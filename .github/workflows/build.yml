@@ -2,7 +2,7 @@ name: β版ビルド・自動更新配布
 
 on:
   push:
-    branches: [main, "release/*"]
+    branches: [main]
     tags: ["v*"]
   pull_request:
     branches: [main]
@@ -52,8 +52,11 @@ jobs:
   publish-release:
     name: GitHub Releasesへ自動更新版を公開
     runs-on: windows-latest
+    concurrency:
+      group: kick-recorder-release-${{ github.ref }}
+      cancel-in-progress: false
     needs: quality
-    if: ${{ startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/release/') }}
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
     permissions:
       contents: write
     steps:
@@ -65,12 +68,8 @@ jobs:
         shell: pwsh
         run: |
           $version = node -p "require('./package.json').version"
-          $refName = $env:GITHUB_REF_NAME
-          if ($env:GITHUB_REF.StartsWith("refs/heads/release/")) {
-            $refName = $refName.Substring("release/".Length)
-          }
-          if ($refName -ne "v$version") {
-            throw "リリース参照 $refName と package.json のバージョン v$version が一致しません。"
+          if ($env:GITHUB_REF_NAME -ne "v$version") {
+            throw "タグ $env:GITHUB_REF_NAME と package.json のバージョン v$version が一致しません。"
           }
       - name: 依存パッケージをインストール
         run: npm install --no-audit --no-fund --no-package-lock
