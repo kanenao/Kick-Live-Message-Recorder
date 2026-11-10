@@ -593,13 +593,14 @@ export default function App() {
       <div className="nav-label">メインメニュー</div>
       <button className={tab === "dashboard" ? "nav-item selected" : "nav-item"} onClick={() => setTab("dashboard")}>▦ <span>ダッシュボード</span></button>
       <button className={tab === "library" ? "nav-item selected" : "nav-item"} onClick={() => setTab("library")}>▤ <span>録画ライブラリ</span></button>
+      <button className={tab === "comments" ? "nav-item selected" : "nav-item"} onClick={() => setTab("comments")}>▶ <span>コメント付き動画</span></button>
       <button className={tab === "settings" ? "nav-item selected" : "nav-item"} onClick={() => setTab("settings")}>⚙ <span>設定</span></button>
       <div className="sidebar-bottom"><span className="status-dot" /> β版・開発テスト中<small>現在のバージョン {appVersion}</small></div>
     </aside>
 
     <main className="main">
       <header className="topbar">
-        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "library" ? "録画ライブラリ" : "設定"}</h1></div>
+        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "library" ? "録画ライブラリ" : tab === "comments" ? "コメント付き動画を作成" : "設定"}</h1></div>
         <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="beta-tag">β版</span><div className="avatar">KR</div></div>
       </header>
 
@@ -655,6 +656,106 @@ export default function App() {
       {tab === "library" && <section className="panel">
         <div className="panel-heading"><div><h2>録画ライブラリ</h2><p>配信映像とチャットの保存履歴</p></div></div>
         <div className="empty-state"><div className="empty-icon">▤</div><strong>録画ライブラリは次の段階で実装します</strong><span>録画ファイルは保存先フォルダーから直接確認できます。</span></div>
+      </section>}
+
+      {tab === "comments" && <section className="panel comment-video-panel">
+        <div className="panel-heading">
+          <div><h2>ニコニコ風コメント合成</h2><p>録画した動画の上にコメントを流し、MP4動画として書き出します</p></div>
+          <span className="api-state connected">FFmpeg合成</span>
+        </div>
+        <div className="notice">
+          コメントの時刻を元動画の再生位置として扱います。NicoConvAssで作成したASS字幕は、そのまま表示スタイルを保って合成できます。
+          JSON・CSV・XML・TXT・SRTのログは、横スクロールコメントに変換します。
+        </div>
+
+        <div className="comment-file-card">
+          <div className="comment-file-details">
+            <strong>① 元動画ファイル</strong>
+            <small>{commentVideoPath || "MP4 / MKV / MOV / AVI / WebM などを選択"}</small>
+          </div>
+          <button className="small-action" onClick={() => void chooseCommentVideo()} disabled={!isDesktop}>動画を選択</button>
+        </div>
+        <div className="comment-file-card">
+          <div className="comment-file-details">
+            <strong>② コメントログ / ASS字幕</strong>
+            <small>{commentFilePath || "JSON / CSV / XML / TXT / SRT / ASS に対応"}</small>
+            {commentFilePreview && <small className="comment-preview-badge">
+              {commentFilePreview.format} · {commentFilePreview.count.toLocaleString("ja-JP")}件
+              {commentFilePreview.usesExistingAss ? " · 既存ASSの配置・書式を維持" : " · コメントを流れる表示に変換"}
+            </small>}
+          </div>
+          <button className="small-action" onClick={() => void chooseCommentFile()} disabled={!isDesktop}>コメントを選択</button>
+        </div>
+        <div className="comment-file-card">
+          <div className="comment-file-details">
+            <strong>③ 出力先</strong>
+            <small>{commentOutputPath || "保存先を選択してください（MP4）"}</small>
+          </div>
+          <button className="small-action" onClick={() => void chooseCommentOutput()} disabled={!isDesktop || !commentVideoPath}>保存先を選択</button>
+        </div>
+
+        <div className="settings-subsection">
+          <div className="settings-subheading"><h3>コメント表示設定</h3></div>
+          <div className="setting-row">
+            <div><strong>コメントの文字サイズ</strong><small>元動画の解像度に合わせて自動調整します</small></div>
+            <select className="setting-select" value={renderOptions.fontSize} onChange={event => setRenderOptions(prev => ({ ...prev, fontSize: Number(event.target.value) }))}>
+              <option value={28}>小さめ</option>
+              <option value={36}>標準</option>
+              <option value={44}>大きめ</option>
+              <option value={52}>特大</option>
+            </select>
+          </div>
+          <div className="setting-row">
+            <div><strong>流れる速さ</strong><small>画面を横切る時間。秒数が大きいほどゆっくり流れます</small></div>
+            <select className="setting-select" value={renderOptions.scrollDurationSeconds} onChange={event => setRenderOptions(prev => ({ ...prev, scrollDurationSeconds: Number(event.target.value) }))}>
+              <option value={8}>速い（約8秒）</option>
+              <option value={12}>標準（約12秒）</option>
+              <option value={16}>ゆっくり（約16秒）</option>
+              <option value={20}>かなりゆっくり（約20秒）</option>
+              <option value={24}>非常にゆっくり（約24秒）</option>
+            </select>
+          </div>
+          <div className="setting-row">
+            <div><strong>投稿者名をコメントに付ける</strong><small>ログに投稿者名がある場合、コメントの先頭に表示します</small></div>
+            <label className="setting-control"><input type="checkbox" checked={renderOptions.includeUsername} onChange={event => setRenderOptions(prev => ({ ...prev, includeUsername: event.target.checked }))} /><span>{renderOptions.includeUsername ? "有効" : "無効"}</span></label>
+          </div>
+          <div className="setting-row">
+            <div><strong>上・下固定コメントの位置を反映</strong><small>ログ側に「上」「下」の位置情報がある場合に固定表示します</small></div>
+            <label className="setting-control"><input type="checkbox" checked={renderOptions.respectPosition} onChange={event => setRenderOptions(prev => ({ ...prev, respectPosition: event.target.checked }))} /><span>{renderOptions.respectPosition ? "有効" : "無効"}</span></label>
+          </div>
+        </div>
+
+        <div className="settings-subsection">
+          <div className="settings-subheading"><h3>動画エンコード</h3><span className={settings.ffmpegPath ? "api-state connected" : "api-state"}>{settings.ffmpegPath ? "FFmpeg設定済み" : "PATHから検索"}</span></div>
+          <p className="settings-help">動画にコメントを焼き込むにはFFmpegが必要です。設定済みのffmpeg.exeを利用します。未指定の場合はWindowsのPATH上にある ffmpeg.exe を探します。</p>
+          <div className="setting-row">
+            <div><strong>FFmpeg</strong><small>{settings.ffmpegPath || "設定画面で指定するか、PATHに登録してください"}</small></div>
+            <button className="small-action" onClick={() => setTab("settings")}>FFmpeg設定を開く</button>
+          </div>
+        </div>
+
+        {commentFileError && <div className="storage-error" role="alert">{commentFileError}</div>}
+        {(renderStatus.status === "preparing" || renderStatus.status === "rendering") && <div className="render-progress-panel">
+          <div className="render-progress-heading"><strong>{renderStatus.status === "preparing" ? "準備中" : "動画を生成中"}</strong><span>{renderStatus.progressPercent}%</span></div>
+          <div className="update-progress"><div className="update-progress-fill" style={{ width: renderStatus.progressPercent + "%" }} /></div>
+          <div className="update-description">{renderStatus.message}</div>
+          {renderStatus.commentCount > 0 && <div className="settings-help">合成対象コメント：{renderStatus.commentCount.toLocaleString("ja-JP")}件</div>}
+        </div>}
+        {renderStatus.status === "completed" && <div className="comment-render-success">
+          <strong>コメント付き動画の生成が完了しました</strong>
+          <small>{renderStatus.outputPath}</small>
+        </div>}
+        {renderStatus.status === "error" && renderStatus.error && <div className="storage-error">生成エラー：{renderStatus.error}</div>}
+        {renderStatus.status === "cancelled" && <div className="notice">{renderStatus.message}</div>}
+
+        <div className="comment-render-actions">
+          <button className="primary-small" onClick={() => void startCommentVideoRender()}
+            disabled={!isDesktop || !commentVideoPath || !commentFilePath || !commentOutputPath || !commentFilePreview || isStartingRender || renderStatus.status === "preparing" || renderStatus.status === "rendering"}>
+            {isStartingRender || renderStatus.status === "preparing" || renderStatus.status === "rendering" ? "生成中..." : "コメント付き動画を生成"}
+          </button>
+          {(renderStatus.status === "preparing" || renderStatus.status === "rendering") && <button className="small-action stop-record-button" onClick={() => void cancelCommentVideoRender()}>生成をキャンセル</button>}
+        </div>
+        {!isDesktop && <div className="notice">コメント付き動画の生成はWindowsデスクトップ版で利用できます。</div>}
       </section>}
 
       {tab === "settings" && <section className="panel">
