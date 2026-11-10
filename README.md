@@ -3,11 +3,11 @@
 Kick のライブ配信を録画し、チャットを保存する Windows デスクトップアプリです。
 
 <aside>
-<strong>開発版：0.1.0-beta.2</strong><br />
+<strong>開発版：0.1.0-beta.3</strong><br />
 この段階はβ版の初期土台です。Kick配信の検知・録画・チャット取得はまだ利用できません。
 </aside>
 
-## β版 0.1.0-beta.2 で利用できる機能
+## β版 0.1.0-beta.3 で利用できる機能
 
 - 日本語ダッシュボード
 - Kickチャンネルの追加・削除
@@ -17,7 +17,18 @@ Kick のライブ配信を録画し、チャットを保存する Windows デス
 - 録画データ保存先フォルダーの選択
 - Kick公式APIで登録チャンネルの配信中/オフライン状態を手動確認
 - Client SecretはElectron safeStorageで暗号化して保存（Windows環境）
-- GitHub Actionsによる型チェック・Windowsインストーラー作成
+- 画面表示・Windowsインストーラーの日本語化
+- 現在のバージョン番号を画面に常時表示
+- 起動時・6時間ごとの自動更新確認と自動ダウンロード
+- GitHub Releases経由の更新配布
+
+## 自動アップデートについて
+
+- Windows版は起動時と6時間ごとにGitHub Releasesを確認します。
+- 新版があれば自動でダウンロードし、アプリ終了時に適用します。設定画面から手動確認・即時再起動もできます。
+- β版の更新公開は `v0.1.0-beta.3` のように、`package.json` のバージョンと一致するタグを作成してpushします。GitHub ActionsがWindowsインストーラーと更新情報ファイルをReleaseへ公開します。
+- β2以前は自動更新機能を含まないため、β3は手動インストールが必要です。β3以降は自動更新に対応します。
+- 現在のWindowsビルドにはコード署名証明書がありません。更新ファイルはHTTPSとSHA-512で検証しますが、発行元のAuthenticode署名検証は無効化しています。将来の一般配布前にコード署名証明書を導入することを推奨します。
 
 ## これから実装する機能
 
@@ -42,7 +53,7 @@ Windows向けインストーラーをローカルで作成する場合：
 npm run dist:win
 ```
 
-GitHub Actionsでは、型チェック・ビルド後にWindows向けNSISインストーラーを作成し、ActionsのArtifactsに14日間保存します。
+GitHub Actionsでは、mainブランチのビルドをActions Artifactsに14日間保存します。バージョンに一致する `v*` タグをpushすると、Windowsインストーラーと自動更新用ファイルをGitHub Releasesへβ版として公開します。
 
 ## Kick API接続設定
 
