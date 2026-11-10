@@ -43,6 +43,17 @@ type UpdateStatus = {
   message: string;
 };
 
+type RecordingStatus = {
+  slug: string;
+  status: "starting" | "recording" | "reconnecting" | "stopping" | "stopped" | "error";
+  startedAt: string;
+  filePath: string;
+  progress: string;
+  message: string;
+  reconnectCount: number;
+  exitCode?: number | null;
+};
+
 type KickChannelCheck = {
   slug: string;
   found: boolean;
@@ -63,6 +74,16 @@ const api = {
     ipcRenderer.invoke("kick:save-credentials", credentials),
   clearKickCredentials: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("kick:clear-credentials"),
   checkKickChannels: (slugs: string[]): Promise<KickChannelCheck[]> => ipcRenderer.invoke("kick:check-channels", slugs),
+  selectYtDlp: (): Promise<string | null> => ipcRenderer.invoke("recording:select-yt-dlp"),
+  selectFfmpeg: (): Promise<string | null> => ipcRenderer.invoke("recording:select-ffmpeg"),
+  startRecording: (slug: string): Promise<RecordingStatus> => ipcRenderer.invoke("recording:start", slug),
+  stopRecording: (slug: string): Promise<RecordingStatus | null> => ipcRenderer.invoke("recording:stop", slug),
+  getRecordingStatuses: (): Promise<RecordingStatus[]> => ipcRenderer.invoke("recording:get-statuses"),
+  onRecordingStatus: (callback: (status: RecordingStatus) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: RecordingStatus): void => callback(status);
+    ipcRenderer.on("recording:status", listener);
+    return () => ipcRenderer.removeListener("recording:status", listener);
+  },
   getUpdateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke("updater:get-status"),
   checkForUpdates: (): Promise<UpdateStatus> => ipcRenderer.invoke("updater:check"),
   installUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("updater:install"),
