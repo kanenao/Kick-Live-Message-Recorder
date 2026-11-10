@@ -74,6 +74,7 @@ type KickRecorderCommentRenderOptions = {
   outputPath: string;
   fontSize: number;
   scrollDurationSeconds: number;
+  timeOffsetSeconds: number;
   includeUsername: boolean;
   respectPosition: boolean;
 };
