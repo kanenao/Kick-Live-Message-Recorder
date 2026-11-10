@@ -40,7 +40,22 @@ type UpdateStatus = {
   message: string;
 };
 
-const APP_VERSION = "0.1.0-beta.5";
+type RecordingFile = {
+  path: string;
+  name: string;
+  extension: string;
+  size: number;
+  modifiedAt: string;
+};
+
+type RecordingEvent = {
+  slug: string;
+  status: "starting" | "recording" | "stopped" | "error";
+  filePath?: string;
+  message?: string;
+};
+
+const APP_VERSION = "0.1.0-beta.9";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -131,11 +146,17 @@ export default function App() {
     message: "起動時に自動で更新を確認します。"
   });
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
+  const [recordingRequests, setRecordingRequests] = useState<Record<string, boolean>>({});
+  const [recordingFiles, setRecordingFiles] = useState<RecordingFile[]>([]);
+  const [isLoadingRecordings, setIsLoadingRecordings] = useState(false);
+  const [recordingMessage, setRecordingMessage] = useState("");
+  const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
   const activeCount = useMemo(() => channels.filter(c => c.recording).length, [channels]);
 
   useEffect(() => {
     let active = true;
     let unsubscribeUpdate: (() => void) | undefined;
+    let unsubscribeRecording: (() => void) | undefined;
     void loadState().then(state => {
       if (!active) return;
       setChannels(state.channels);
@@ -151,10 +172,30 @@ export default function App() {
       unsubscribeUpdate = window.kickRecorder.onUpdateStatus(status => {
         if (active) setUpdateStatus(status);
       });
+      unsubscribeRecording = window.kickRecorder.onRecordingStatus(event => {
+        if (!active) return;
+        setChannels(previous => previous.map(channel =>
+          channel.name.toLowerCase() === event.slug
+            ? { ...channel, recording: event.status === "starting" || event.status === "recording" }
+            : channel
+        ));
+        setRecordingRequests(previous => ({ ...previous, [event.slug]: false }));
+        if (event.status === "error") {
+          setRecordingMessage(`${event.slug}：${event.message ?? "録画に失敗しました。"}`);
+        } else if (event.status === "recording") {
+          setRecordingMessage(`${event.slug} の録画を開始しました。`);
+        } else if (event.status === "stopped") {
+          setRecordingMessage(`${event.slug}：${event.message ?? "録画を終了しました。"}`);
+        }
+        setLibraryRefreshKey(value => value + 1);
+      });
       void window.kickRecorder.getAppInfo().then(info => {
         if (!active) return;
         setAppDataDirectory(info.dataDirectory);
         setAppVersion(info.version);
+        setSettings(previous => previous.outputDirectory
+          ? previous
+          : { ...previous, outputDirectory: info.defaultOutputDirectory });
       }).catch(() => undefined);
       void window.kickRecorder.getUpdateStatus().then(status => {
         if (active) setUpdateStatus(status);
@@ -170,6 +211,7 @@ export default function App() {
     return () => {
       active = false;
       unsubscribeUpdate?.();
+      unsubscribeRecording?.();
     };
   }, []);
 
@@ -177,6 +219,20 @@ export default function App() {
     () => channels.map(channel => channel.name),
     [channels]
   );
+
+  useEffect(() => {
+    if (tab !== "library" || !isDesktop || !window.kickRecorder) return;
+    let active = true;
+    setIsLoadingRecordings(true);
+    void window.kickRecorder.listRecordings().then(files => {
+      if (active) setRecordingFiles(files);
+    }).catch(error => {
+      if (active) setRecordingMessage(error instanceof Error ? error.message : "録画一覧を取得できませんでした。");
+    }).finally(() => {
+      if (active) setIsLoadingRecordings(false);
+    });
+    return () => { active = false; };
+  }, [tab, isDesktop, libraryRefreshKey, settings.outputDirectory]);
 
   useEffect(() => {
     if (
@@ -205,6 +261,19 @@ export default function App() {
 
         for (const result of results) {
           const previous = previousChecks[result.slug.toLowerCase()];
+          const watchedChannel = channels.find(channel => channel.name.toLowerCase() === result.slug.toLowerCase());
+          if (
+            settings.autoRecordOnStreamStart &&
+            watchedChannel?.mode === "auto" &&
+            result.found &&
+            result.isLive &&
+            !previous?.isLive &&
+            !watchedChannel.recording
+          ) {
+            void window.kickRecorder.startRecording(result.slug).catch(error => {
+              setRecordingMessage(error instanceof Error ? error.message : `${result.slug} の自動録画を開始できませんでした。`);
+            });
+          }
           if (
             settings.notifyOnLive &&
             result.found &&
@@ -244,6 +313,8 @@ export default function App() {
     settings.autoMonitorEnabled,
     settings.monitorIntervalSeconds,
     settings.notifyOnLive,
+    settings.autoRecordOnStreamStart,
+    channels,
     monitorSlugs
   ]);
 
@@ -354,6 +425,44 @@ export default function App() {
   }
 
 
+  async function toggleRecording(slug: string, isRecording: boolean) {
+    if (!window.kickRecorder) {
+      setRecordingMessage("録画はWindowsデスクトップ版で利用できます。");
+      return;
+    }
+    setRecordingRequests(previous => ({ ...previous, [slug.toLowerCase()]: true }));
+    setRecordingMessage("");
+    try {
+      if (isRecording) {
+        await window.kickRecorder.stopRecording(slug);
+      } else {
+        const result = await window.kickRecorder.startRecording(slug);
+        setRecordingMessage(`録画要求を送信しました。保存先：${result.outputDirectory}`);
+      }
+    } catch (error) {
+      setRecordingRequests(previous => ({ ...previous, [slug.toLowerCase()]: false }));
+      setRecordingMessage(error instanceof Error ? error.message : "録画操作に失敗しました。");
+    }
+  }
+
+  async function openRecordingFile(filePath: string) {
+    if (!window.kickRecorder) return;
+    try {
+      await window.kickRecorder.openRecording(filePath);
+    } catch (error) {
+      setRecordingMessage(error instanceof Error ? error.message : "録画ファイルを開けませんでした。");
+    }
+  }
+
+  async function revealRecordingFile(filePath: string) {
+    if (!window.kickRecorder) return;
+    try {
+      await window.kickRecorder.revealRecording(filePath);
+    } catch (error) {
+      setRecordingMessage(error instanceof Error ? error.message : "保存先を表示できませんでした。");
+    }
+  }
+
   async function checkForAppUpdates() {
     if (!window.kickRecorder) {
       setUpdateStatus(prev => ({ ...prev, status: "error", message: "更新確認はWindowsデスクトップ版で利用できます。" }));
@@ -399,7 +508,7 @@ export default function App() {
 
   return <div className="app-shell">
     <aside className="sidebar">
-      <div className="brand"><div className="brand-mark">K</div><div><strong>Kick Recorder</strong><small>配信・チャット保存</small></div></div>
+      <div className="brand"><div className="brand-mark">K</div><div><strong>Kick Live Message Recorder</strong><small>配信映像・チャット記録</small></div></div>
       <div className="nav-label">メインメニュー</div>
       <button className={tab === "dashboard" ? "nav-item selected" : "nav-item"} onClick={() => setTab("dashboard")}>▦ <span>ダッシュボード</span></button>
       <button className={tab === "library" ? "nav-item selected" : "nav-item"} onClick={() => setTab("library")}>▤ <span>録画ライブラリ</span></button>
@@ -442,11 +551,15 @@ export default function App() {
                   ? (channelChecks[c.name.toLowerCase()].isLive ? `配信中 · ${channelChecks[c.name.toLowerCase()].viewerCount.toLocaleString("ja-JP")}人` : "オフライン")
                   : (channelChecks[c.name.toLowerCase()] ? "チャンネル未検出" : "未確認")}
               </span>
-              <button className="small-action" onClick={() => setChannels(prev => prev.map(x => x.id === c.id ? {...x, mode: x.mode === "auto" ? "manual" : "auto"} : x))}>録画方式を変更</button>
+              <button className="small-action" onClick={() => setChannels(prev => prev.map(x => x.id === c.id ? {...x, mode: x.mode === "auto" ? "manual" : "auto"} : x))}>方式：{c.mode === "auto" ? "自動" : "手動"}</button>
+              <button className="primary-small recording-action" onClick={() => void toggleRecording(c.name, c.recording)} disabled={!isDesktop || Boolean(recordingRequests[c.name.toLowerCase()])}>
+                {recordingRequests[c.name.toLowerCase()] ? "処理中..." : c.recording ? "録画停止" : "録画開始"}
+              </button>
               <button className="remove" aria-label={`${c.name}を削除`} onClick={() => setChannels(prev => prev.filter(x => x.id !== c.id))}>×</button>
             </div>)}
           </div>
-          <div className="notice">Kick公式APIによる手動確認と定期監視に対応しました。映像・音声の録画とチャット保存は、今後の段階で実装します。{lastChannelCheck && ` 最終確認：${lastChannelCheck}`}</div>
+          <div className="notice">Kickの配信状態監視と、yt-dlpによる映像・音声の手動／自動録画に対応しました。チャットの取得・保存とコメント流し込み動画の生成は未実装です。{lastChannelCheck && ` 最終確認：${lastChannelCheck}`}</div>
+          {recordingMessage && <div className="api-message" role="status">{recordingMessage}</div>}
         </section>
 
         <section className="panel lower-panel">
@@ -456,19 +569,40 @@ export default function App() {
       </>}
 
       {tab === "library" && <section className="panel">
-        <div className="panel-heading"><div><h2>録画ライブラリ</h2><p>配信映像とチャットの保存履歴</p></div></div>
-        <div className="empty-state"><div className="empty-icon">▤</div><strong>保存された録画はありません</strong><span>録画機能を実装すると、ここで検索・再生できます。</span></div>
+        <div className="panel-heading">
+          <div><h2>録画ライブラリ</h2><p>このPCに保存されたKick配信映像</p></div>
+          <button className="small-action" onClick={() => setLibraryRefreshKey(value => value + 1)} disabled={!isDesktop || isLoadingRecordings}>一覧を更新</button>
+        </div>
+        {recordingMessage && <div className="api-message" role="status">{recordingMessage}</div>}
+        {!isDesktop
+          ? <div className="empty-state"><div className="empty-icon">▤</div><strong>Windowsデスクトップ版で利用できます</strong><span>ブラウザープレビューではPC内の録画ファイルを読み取れません。</span></div>
+          : isLoadingRecordings
+            ? <div className="empty-state"><strong>録画一覧を読み込み中...</strong></div>
+            : recordingFiles.length === 0
+              ? <div className="empty-state"><div className="empty-icon">▤</div><strong>保存された録画はありません</strong><span>ダッシュボードで配信を録画すると、ここに表示されます。</span></div>
+              : <div className="recording-library-list">
+                  {recordingFiles.map(file => <div className="recording-file-row" key={file.path}>
+                    <div className="recording-file-icon">▶</div>
+                    <div className="recording-file-info">
+                      <strong>{file.name}</strong>
+                      <small>{new Date(file.modifiedAt).toLocaleString("ja-JP")} ・ {file.extension} ・ {(file.size / (1024 * 1024)).toFixed(1)} MB</small>
+                    </div>
+                    <button className="primary-small" onClick={() => void openRecordingFile(file.path)}>再生</button>
+                    <button className="small-action" onClick={() => void revealRecordingFile(file.path)}>保存先を表示</button>
+                  </div>)}
+                </div>}
+        <div className="data-path-note">保存先：{settings.outputDirectory || "アプリ既定のビデオフォルダー"}</div>
       </section>}
 
       {tab === "settings" && <section className="panel">
         <div className="panel-heading"><div><h2>基本設定</h2><p>β版の録画動作・保存先の設定</p></div></div>
         <div className="setting-row">
-          <div><strong>配信開始時に自動録画</strong><small>自動録画モードのチャンネルで使用します（録画機能は開発中）</small></div>
+          <div><strong>配信開始時に自動録画</strong><small>自動モードの登録チャンネルが配信を開始すると録画します</small></div>
           <label className="setting-control"><input type="checkbox" checked={settings.autoRecordOnStreamStart} onChange={e => setSettings(prev => ({ ...prev, autoRecordOnStreamStart: e.target.checked }))} /><span>{settings.autoRecordOnStreamStart ? "有効" : "無効"}</span></label>
         </div>
         <div className="setting-row">
-          <div><strong>チャットを保存</strong><small>配信映像とチャットを一緒に保存する機能の設定</small></div>
-          <label className="setting-control"><input type="checkbox" checked={settings.saveChat} onChange={e => setSettings(prev => ({ ...prev, saveChat: e.target.checked }))} /><span>{settings.saveChat ? "有効" : "無効"}</span></label>
+          <div><strong>チャットを保存（開発中）</strong><small>Kickのチャット取得と保存は未実装です。現在は映像・音声のみ録画します。</small></div>
+          <label className="setting-control"><input type="checkbox" checked={settings.saveChat} disabled /><span>未対応</span></label>
         </div>
 
         <div className="settings-subsection monitor-settings">
