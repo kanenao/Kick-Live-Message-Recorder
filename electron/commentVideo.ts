@@ -354,7 +354,8 @@ function makeAss(comments: ImportedComment[], info: MediaInfo, options: CommentR
       const lanes = position === "top" ? topFreeAt : bottomFreeAt;
       let laneIndex = lanes.findIndex(freeAt => freeAt <= commentTime);
       if (laneIndex < 0) laneIndex = lanes.indexOf(Math.min(...lanes));
-      const end = commentTime + commentDuration;
+      const displayTime = Math.max(commentTime, lanes[laneIndex]);
+      const end = displayTime + commentDuration;
       lanes[laneIndex] = end + 0.25;
       const y = position === "top"
         ? margin + laneIndex * lineHeight
@@ -362,7 +363,7 @@ function makeAss(comments: ImportedComment[], info: MediaInfo, options: CommentR
       const alignment = position === "top" ? "\\an8" : "\\an2";
       const effect = "{" + alignment + "\\pos(" + Math.round(width / 2) + "," + y + ")" +
         "\\fs" + fontSize + "\\bord2\\shad1\\1c" + color + "\\3c&H000000&}";
-      events.push("Dialogue: 1," + assTime(commentTime) + "," + assTime(end) +
+      events.push("Dialogue: 1," + assTime(displayTime) + "," + assTime(end) +
         ",Danmaku,,0,0,0,," + effect + safeText);
       continue;
     }
@@ -371,12 +372,13 @@ function makeAss(comments: ImportedComment[], info: MediaInfo, options: CommentR
     const duration = Math.max(4, travelBase * ((width + commentWidth + 40) / width));
     let laneIndex = scrollFreeAt.findIndex(freeAt => freeAt <= commentTime);
     if (laneIndex < 0) laneIndex = scrollFreeAt.indexOf(Math.min(...scrollFreeAt));
-    scrollFreeAt[laneIndex] = commentTime + duration * 0.45 + 0.7;
+    const displayTime = Math.max(commentTime, scrollFreeAt[laneIndex]);
+    scrollFreeAt[laneIndex] = displayTime + duration * 0.45 + 0.7;
     const y = margin + laneIndex * lineHeight;
     const move = "\\move(" + Math.round(width + 30) + "," + y + "," +
       Math.round(-commentWidth - 30) + "," + y + ",0," + Math.round(duration * 1000) + ")";
     const effect = "{" + move + "\\fs" + fontSize + "\\bord2\\shad1\\1c" + color + "\\3c&H000000&}";
-    events.push("Dialogue: 0," + assTime(commentTime) + "," + assTime(commentTime + duration) +
+    events.push("Dialogue: 0," + assTime(displayTime) + "," + assTime(displayTime + duration) +
       ",Danmaku,,0,0,0,," + effect + safeText);
   }
 
