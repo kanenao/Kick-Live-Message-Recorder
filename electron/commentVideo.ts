@@ -3,6 +3,7 @@ import {
   existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync
 } from "node:fs";
 import { basename, dirname, extname, join, parse, resolve } from "node:path";
+import { TextDecoder } from "node:util";
 
 export type RenderStatus = {
   status: "idle" | "preparing" | "rendering" | "completed" | "cancelled" | "error";
@@ -263,12 +264,36 @@ function countAssDialogue(source: string): number {
   return source.split(/\r?\n/).filter(line => /^Dialogue\s*:/i.test(line)).length;
 }
 
+function readCommentText(filePath: string): string {
+  const bytes = readFileSync(filePath);
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
+    return bytes.subarray(2).toString("utf16le");
+  }
+  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+    const swapped = Buffer.from(bytes.subarray(2));
+    for (let index = 0; index + 1 < swapped.length; index += 2) {
+      const first = swapped[index];
+      swapped[index] = swapped[index + 1];
+      swapped[index + 1] = first;
+    }
+    return swapped.toString("utf16le");
+  }
+  if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    return bytes.subarray(3).toString("utf8");
+  }
+  const utf8 = bytes.toString("utf8");
+  if (utf8.includes("\uFFFD")) {
+    try { return new TextDecoder("shift_jis").decode(bytes); } catch { /* use UTF-8 replacement fallback */ }
+  }
+  return utf8;
+}
+
 function readCommentFile(filePath: string): { comments: ImportedComment[]; isAss: boolean; format: string } {
   if (!existsSync(filePath)) throw new Error("コメントファイルが見つかりません。");
   const size = statSync(filePath).size;
   if (size <= 0 || size > MAX_COMMENT_FILE_BYTES) throw new Error("コメントファイルは空、または80MBを超えています。");
   const extension = extname(filePath).toLowerCase();
-  const source = readFileSync(filePath, "utf8").replace(/^\uFEFF/, "");
+  const source = readCommentText(filePath).replace(/^\uFEFF/, "");
   if (extension === ".ass") {
     const count = countAssDialogue(source);
     if (count === 0) throw new Error("ASSファイル内にDialogue行がありません。");
@@ -515,7 +540,7 @@ export class CommentVideoRenderer {
       this.temporaryAssPath = join(dirname(outputPath), "_klmr_comments_" + token + ".ass");
       this.temporaryVideoPath = join(dirname(outputPath), parse(outputPath).name + ".rendering-" + token + ".mp4");
       if (parsed.isAss) {
-        const assSource = readFileSync(commentsPath, "utf8");
+        const assSource = readCommentText(commentsPath);
         writeFileSync(this.temporaryAssPath, shiftAssContent(assSource, options.timeOffsetSeconds), "utf8");
       } else {
         writeFileSync(this.temporaryAssPath, makeAss(parsed.comments, info, options), "utf8");
