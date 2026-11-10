@@ -503,7 +503,7 @@ function registerIpcHandlers(): void {
     return recorderManager.start(input, {
       ytDlpPath: settings.ytDlpPath,
       ffmpegPath: settings.ffmpegPath,
-      outputDirectory: settings.outputDirectory || join(app.getPath("videos"), "Kick Recorder")
+      outputDirectory: settings.outputDirectory || join(app.getPath("videos"), "Kick Live Message Recorder")
     });
   });
 
@@ -528,7 +528,7 @@ function registerIpcHandlers(): void {
     }
     if (!Notification.isSupported()) return { ok: false };
     new Notification({
-      title: "Kick Recorder - 配信開始",
+      title: "Kick Live Message Recorder - 配信開始",
       body: `${slug} が配信を開始しました。`
     }).show();
     return { ok: true };
@@ -595,7 +595,7 @@ function createJapaneseApplicationMenu(): void {
       submenu: [
         { label: "ウィンドウを閉じる", role: "close" },
         { type: "separator" },
-        { label: "Kick Recorderを終了", role: "quit" }
+        { label: "Kick Live Message Recorderを終了", role: "quit" }
       ]
     },
     {
@@ -667,8 +667,8 @@ function createJapaneseApplicationMenu(): void {
           click: () => {
             void dialog.showMessageBox({
               type: "info",
-              title: "Kick Recorderについて",
-              message: "Kick Recorder",
+              title: "Kick Live Message Recorderについて",
+              message: "Kick Live Message Recorder",
               detail: `バージョン：${app.getVersion()}\nKick配信の監視・録画・チャット保存ツール`
             });
           }
@@ -687,7 +687,7 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 640,
     backgroundColor: "#111318",
-    title: "Kick Recorder - 配信録画・チャット保存",
+    title: "Kick Live Message Recorder - 配信録画・チャット保存",
     webPreferences: {
       preload: join(__dirname, "preload.js"),
       contextIsolation: true,
