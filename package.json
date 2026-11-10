@@ -1,6 +1,6 @@
 {
   "name": "kick-live-message-recorder",
-  "version": "0.1.0-beta.6",
+  "version": "0.1.0-beta.7",
   "private": true,
   "description": "Kick配信の監視・録画・チャット保存 Windowsアプリ",
   "main": "dist-electron/main.js",
@@ -35,7 +35,7 @@
   },
   "build": {
     "appId": "jp.kanenao.kickrecorder",
-    "productName": "Kick Recorder",
+    "productName": "Kick Live Message Recorder",
     "asar": true,
     "directories": {
       "output": "release"
@@ -62,7 +62,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Kick Recorder",
+      "shortcutName": "Kick Live Message Recorder",
       "language": 1041,
       "installerLanguages": [
         "ja_JP"
