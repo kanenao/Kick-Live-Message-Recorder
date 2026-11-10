@@ -14,6 +14,7 @@ import {
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { autoUpdater } from "electron-updater";
+import { isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
 
 // Chromiumが提供する標準メニューやコンテキストメニューも日本語で表示する。
 app.commandLine.appendSwitch("lang", "ja-JP");
@@ -358,6 +359,15 @@ function initializeAutoUpdater(): void {
 
 let mainWindow: BrowserWindow | null = null;
 
+const recordingManager = new KickRecordingManager(event => {
+  mainWindow?.webContents.send("recording:status", event);
+});
+
+function getRecordingOutputDirectory(): string {
+  const configured = readState().settings.outputDirectory.trim();
+  return configured || join(app.getPath("videos"), "Kick Live Message Recorder");
+}
+
 function normalizeState(input: unknown): AppState {
   if (!input || typeof input !== "object") return DEFAULT_STATE;
   const candidate = input as Partial<AppState>;
@@ -481,6 +491,7 @@ function registerIpcHandlers(): void {
     return {
       version: app.getVersion(),
       dataDirectory: app.getPath("userData"),
+      defaultOutputDirectory: getRecordingOutputDirectory(),
       isPackaged: app.isPackaged
     };
   });
@@ -526,6 +537,42 @@ function registerIpcHandlers(): void {
   ipcMain.handle("kick:check-channels", async (event, slugs: unknown) => {
     assertTrustedSender(event);
     return checkKickChannels(slugs);
+  });
+
+  ipcMain.handle("recording:start", (event, slug: unknown) => {
+    assertTrustedSender(event);
+    return recordingManager.start(slug, getRecordingOutputDirectory());
+  });
+
+  ipcMain.handle("recording:stop", (event, slug: unknown) => {
+    assertTrustedSender(event);
+    return recordingManager.stop(slug);
+  });
+
+  ipcMain.handle("recording:list", event => {
+    assertTrustedSender(event);
+    return listRecordingFiles(getRecordingOutputDirectory());
+  });
+
+  ipcMain.handle("recording:open", async (event, filePath: unknown) => {
+    assertTrustedSender(event);
+    const directory = getRecordingOutputDirectory();
+    if (typeof filePath !== "string" || !isPathInsideDirectory(filePath, directory) || !existsSync(filePath)) {
+      throw new Error("録画ファイルの場所が不正か、すでに削除されています。");
+    }
+    const error = await shell.openPath(filePath);
+    if (error) throw new Error(`録画ファイルを開けませんでした：${error}`);
+    return { ok: true };
+  });
+
+  ipcMain.handle("recording:reveal", (event, filePath: unknown) => {
+    assertTrustedSender(event);
+    const directory = getRecordingOutputDirectory();
+    if (typeof filePath !== "string" || !isPathInsideDirectory(filePath, directory) || !existsSync(filePath)) {
+      throw new Error("録画ファイルの場所が不正か、すでに削除されています。");
+    }
+    shell.showItemInFolder(filePath);
+    return { ok: true };
   });
 }
 
@@ -718,6 +765,10 @@ if (!hasSingleInstanceLock) {
     });
   });
 }
+
+app.on("before-quit", () => {
+  recordingManager.stopAll();
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
