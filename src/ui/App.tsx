@@ -172,7 +172,7 @@ export default function App() {
       unsubscribeUpdate = window.kickRecorder.onUpdateStatus(status => {
         if (active) setUpdateStatus(status);
       });
-      unsubscribeRecording = window.kickRecorder.onRecordingStatus(event => {
+      unsubscribeRecording = window.kickRecorder.onRecordingStatus((event: RecordingEvent) => {
         if (!active) return;
         setChannels(previous => previous.map(channel =>
           channel.name.toLowerCase() === event.slug
