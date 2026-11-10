@@ -1,15 +1,22 @@
 import {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
   ipcMain,
+  Menu,
   Notification,
   safeStorage,
-  type IpcMainInvokeEvent
+  shell,
+  type IpcMainInvokeEvent,
+  type MenuItemConstructorOptions
 } from "electron";
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { autoUpdater } from "electron-updater";
+
+// Chromiumが提供する標準メニューやコンテキストメニューも日本語で表示する。
+app.commandLine.appendSwitch("lang", "ja-JP");
 
 type Channel = {
   id: number;
@@ -522,6 +529,99 @@ function registerIpcHandlers(): void {
   });
 }
 
+
+function createJapaneseApplicationMenu(): void {
+  const template: MenuItemConstructorOptions[] = [
+    {
+      label: "ファイル",
+      submenu: [
+        { label: "ウィンドウを閉じる", role: "close" },
+        { type: "separator" },
+        { label: "Kick Recorderを終了", role: "quit" }
+      ]
+    },
+    {
+      label: "編集",
+      submenu: [
+        { label: "元に戻す", role: "undo" },
+        { label: "やり直す", role: "redo" },
+        { type: "separator" },
+        { label: "切り取り", role: "cut" },
+        { label: "コピー", role: "copy" },
+        { label: "貼り付け", role: "paste" },
+        { label: "削除", role: "delete" },
+        { type: "separator" },
+        { label: "すべて選択", role: "selectall" }
+      ]
+    },
+    {
+      label: "表示",
+      submenu: [
+        { label: "再読み込み", role: "reload" },
+        { label: "強制再読み込み", role: "forcereload" },
+        {
+          label: "開発者ツール",
+          role: "toggledevtools",
+          enabled: !app.isPackaged
+        },
+        { type: "separator" },
+        { label: "拡大", role: "zoomin" },
+        { label: "縮小", role: "zoomout" },
+        { label: "標準サイズに戻す", role: "resetzoom" },
+        { type: "separator" },
+        { label: "全画面表示", role: "togglefullscreen" }
+      ]
+    },
+    {
+      label: "ウィンドウ",
+      submenu: [
+        { label: "最小化", role: "minimize" },
+        { label: "ズーム", role: "zoom" },
+        { label: "閉じる", role: "close" }
+      ]
+    },
+    {
+      label: "ヘルプ",
+      submenu: [
+        {
+          label: "GitHubリポジトリを開く",
+          click: () => { void shell.openExternal("https://github.com/kanenao/Kick-Live-Message-Recorder"); }
+        },
+        {
+          label: "不具合・改善案を報告",
+          click: () => { void shell.openExternal("https://github.com/kanenao/Kick-Live-Message-Recorder/issues"); }
+        },
+        {
+          label: "更新を確認",
+          enabled: app.isPackaged && process.platform === "win32",
+          click: () => {
+            void autoUpdater.checkForUpdates().catch(error => {
+              dialog.showErrorBox(
+                "更新の確認に失敗しました",
+                error instanceof Error ? error.message : String(error)
+              );
+            });
+          }
+        },
+        { type: "separator" },
+        {
+          label: "バージョン情報",
+          click: () => {
+            void dialog.showMessageBox({
+              type: "info",
+              title: "Kick Recorderについて",
+              message: "Kick Recorder",
+              detail: `バージョン：${app.getVersion()}\nKick配信の監視・録画・チャット保存ツール`
+            });
+          }
+        }
+      ]
+    }
+  ];
+
+  app.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -535,6 +635,45 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true
+    }
+  });
+
+  mainWindow.webContents.on("context-menu", (event, params) => {
+    if (!mainWindow) return;
+
+    const items: MenuItemConstructorOptions[] = [];
+    if (params.isEditable) {
+      items.push(
+        { label: "元に戻す", role: "undo" },
+        { label: "やり直す", role: "redo" },
+        { type: "separator" },
+        { label: "切り取り", role: "cut" },
+        { label: "コピー", role: "copy" },
+        { label: "貼り付け", role: "paste" },
+        { type: "separator" },
+        { label: "すべて選択", role: "selectall" }
+      );
+    } else if (params.selectionText.trim()) {
+      items.push({ label: "選択した文字をコピー", role: "copy" });
+    }
+
+    if (params.linkURL) {
+      if (items.length > 0) items.push({ type: "separator" });
+      items.push(
+        {
+          label: "リンクを開く",
+          click: () => { void shell.openExternal(params.linkURL); }
+        },
+        {
+          label: "リンクアドレスをコピー",
+          click: () => clipboard.writeText(params.linkURL)
+        }
+      );
+    }
+
+    if (items.length > 0) {
+      event.preventDefault();
+      Menu.buildFromTemplate(items).popup({ window: mainWindow });
     }
   });
 
@@ -571,6 +710,7 @@ if (!hasSingleInstanceLock) {
   app.whenReady().then(() => {
     registerIpcHandlers();
     app.setAppUserModelId("jp.kanenao.kickrecorder");
+    createJapaneseApplicationMenu();
     createWindow();
     initializeAutoUpdater();
     app.on("activate", () => {
