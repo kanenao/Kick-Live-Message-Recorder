@@ -551,23 +551,23 @@ function createJapaneseApplicationMenu(): void {
         { label: "貼り付け", role: "paste" },
         { label: "削除", role: "delete" },
         { type: "separator" },
-        { label: "すべて選択", role: "selectall" }
+        { label: "すべて選択", role: "selectAll" }
       ]
     },
     {
       label: "表示",
       submenu: [
         { label: "再読み込み", role: "reload" },
-        { label: "強制再読み込み", role: "forcereload" },
+        { label: "強制再読み込み", role: "forceReload" },
         {
           label: "開発者ツール",
-          role: "toggledevtools",
+          role: "toggleDevTools",
           enabled: !app.isPackaged
         },
         { type: "separator" },
-        { label: "拡大", role: "zoomin" },
-        { label: "縮小", role: "zoomout" },
-        { label: "標準サイズに戻す", role: "resetzoom" },
+        { label: "拡大", role: "zoomIn" },
+        { label: "縮小", role: "zoomOut" },
+        { label: "標準サイズに戻す", role: "resetZoom" },
         { type: "separator" },
         { label: "全画面表示", role: "togglefullscreen" }
       ]
@@ -619,7 +619,7 @@ function createJapaneseApplicationMenu(): void {
     }
   ];
 
-  app.setApplicationMenu(Menu.buildFromTemplate(template));
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
 function createWindow(): void {
@@ -651,7 +651,7 @@ function createWindow(): void {
         { label: "コピー", role: "copy" },
         { label: "貼り付け", role: "paste" },
         { type: "separator" },
-        { label: "すべて選択", role: "selectall" }
+        { label: "すべて選択", role: "selectAll" }
       );
     } else if (params.selectionText.trim()) {
       items.push({ label: "選択した文字をコピー", role: "copy" });
