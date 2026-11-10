@@ -21,6 +21,7 @@ export type CommentRenderOptions = {
   ffmpegPath: string;
   fontSize: number;
   scrollDurationSeconds: number;
+  timeOffsetSeconds: number;
   includeUsername: boolean;
   respectPosition: boolean;
 };
@@ -325,7 +326,8 @@ function makeAss(comments: ImportedComment[], info: MediaInfo, options: CommentR
   const events: string[] = [];
 
   for (const comment of [...comments].sort((a, b) => a.time - b.time)) {
-    if (info.duration !== undefined && comment.time > info.duration + 1) continue;
+    const commentTime = Math.max(0, comment.time + options.timeOffsetSeconds);
+    if (info.duration !== undefined && commentTime > info.duration + 1) continue;
     const text = options.includeUsername && comment.user ? comment.user + ": " + comment.text : comment.text;
     const safeText = assEscape(text).slice(0, 500);
     if (!safeText) continue;
@@ -335,9 +337,9 @@ function makeAss(comments: ImportedComment[], info: MediaInfo, options: CommentR
 
     if (position === "top" || position === "bottom") {
       const lanes = position === "top" ? topFreeAt : bottomFreeAt;
-      let laneIndex = lanes.findIndex(freeAt => freeAt <= comment.time);
+      let laneIndex = lanes.findIndex(freeAt => freeAt <= commentTime);
       if (laneIndex < 0) laneIndex = lanes.indexOf(Math.min(...lanes));
-      const end = comment.time + commentDuration;
+      const end = commentTime + commentDuration;
       lanes[laneIndex] = end + 0.25;
       const y = position === "top"
         ? margin + laneIndex * lineHeight
@@ -345,21 +347,21 @@ function makeAss(comments: ImportedComment[], info: MediaInfo, options: CommentR
       const alignment = position === "top" ? "\\an8" : "\\an2";
       const effect = "{" + alignment + "\\pos(" + Math.round(width / 2) + "," + y + ")" +
         "\\fs" + fontSize + "\\bord2\\shad1\\1c" + color + "\\3c&H000000&}";
-      events.push("Dialogue: 1," + assTime(comment.time) + "," + assTime(end) +
+      events.push("Dialogue: 1," + assTime(commentTime) + "," + assTime(end) +
         ",Danmaku,,0,0,0,," + effect + safeText);
       continue;
     }
 
     const commentWidth = approximateTextWidth(text, fontSize);
     const duration = Math.max(4, travelBase * ((width + commentWidth + 40) / width));
-    let laneIndex = scrollFreeAt.findIndex(freeAt => freeAt <= comment.time);
+    let laneIndex = scrollFreeAt.findIndex(freeAt => freeAt <= commentTime);
     if (laneIndex < 0) laneIndex = scrollFreeAt.indexOf(Math.min(...scrollFreeAt));
-    scrollFreeAt[laneIndex] = comment.time + duration * 0.45 + 0.7;
+    scrollFreeAt[laneIndex] = commentTime + duration * 0.45 + 0.7 + 0.7;
     const y = margin + laneIndex * lineHeight;
     const move = "\\move(" + Math.round(width + 30) + "," + y + "," +
       Math.round(-commentWidth - 30) + "," + y + ",0," + Math.round(duration * 1000) + ")";
     const effect = "{" + move + "\\fs" + fontSize + "\\bord2\\shad1\\1c" + color + "\\3c&H000000&}";
-    events.push("Dialogue: 0," + assTime(comment.time) + "," + assTime(comment.time + duration) +
+    events.push("Dialogue: 0," + assTime(commentTime) + "," + assTime(commentTime + duration) +
       ",Danmaku,,0,0,0,," + effect + safeText);
   }
 
