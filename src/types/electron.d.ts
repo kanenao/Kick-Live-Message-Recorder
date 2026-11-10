@@ -24,6 +24,21 @@ type KickRecorderAppInfo = {
   isPackaged: boolean;
 };
 
+type KickRecorderCredentialsStatus = {
+  configured: boolean;
+  encryptionAvailable: boolean;
+  clientId: string;
+};
+
+type KickRecorderChannelCheck = {
+  slug: string;
+  found: boolean;
+  isLive: boolean;
+  streamTitle: string;
+  viewerCount: number;
+  startedAt: string | null;
+};
+
 declare global {
   interface Window {
     kickRecorder?: {
@@ -31,6 +46,10 @@ declare global {
       saveState: (state: KickRecorderAppState) => Promise<{ ok: boolean }>;
       selectOutputDirectory: () => Promise<string | null>;
       getAppInfo: () => Promise<KickRecorderAppInfo>;
+      getKickCredentialsStatus: () => Promise<KickRecorderCredentialsStatus>;
+      saveKickCredentials: (credentials: { clientId: string; clientSecret: string }) => Promise<{ ok: boolean; clientId: string }>;
+      clearKickCredentials: () => Promise<{ ok: boolean }>;
+      checkKickChannels: (slugs: string[]) => Promise<KickRecorderChannelCheck[]>;
     };
   }
 }
