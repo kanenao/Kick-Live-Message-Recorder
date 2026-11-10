@@ -29,3 +29,15 @@
 .primary-small{border:0;background:#51d895;color:#10251a;border-radius:6px;padding:8px 12px;font-size:10px;font-weight:700;cursor:pointer}
 .primary-small:disabled{opacity:.45;cursor:not-allowed}
 .api-message{font-size:10px;color:#80d9a2;margin-top:12px;line-height:1.6}
+
+.version-value{font-size:17px!important;letter-spacing:0!important;overflow-wrap:anywhere}
+.updater-panel{margin-top:25px}
+.version-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #2b2f38;color:#9da6b2;font-size:11px}
+.version-row strong{font-size:15px;color:#e8edf3;font-variant-numeric:tabular-nums}
+.update-description{color:#bac2cc;font-size:11px;line-height:1.7;padding:14px 0 8px}
+.update-progress{height:7px;background:#303641;border-radius:8px;overflow:hidden;margin:5px 0 12px}
+.update-progress-fill{height:100%;background:#55d895;border-radius:8px;transition:width .2s ease}
+.update-version{font-size:10px;color:#81dfa6;margin:5px 0 12px}
+.update-actions{display:flex;gap:9px;flex-wrap:wrap;margin:10px 0 13px}
+.update-actions button:disabled{opacity:.45;cursor:not-allowed}
+.updater-panel .settings-help{margin-top:12px}
