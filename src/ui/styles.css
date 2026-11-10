@@ -46,3 +46,15 @@
 .monitor-settings{margin-top:24px}
 .monitor-status-line{font-size:10px;color:#84dba5;padding:12px 2px 0;line-height:1.7}
 .monitor-error{margin:10px 0 0}
+
+
+.recording-action{white-space:nowrap;min-width:88px}
+.recording-library-list{border-top:1px solid #2b2f38}
+.recording-file-row{display:flex;align-items:center;gap:12px;padding:14px 2px;border-bottom:1px solid #2b2f38}
+.recording-file-icon{width:36px;height:36px;display:grid;place-items:center;border-radius:9px;background:#23362c;color:#77e3a4;font-size:13px}
+.recording-file-info{flex:1;min-width:0}
+.recording-file-info strong,.recording-file-info small{display:block;overflow-wrap:anywhere}
+.recording-file-info strong{font-size:12px;color:#e8edf3}
+.recording-file-info small{font-size:10px;color:#7e8794;margin-top:5px}
+.recording-file-row button{white-space:nowrap}
+@media(max-width:1050px){.recording-file-row{flex-wrap:wrap}.recording-file-info{flex-basis:70%}.recording-file-row button{margin-left:48px}}
