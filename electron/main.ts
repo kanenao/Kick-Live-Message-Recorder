@@ -3,6 +3,7 @@ import {
   BrowserWindow,
   dialog,
   ipcMain,
+  Notification,
   safeStorage,
   type IpcMainInvokeEvent
 } from "electron";
@@ -23,6 +24,9 @@ type AppSettings = {
   autoRecordOnStreamStart: boolean;
   saveChat: boolean;
   outputDirectory: string;
+  autoMonitorEnabled: boolean;
+  monitorIntervalSeconds: number;
+  notifyOnLive: boolean;
 };
 
 type AppState = {
@@ -35,7 +39,10 @@ const DEFAULT_STATE: AppState = {
   settings: {
     autoRecordOnStreamStart: true,
     saveChat: true,
-    outputDirectory: ""
+    outputDirectory: "",
+    autoMonitorEnabled: true,
+    monitorIntervalSeconds: 60,
+    notifyOnLive: true
   }
 };
 
@@ -382,7 +389,13 @@ function normalizeState(input: unknown): AppState {
       saveChat: settings.saveChat !== false,
       outputDirectory: typeof settings.outputDirectory === "string"
         ? settings.outputDirectory.slice(0, 4096)
-        : ""
+        : "",
+      autoMonitorEnabled: settings.autoMonitorEnabled !== false,
+      monitorIntervalSeconds: typeof settings.monitorIntervalSeconds === "number" &&
+        Number.isFinite(settings.monitorIntervalSeconds)
+        ? Math.max(30, Math.min(3600, Math.round(settings.monitorIntervalSeconds)))
+        : 60,
+      notifyOnLive: settings.notifyOnLive !== false
     }
   };
 }
@@ -441,6 +454,19 @@ function registerIpcHandlers(): void {
       properties: ["openDirectory", "createDirectory"]
     });
     return result.canceled ? null : (result.filePaths[0] ?? null);
+  });
+
+  ipcMain.handle("app:notify-live", (event, slug: unknown) => {
+    assertTrustedSender(event);
+    if (typeof slug !== "string" || !/^[a-zA-Z0-9_]{1,25}$/.test(slug)) {
+      throw new Error("通知対象のチャンネル名が不正です。");
+    }
+    if (!Notification.isSupported()) return { ok: false };
+    new Notification({
+      title: "Kick Recorder - 配信開始",
+      body: `${slug} が配信を開始しました。`
+    }).show();
+    return { ok: true };
   });
 
   ipcMain.handle("app:get-info", event => {
