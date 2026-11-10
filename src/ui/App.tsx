@@ -29,7 +29,15 @@ type ChannelCheck = {
   startedAt: string | null;
 };
 
-const APP_VERSION = "0.1.0-beta.2";
+type UpdateStatus = {
+  status: "idle" | "checking" | "available" | "downloading" | "downloaded" | "not-available" | "error";
+  currentVersion: string;
+  availableVersion?: string;
+  percent?: number;
+  message: string;
+};
+
+const APP_VERSION = "0.1.0-beta.3";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -103,10 +111,18 @@ export default function App() {
   const [channelChecks, setChannelChecks] = useState<Record<string, ChannelCheck>>({});
   const [isCheckingChannels, setIsCheckingChannels] = useState(false);
   const [lastChannelCheck, setLastChannelCheck] = useState("");
+  const [appVersion, setAppVersion] = useState(APP_VERSION);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({
+    status: "idle",
+    currentVersion: APP_VERSION,
+    message: "起動時に自動で更新を確認します。"
+  });
+  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
   const activeCount = useMemo(() => channels.filter(c => c.recording).length, [channels]);
 
   useEffect(() => {
     let active = true;
+    let unsubscribeUpdate: (() => void) | undefined;
     void loadState().then(state => {
       if (!active) return;
       setChannels(state.channels);
@@ -119,8 +135,16 @@ export default function App() {
 
     if (window.kickRecorder) {
       setIsDesktop(true);
+      unsubscribeUpdate = window.kickRecorder.onUpdateStatus(status => {
+        if (active) setUpdateStatus(status);
+      });
       void window.kickRecorder.getAppInfo().then(info => {
-        if (active) setAppDataDirectory(info.dataDirectory);
+        if (!active) return;
+        setAppDataDirectory(info.dataDirectory);
+        setAppVersion(info.version);
+      }).catch(() => undefined);
+      void window.kickRecorder.getUpdateStatus().then(status => {
+        if (active) setUpdateStatus(status);
       }).catch(() => undefined);
       void window.kickRecorder.getKickCredentialsStatus().then(status => {
         if (!active) return;
@@ -130,7 +154,10 @@ export default function App() {
       }).catch(() => undefined);
     }
 
-    return () => { active = false; };
+    return () => {
+      active = false;
+      unsubscribeUpdate?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -174,7 +201,7 @@ export default function App() {
   async function saveKickApiCredentials() {
     if (!window.kickRecorder) return;
     if (!kickClientId.trim() || !kickClientSecret) {
-      setKickMessage("Client IDとClient Secretを入力してください。");
+      setKickMessage("クライアントIDとクライアントシークレットを入力してください。");
       return;
     }
     try {
@@ -234,6 +261,40 @@ export default function App() {
     }
   }
 
+
+  async function checkForAppUpdates() {
+    if (!window.kickRecorder) {
+      setUpdateStatus(prev => ({ ...prev, status: "error", message: "更新確認はWindowsデスクトップ版で利用できます。" }));
+      return;
+    }
+    setIsCheckingUpdates(true);
+    try {
+      const status = await window.kickRecorder.checkForUpdates();
+      setUpdateStatus(status);
+    } catch (error) {
+      setUpdateStatus(prev => ({
+        ...prev,
+        status: "error",
+        message: error instanceof Error ? error.message : "更新を確認できませんでした。"
+      }));
+    } finally {
+      setIsCheckingUpdates(false);
+    }
+  }
+
+  async function installAppUpdate() {
+    if (!window.kickRecorder) return;
+    try {
+      await window.kickRecorder.installUpdate();
+    } catch (error) {
+      setUpdateStatus(prev => ({
+        ...prev,
+        status: "error",
+        message: error instanceof Error ? error.message : "更新を適用できませんでした。"
+      }));
+    }
+  }
+
   async function chooseOutputDirectory() {
     if (!window.kickRecorder) return;
     try {
@@ -246,18 +307,18 @@ export default function App() {
 
   return <div className="app-shell">
     <aside className="sidebar">
-      <div className="brand"><div className="brand-mark">K</div><div><strong>Kick Recorder</strong><small>LIVE ARCHIVER</small></div></div>
-      <div className="nav-label">WORKSPACE</div>
+      <div className="brand"><div className="brand-mark">K</div><div><strong>Kick Recorder</strong><small>配信・チャット保存</small></div></div>
+      <div className="nav-label">メインメニュー</div>
       <button className={tab === "dashboard" ? "nav-item selected" : "nav-item"} onClick={() => setTab("dashboard")}>▦ <span>ダッシュボード</span></button>
       <button className={tab === "library" ? "nav-item selected" : "nav-item"} onClick={() => setTab("library")}>▤ <span>録画ライブラリ</span></button>
       <button className={tab === "settings" ? "nav-item selected" : "nav-item"} onClick={() => setTab("settings")}>⚙ <span>設定</span></button>
-      <div className="sidebar-bottom"><span className="status-dot" /> β版・開発テスト中<small>Version {APP_VERSION}</small></div>
+      <div className="sidebar-bottom"><span className="status-dot" /> β版・開発テスト中<small>現在のバージョン {appVersion}</small></div>
     </aside>
 
     <main className="main">
       <header className="topbar">
-        <div><span className="eyebrow">KICK STREAM MANAGER</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "library" ? "録画ライブラリ" : "設定"}</h1></div>
-        <div className="top-actions"><span className="connection"><i /> {isDesktop ? "デスクトップ版" : "ブラウザープレビュー"}</span><span className="beta-tag">BETA</span><div className="avatar">KR</div></div>
+        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "library" ? "録画ライブラリ" : "設定"}</h1></div>
+        <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="beta-tag">β版</span><div className="avatar">KR</div></div>
       </header>
 
       {storageError && <div className="storage-error" role="alert">{storageError}</div>}
@@ -267,11 +328,11 @@ export default function App() {
           <div className="stat-card"><span>登録チャンネル</span><strong>{channels.length.toString().padStart(2,"0")}</strong><small>監視対象</small></div>
           <div className="stat-card"><span>録画中</span><strong>{activeCount.toString().padStart(2,"0")}</strong><small>現在のセッション</small></div>
           <div className="stat-card"><span>保存済み録画</span><strong>00</strong><small>このPC内</small></div>
-          <div className="stat-card accent"><span>バージョン</span><strong>β 1</strong><small>{isReady ? "設定の読み込み完了" : "設定を読み込み中"}</small></div>
+          <div className="stat-card accent"><span>現在のバージョン</span><strong className="version-value">{appVersion}</strong><small>{isReady ? "インストール済み" : "起動情報を読み込み中"}</small></div>
         </section>
 
         <section className="panel">
-          <div className="panel-heading"><div><h2>チャンネル管理</h2><p>録画・監視したいKickチャンネルを登録</p></div><div className="panel-heading-actions"><span className="count-pill">{channels.length} CHANNELS</span><button className="small-action refresh-button" onClick={() => void refreshChannelStatuses()} disabled={!isDesktop || isCheckingChannels || channels.length === 0}>{isCheckingChannels ? "確認中..." : "配信状態を更新"}</button></div></div>
+          <div className="panel-heading"><div><h2>チャンネル管理</h2><p>録画・監視したいKickチャンネルを登録</p></div><div className="panel-heading-actions"><span className="count-pill">登録数：{channels.length}件</span><button className="small-action refresh-button" onClick={() => void refreshChannelStatuses()} disabled={!isDesktop || isCheckingChannels || channels.length === 0}>{isCheckingChannels ? "確認中..." : "配信状態を更新"}</button></div></div>
           <div className="add-channel">
             <input value={newChannel} onChange={e => setNewChannel(e.target.value)} onKeyDown={e => e.key === "Enter" && addChannel()} placeholder="チャンネル名 または kick.com のURL" aria-label="Kickチャンネル名またはURL" />
             <button onClick={addChannel}>＋ 追加する</button>
@@ -289,7 +350,7 @@ export default function App() {
                   ? (channelChecks[c.name.toLowerCase()].isLive ? `配信中 · ${channelChecks[c.name.toLowerCase()].viewerCount.toLocaleString("ja-JP")}人` : "オフライン")
                   : (channelChecks[c.name.toLowerCase()] ? "チャンネル未検出" : "未確認")}
               </span>
-              <button className="small-action" onClick={() => setChannels(prev => prev.map(x => x.id === c.id ? {...x, mode: x.mode === "auto" ? "manual" : "auto"} : x))}>方式変更</button>
+              <button className="small-action" onClick={() => setChannels(prev => prev.map(x => x.id === c.id ? {...x, mode: x.mode === "auto" ? "manual" : "auto"} : x))}>録画方式を変更</button>
               <button className="remove" aria-label={`${c.name}を削除`} onClick={() => setChannels(prev => prev.filter(x => x.id !== c.id))}>×</button>
             </div>)}
           </div>
@@ -311,11 +372,11 @@ export default function App() {
         <div className="panel-heading"><div><h2>基本設定</h2><p>β版の録画動作・保存先の設定</p></div></div>
         <div className="setting-row">
           <div><strong>配信開始時に自動録画</strong><small>自動録画モードのチャンネルで使用します（録画機能は開発中）</small></div>
-          <label className="setting-control"><input type="checkbox" checked={settings.autoRecordOnStreamStart} onChange={e => setSettings(prev => ({ ...prev, autoRecordOnStreamStart: e.target.checked }))} /><span>{settings.autoRecordOnStreamStart ? "ON" : "OFF"}</span></label>
+          <label className="setting-control"><input type="checkbox" checked={settings.autoRecordOnStreamStart} onChange={e => setSettings(prev => ({ ...prev, autoRecordOnStreamStart: e.target.checked }))} /><span>{settings.autoRecordOnStreamStart ? "有効" : "無効"}</span></label>
         </div>
         <div className="setting-row">
           <div><strong>チャットを保存</strong><small>配信映像とチャットを一緒に保存する機能の設定</small></div>
-          <label className="setting-control"><input type="checkbox" checked={settings.saveChat} onChange={e => setSettings(prev => ({ ...prev, saveChat: e.target.checked }))} /><span>{settings.saveChat ? "ON" : "OFF"}</span></label>
+          <label className="setting-control"><input type="checkbox" checked={settings.saveChat} onChange={e => setSettings(prev => ({ ...prev, saveChat: e.target.checked }))} /><span>{settings.saveChat ? "有効" : "無効"}</span></label>
         </div>
         <div className="setting-row">
           <div><strong>録画・データの保存先</strong><small>{settings.outputDirectory || "未指定（初期設定の保存場所を使用）"}</small></div>
@@ -324,17 +385,37 @@ export default function App() {
           </div>
         </div>
 
+        <div className="settings-subsection updater-panel">
+          <div className="settings-subheading">
+            <h3>アプリ情報・自動更新</h3>
+            <span className="api-state connected">自動確認：有効</span>
+          </div>
+          <div className="version-row">
+            <span>現在のバージョン</span>
+            <strong>{appVersion}</strong>
+          </div>
+          <div className="update-description">{updateStatus.message}</div>
+          {(updateStatus.status === "downloading" || updateStatus.status === "available") && <div className="update-progress"><div className="update-progress-fill" style={{ width: `${updateStatus.percent ?? 0}%` }} /></div>}
+          {updateStatus.availableVersion && <div className="update-version">新しいバージョン：{updateStatus.availableVersion}</div>}
+          <div className="update-actions">
+            <button className="primary-small" onClick={() => void checkForAppUpdates()} disabled={!isDesktop || isCheckingUpdates || updateStatus.status === "downloading"}>{isCheckingUpdates || updateStatus.status === "checking" ? "確認中..." : "今すぐ更新を確認"}</button>
+            {updateStatus.status === "downloaded" && <button className="primary-small" onClick={() => void installAppUpdate()}>再起動して更新</button>}
+          </div>
+          <p className="settings-help">起動時と6時間ごとに新しいバージョンを確認します。更新が見つかると自動でダウンロードし、アプリ終了時に適用します。更新の適用にはアプリの再起動が必要です。</p>
+          {!isDesktop && <div className="notice">自動更新はWindowsデスクトップ版をインストールして利用してください。</div>}
+        </div>
+
         <div className="settings-subsection">
           <div className="settings-subheading">
             <h3>Kick API接続</h3>
             <span className={kickCredentialsConfigured ? "api-state connected" : "api-state"}>{kickCredentialsConfigured ? "認証情報登録済み" : "未設定"}</span>
           </div>
           <p className="settings-help">Kick Developerで作成したアプリのClient IDとClient Secretを入力します。SecretはWindowsの暗号化機能で保護し、画面側やログには保存しません。</p>
-          <label className="credential-field">Client ID
-            <input value={kickClientId} onChange={event => setKickClientId(event.target.value)} placeholder="Kick DeveloperのClient ID" autoComplete="off" disabled={!isDesktop} />
+          <label className="credential-field">クライアントID
+            <input value={kickClientId} onChange={event => setKickClientId(event.target.value)} placeholder="Kick DeveloperのクライアントID" autoComplete="off" disabled={!isDesktop} />
           </label>
-          <label className="credential-field">Client Secret
-            <input type="password" value={kickClientSecret} onChange={event => setKickClientSecret(event.target.value)} placeholder={kickCredentialsConfigured ? "保存済み（変更する場合のみ入力）" : "Kick DeveloperのClient Secret"} autoComplete="new-password" disabled={!isDesktop} />
+          <label className="credential-field">クライアントシークレット
+            <input type="password" value={kickClientSecret} onChange={event => setKickClientSecret(event.target.value)} placeholder={kickCredentialsConfigured ? "保存済み（変更する場合のみ入力）" : "Kick Developerのクライアントシークレット"} autoComplete="new-password" disabled={!isDesktop} />
           </label>
           <div className="credential-actions">
             <button className="primary-small" onClick={() => void saveKickApiCredentials()} disabled={!isDesktop || !kickEncryptionAvailable}>認証情報を保存</button>
@@ -348,7 +429,7 @@ export default function App() {
         {!isDesktop && <div className="notice">保存先フォルダーの選択はWindowsデスクトップ版で利用できます。ブラウザープレビューでは設定をブラウザー内に保存します。</div>}
       </section>}
 
-      <footer>Kick Recorder <span>•</span> β版 {APP_VERSION} <span>•</span> Made for stream archiving</footer>
+      <footer>Kick Recorder <span>•</span> β版 {appVersion} <span>•</span> 日本語版</footer>
     </main>
   </div>;
 }
