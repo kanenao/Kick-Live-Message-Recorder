@@ -41,3 +41,8 @@
 .update-actions{display:flex;gap:9px;flex-wrap:wrap;margin:10px 0 13px}
 .update-actions button:disabled{opacity:.45;cursor:not-allowed}
 .updater-panel .settings-help{margin-top:12px}
+
+.setting-select{background:#11141a;border:1px solid #343945;border-radius:6px;color:#e7ebf0;padding:8px 10px;font-size:11px;min-width:100px}
+.monitor-settings{margin-top:24px}
+.monitor-status-line{font-size:10px;color:#84dba5;padding:12px 2px 0;line-height:1.7}
+.monitor-error{margin:10px 0 0}
