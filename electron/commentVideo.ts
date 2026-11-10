@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import {
-  copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync
+  existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync
 } from "node:fs";
 import { basename, dirname, extname, join, parse, resolve } from "node:path";
 
