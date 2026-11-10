@@ -75,6 +75,16 @@ jobs:
           if ($refName -ne "v$version") {
             throw "リリース参照 $refName と package.json のバージョン v$version が一致しません。"
           }
+      - name: リリースノートが揃っていることを確認
+        if: ${{ startsWith(github.ref, 'refs/heads/release/') }}
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          $notesPath = "docs/releases/v$version.md"
+          if (-not (Test-Path $notesPath)) {
+            throw "リリースノート $notesPath がありません。実装・文書を揃えてから公開してください。"
+          }
+          Write-Host "リリースノートを確認しました: $notesPath"
       - name: GitHub Releases用のバージョンタグを確認
         id: release_tag
         if: ${{ startsWith(github.ref, 'refs/heads/release/') }}
@@ -91,6 +101,14 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "既存タグを取得できませんでした。" }
             $tagCommit = git rev-list -n 1 $tag
             if (-not $tagCommit) { throw "既存タグ $tag を読み取れませんでした。" }
+            $currentCommit = git rev-parse HEAD
+            if ($tagCommit -ne $currentCommit) {
+              git tag -f $tag $currentCommit
+              if ($LASTEXITCODE -ne 0) { throw "タグ $tag を最新コミットへ更新できませんでした。" }
+              git push --force origin $tag
+              if ($LASTEXITCODE -ne 0) { throw "最新タグ $tag をGitHubへpushできませんでした。" }
+              Write-Host "タグ $tag を現在のリリースブランチのコミットに合わせました。"
+            }
             "should_publish=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
             Write-Host "既存タグ $tag のReleaseアセットを更新します。"
           } else {
