@@ -99,7 +99,7 @@ function normalizePosition(value: unknown): ImportedComment["position"] {
 
 function normalizeComment(record: Record<string, unknown>): ImportedComment | null {
   const timeValue = firstValue(record, [
-    "vpos", "time", "offset", "seconds", "elapsed", "time_seconds", "timestamp_ms", "position", "timestamp"
+    "vpos", "time", "offset", "seconds", "elapsed", "time_seconds", "timestamp_ms", "timestamp"
   ]);
   if (!timeValue) return null;
   const time = parseTimeValue(timeValue.value, timeValue.key);
@@ -244,6 +244,21 @@ function parseTextComments(source: string): ImportedComment[] {
   return comments;
 }
 
+function shiftAssContent(source: string, offsetSeconds: number): string {
+  if (Math.abs(offsetSeconds) < 0.001) return source;
+  return source.split(/\r?\n/).map(line => {
+    if (!/^Dialogue\s*:/i.test(line)) return line;
+    const fields = line.split(",");
+    if (fields.length < 10) return line;
+    const start = parseClock(fields[1]);
+    const end = parseClock(fields[2]);
+    if (start === null || end === null) return line;
+    fields[1] = assTime(Math.max(0, start + offsetSeconds));
+    fields[2] = assTime(Math.max(0, end + offsetSeconds));
+    return fields.join(",");
+  }).join("\r\n");
+}
+
 function countAssDialogue(source: string): number {
   return source.split(/\r?\n/).filter(line => /^Dialogue\s*:/i.test(line)).length;
 }
@@ -292,7 +307,7 @@ function assEscape(value: string): string {
 function assColor(value?: string): string {
   const input = String(value ?? "").trim().toLowerCase();
   const names: Record<string, string> = {
-    white: "#ffffff", black: "#ffffff", red: "#ff4444", pink: "#ff80c0",
+    white: "#ffffff", black: "#000000", red: "#ff4444", pink: "#ff80c0",
     orange: "#ff9900", yellow: "#ffff55", green: "#55ff55", cyan: "#55ffff",
     blue: "#5599ff", purple: "#cc88ff"
   };
@@ -492,13 +507,34 @@ export class CommentVideoRenderer {
       this.publish();
       return this.getStatus();
     }
-    mkdirSync(dirname(outputPath), { recursive: true });
+    try {
+      mkdirSync(dirname(outputPath), { recursive: true });
+      const token = String(process.pid) + "_" + String(Date.now());
+      this.temporaryAssPath = join(dirname(outputPath), "_klmr_comments_" + token + ".ass");
+      this.temporaryVideoPath = join(dirname(outputPath), parse(outputPath).name + ".rendering-" + token + ".mp4");
+      if (parsed.isAss) {
+        const assSource = readFileSync(commentsPath, "utf8");
+        writeFileSync(this.temporaryAssPath, shiftAssContent(assSource, options.timeOffsetSeconds), "utf8");
+      } else {
+        writeFileSync(this.temporaryAssPath, makeAss(parsed.comments, info, options), "utf8");
+      }
+    } catch (error) {
+      this.active = false;
+      this.cleanupTemporaryAss();
+      this.cleanupTemporaryVideo();
+      this.status = { ...this.status, status: "error", message: "合成用コメントデータを準備できませんでした。", error: error instanceof Error ? error.message : String(error) };
+      this.publish();
+      throw error;
+    }
 
-    const token = String(process.pid) + "_" + String(Date.now());
-    this.temporaryAssPath = join(dirname(outputPath), "_klmr_comments_" + token + ".ass");
-    this.temporaryVideoPath = join(dirname(outputPath), parse(outputPath).name + ".rendering-" + token + ".mp4");
-    if (parsed.isAss) copyFileSync(commentsPath, this.temporaryAssPath);
-    else writeFileSync(this.temporaryAssPath, makeAss(parsed.comments, info, options), "utf8");
+    if (this.cancelled) {
+      this.active = false;
+      this.cleanupTemporaryAss();
+      this.cleanupTemporaryVideo();
+      this.status = { ...this.status, status: "cancelled", message: "動画生成をキャンセルしました。" };
+      this.publish();
+      return this.getStatus();
+    }
 
     const tempAssName = basename(this.temporaryAssPath);
     const args = [
@@ -564,9 +600,24 @@ export class CommentVideoRenderer {
         this.cleanupTemporaryVideo();
         this.status = { ...this.status, status: "cancelled", message: "動画生成をキャンセルしました。", progressPercent: 0 };
       } else {
-        if (existsSync(outputPath)) unlinkSync(outputPath);
-        renameSync(this.temporaryVideoPath, outputPath);
-        this.temporaryVideoPath = "";
+        const backupPath = outputPath + ".previous-" + String(Date.now());
+        let movedExistingOutput = false;
+        try {
+          if (existsSync(outputPath)) {
+            renameSync(outputPath, backupPath);
+            movedExistingOutput = true;
+          }
+          renameSync(this.temporaryVideoPath, outputPath);
+          this.temporaryVideoPath = "";
+          if (movedExistingOutput && existsSync(backupPath)) {
+            try { unlinkSync(backupPath); } catch { /* keep backup if cleanup is blocked */ }
+          }
+        } catch (error) {
+          if (movedExistingOutput && existsSync(backupPath) && !existsSync(outputPath)) {
+            try { renameSync(backupPath, outputPath); } catch { /* retain the backup for manual recovery */ }
+          }
+          throw error;
+        }
         this.status = { ...this.status, status: "completed", message: "コメント付き動画の生成が完了しました。", progressPercent: 100 };
       }
       this.active = false;
