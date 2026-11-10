@@ -91,14 +91,47 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "既存タグを取得できませんでした。" }
             $tagCommit = git rev-list -n 1 $tag
             if (-not $tagCommit) { throw "既存タグ $tag を読み取れませんでした。" }
-            "should_publish=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            Write-Host "既存のバージョン $tag は変更しません。公開処理をスキップします。"
+            "should_publish=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            Write-Host "既存タグ $tag のReleaseアセットを更新します。"
           } else {
             git tag $tag
             if ($LASTEXITCODE -ne 0) { throw "タグを作成できませんでした。" }
             git push origin $tag
             if ($LASTEXITCODE -ne 0) { throw "GitHubへタグをpushできませんでした。" }
             "should_publish=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          }
+      - name: 同一タグの重複Releaseを整理
+        if: ${{ startsWith(github.ref, 'refs/heads/release/') }}
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = node -p "require('./package.json').version"
+          $tag = "v$version"
+          $headers = @{
+            Authorization = "Bearer $env:GITHUB_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+          $uri = "https://api.github.com/repos/kanenao/Kick-Live-Message-Recorder/releases?per_page=100"
+          $releases = Invoke-RestMethod -Headers $headers -Uri $uri
+          $matches = @($releases | Where-Object { $_.tag_name -eq $tag })
+          if ($matches.Count -gt 1) {
+            $installerName = "Kick-Recorder-Setup-$version.exe"
+            $keep = $matches | Where-Object {
+              ($_.assets.name -contains $installerName) -and ($_.assets.name -contains "latest.yml")
+            } | Select-Object -First 1
+            if (-not $keep) {
+              throw "タグ $tag のReleaseが重複していますが、インストーラーとlatest.ymlを持つReleaseを特定できません。"
+            }
+            foreach ($release in $matches) {
+              if ($release.id -ne $keep.id) {
+                Invoke-RestMethod -Method Delete -Headers $headers -Uri "https://api.github.com/repos/kanenao/Kick-Live-Message-Recorder/releases/$($release.id)"
+                Write-Host "重複Release $($release.id) を削除しました。"
+              }
+            }
+          } else {
+            Write-Host "同一タグの重複Releaseはありません。"
           }
       - name: 依存パッケージをインストール
         run: npm install --no-audit --no-fund --no-package-lock
