@@ -90,8 +90,9 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "既存タグを取得できませんでした。" }
             $tagCommit = git rev-list -n 1 $tag
             $headCommit = git rev-parse HEAD
-            if ($tagCommit -ne $headCommit) {
-              throw "タグ $tag は別のコミットを指しています。既存タグは変更しません。"
+            $mergeBase = git merge-base $tagCommit $headCommit
+            if ($mergeBase -ne $tagCommit) {
+              throw "タグ $tag がリリースブランチに含まれていません。既存タグは変更しません。"
             }
           } else {
             git tag $tag
