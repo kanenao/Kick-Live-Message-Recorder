@@ -28,7 +28,9 @@
 - [ ] WindowsインストーラーのCI実ビルド確認
 
 ### Phase 2: 配信検知・録画
-- [ ] Kick公式APIによる配信状態の確認
+- [x] Kick公式APIによる配信状態の手動確認
+- [x] Kick Client Secretの暗号化保存（Electron safeStorage）
+- [ ] Kick公式APIによる配信状態の定期検知
 - [ ] 自動録画の開始・終了制御
 - [ ] 手動録画の開始・停止
 - [ ] FFmpeg等による映像・音声保存
