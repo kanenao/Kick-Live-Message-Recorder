@@ -410,6 +410,20 @@ export default function App() {
     setKickMessage("");
     try {
       const results = await window.kickRecorder.checkKickChannels(channels.map(channel => channel.name));
+      for (const result of results) {
+        const channel = channels.find(item => item.name.toLowerCase() === result.slug.toLowerCase());
+        if (
+          settings.autoRecordOnStreamStart &&
+          channel?.mode === "auto" &&
+          result.found &&
+          result.isLive &&
+          !channel.recording
+        ) {
+          void window.kickRecorder.startRecording(result.slug).catch(error => {
+            setRecordingMessage(error instanceof Error ? error.message : `${result.slug} の自動録画を開始できませんでした。`);
+          });
+        }
+      }
       const nextChecks = Object.fromEntries(results.map(result => [result.slug.toLowerCase(), result]));
       previousChecksRef.current = nextChecks;
       setChannelChecks(nextChecks);
@@ -687,7 +701,7 @@ export default function App() {
         {!isDesktop && <div className="notice">保存先フォルダーの選択はWindowsデスクトップ版で利用できます。ブラウザープレビューでは設定をブラウザー内に保存します。</div>}
       </section>}
 
-      <footer>Kick Recorder <span>•</span> β版 {appVersion} <span>•</span> 日本語版</footer>
+      <footer>Kick Live Message Recorder <span>•</span> β版 {appVersion} <span>•</span> 日本語版</footer>
     </main>
   </div>;
 }
