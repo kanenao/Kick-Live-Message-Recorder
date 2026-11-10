@@ -127,7 +127,8 @@ export class RecorderManager {
 
   private startProcess(session: Session): void {
     if (session.stopping) return;
-    const { slug, config } = session;
+    const slug = session.info.slug;
+    const config = session.config;
     const args = [
       "--no-warnings",
       "--newline",
