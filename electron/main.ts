@@ -8,6 +8,7 @@ import {
 } from "electron";
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { autoUpdater } from "electron-updater";
 
 type Channel = {
   id: number;
@@ -249,6 +250,98 @@ async function checkKickChannels(input: unknown): Promise<KickChannelCheck[]> {
   });
 }
 
+
+type UpdateStatus = {
+  status: "idle" | "checking" | "available" | "downloading" | "downloaded" | "not-available" | "error";
+  currentVersion: string;
+  availableVersion?: string;
+  percent?: number;
+  message: string;
+};
+
+let updateStatus: UpdateStatus = {
+  status: "idle",
+  currentVersion: app.getVersion(),
+  message: "起動時に自動で更新を確認します。"
+};
+
+function publishUpdateStatus(next: Partial<UpdateStatus>): void {
+  updateStatus = { ...updateStatus, ...next, currentVersion: app.getVersion() };
+  mainWindow?.webContents.send("updater:status", updateStatus);
+}
+
+function initializeAutoUpdater(): void {
+  if (!app.isPackaged || process.platform !== "win32") return;
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.allowPrerelease = app.getVersion().includes("-");
+
+  autoUpdater.on("checking-for-update", () => {
+    publishUpdateStatus({
+      status: "checking",
+      percent: 0,
+      message: "新しいバージョンを確認しています。"
+    });
+  });
+
+  autoUpdater.on("update-available", info => {
+    publishUpdateStatus({
+      status: "available",
+      availableVersion: info.version,
+      percent: 0,
+      message: `新しいバージョン ${info.version} が見つかりました。自動でダウンロードします。`
+    });
+  });
+
+  autoUpdater.on("download-progress", progress => {
+    publishUpdateStatus({
+      status: "downloading",
+      percent: Math.max(0, Math.min(100, progress.percent)),
+      message: `更新をダウンロードしています（${Math.round(progress.percent)}%）。`
+    });
+  });
+
+  autoUpdater.on("update-downloaded", info => {
+    publishUpdateStatus({
+      status: "downloaded",
+      availableVersion: info.version,
+      percent: 100,
+      message: `バージョン ${info.version} をダウンロードしました。再起動して更新できます。`
+    });
+  });
+
+  autoUpdater.on("update-not-available", () => {
+    publishUpdateStatus({
+      status: "not-available",
+      availableVersion: undefined,
+      percent: 100,
+      message: "現在のバージョンは最新です。"
+    });
+  });
+
+  autoUpdater.on("error", error => {
+    publishUpdateStatus({
+      status: "error",
+      message: `更新の確認・ダウンロードに失敗しました：${error.message}`
+    });
+  });
+
+  const check = (): void => {
+    void autoUpdater.checkForUpdates().catch(error => {
+      publishUpdateStatus({
+        status: "error",
+        message: `更新の確認に失敗しました：${error instanceof Error ? error.message : String(error)}`
+      });
+    });
+  };
+
+  // 起動直後と6時間ごとに確認。取得した更新は自動ダウンロードし、アプリ終了時に適用する。
+  setTimeout(check, 5_000);
+  const periodicCheck = setInterval(check, 6 * 60 * 60 * 1000);
+  periodicCheck.unref();
+}
+
 let mainWindow: BrowserWindow | null = null;
 
 function normalizeState(input: unknown): AppState {
@@ -359,6 +452,29 @@ function registerIpcHandlers(): void {
     };
   });
 
+  ipcMain.handle("updater:get-status", event => {
+    assertTrustedSender(event);
+    return updateStatus;
+  });
+
+  ipcMain.handle("updater:check", async event => {
+    assertTrustedSender(event);
+    if (!app.isPackaged || process.platform !== "win32") {
+      throw new Error("自動更新はインストール済みのWindows版で利用できます。");
+    }
+    await autoUpdater.checkForUpdates();
+    return updateStatus;
+  });
+
+  ipcMain.handle("updater:install", event => {
+    assertTrustedSender(event);
+    if (updateStatus.status !== "downloaded") {
+      throw new Error("更新ファイルのダウンロードが完了していません。");
+    }
+    autoUpdater.quitAndInstall();
+    return { ok: true };
+  });
+
   ipcMain.handle("kick:get-credentials-status", event => {
     assertTrustedSender(event);
     return getKickCredentialsStatus();
@@ -387,7 +503,7 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 640,
     backgroundColor: "#111318",
-    title: "Kick Recorder",
+    title: "Kick Recorder - 配信録画・チャット保存",
     webPreferences: {
       preload: join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -428,7 +544,9 @@ if (!hasSingleInstanceLock) {
 
   app.whenReady().then(() => {
     registerIpcHandlers();
+    app.setAppUserModelId("jp.kanenao.kickrecorder");
     createWindow();
+    initializeAutoUpdater();
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
