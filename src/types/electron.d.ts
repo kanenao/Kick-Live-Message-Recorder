@@ -41,6 +41,17 @@ type KickRecorderUpdateStatus = {
   message: string;
 };
 
+type KickRecorderRecordingStatus = {
+  slug: string;
+  status: "starting" | "recording" | "reconnecting" | "stopping" | "stopped" | "error";
+  startedAt: string;
+  filePath: string;
+  progress: string;
+  message: string;
+  reconnectCount: number;
+  exitCode?: number | null;
+};
+
 type KickRecorderChannelCheck = {
   slug: string;
   found: boolean;
@@ -62,6 +73,12 @@ declare global {
       saveKickCredentials: (credentials: { clientId: string; clientSecret: string }) => Promise<{ ok: boolean; clientId: string }>;
       clearKickCredentials: () => Promise<{ ok: boolean }>;
       checkKickChannels: (slugs: string[]) => Promise<KickRecorderChannelCheck[]>;
+      selectYtDlp: () => Promise<string | null>;
+      selectFfmpeg: () => Promise<string | null>;
+      startRecording: (slug: string) => Promise<KickRecorderRecordingStatus>;
+      stopRecording: (slug: string) => Promise<KickRecorderRecordingStatus | null>;
+      getRecordingStatuses: () => Promise<KickRecorderRecordingStatus[]>;
+      onRecordingStatus: (callback: (status: KickRecorderRecordingStatus) => void) => () => void;
       getUpdateStatus: () => Promise<KickRecorderUpdateStatus>;
       checkForUpdates: () => Promise<KickRecorderUpdateStatus>;
       installUpdate: () => Promise<{ ok: boolean }>;
