@@ -45,6 +45,22 @@ type RecordingStatus = {
   exitCode?: number | null;
 };
 
+type CommentVideoStatus = {
+  status: "idle" | "preparing" | "rendering" | "completed" | "cancelled" | "error";
+  message: string;
+  progressPercent: number;
+  commentCount: number;
+  videoPath: string;
+  outputPath: string;
+  error?: string;
+};
+
+type CommentFilePreview = {
+  count: number;
+  format: string;
+  usesExistingAss: boolean;
+};
+
 type UpdateStatus = {
   status: "idle" | "checking" | "available" | "downloading" | "downloaded" | "not-available" | "error";
   currentVersion: string;
@@ -53,7 +69,7 @@ type UpdateStatus = {
   message: string;
 };
 
-const APP_VERSION = "0.1.0-beta.7";
+const APP_VERSION = "0.1.0-beta.8";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -126,7 +142,7 @@ export default function App() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [newChannel, setNewChannel] = useState("");
-  const [tab, setTab] = useState<"dashboard" | "library" | "settings">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "library" | "comments" | "settings">("dashboard");
   const [isReady, setIsReady] = useState(false);
   const [storageError, setStorageError] = useState("");
   const [appDataDirectory, setAppDataDirectory] = useState("");
@@ -142,6 +158,17 @@ export default function App() {
   const [monitorError, setMonitorError] = useState("");
   const [recordingStates, setRecordingStates] = useState<Record<string, RecordingStatus>>({});
   const [recordingError, setRecordingError] = useState("");
+  const [commentVideoPath, setCommentVideoPath] = useState("");
+  const [commentFilePath, setCommentFilePath] = useState("");
+  const [commentOutputPath, setCommentOutputPath] = useState("");
+  const [commentFilePreview, setCommentFilePreview] = useState<CommentFilePreview | null>(null);
+  const [commentFileError, setCommentFileError] = useState("");
+  const [renderStatus, setRenderStatus] = useState<CommentVideoStatus>({
+    status: "idle", message: "動画とコメントファイルを選択してください。", progressPercent: 0,
+    commentCount: 0, videoPath: "", outputPath: ""
+  });
+  const [renderOptions, setRenderOptions] = useState({ fontSize: 36, scrollDurationSeconds: 12, includeUsername: true, respectPosition: true });
+  const [isStartingRender, setIsStartingRender] = useState(false);
   const previousChecksRef = useRef<Record<string, ChannelCheck>>({});
   const [appVersion, setAppVersion] = useState(APP_VERSION);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({
@@ -156,6 +183,7 @@ export default function App() {
     let active = true;
     let unsubscribeUpdate: (() => void) | undefined;
     let unsubscribeRecording: (() => void) | undefined;
+    let unsubscribeCommentVideo: (() => void) | undefined;
     void loadState().then(state => {
       if (!active) return;
       setChannels(state.channels);
@@ -174,6 +202,12 @@ export default function App() {
       unsubscribeRecording = window.kickRecorder.onRecordingStatus(status => {
         if (active) setRecordingStates(prev => ({ ...prev, [status.slug.toLowerCase()]: status }));
       });
+      unsubscribeCommentVideo = window.kickRecorder.onCommentVideoStatus(status => {
+        if (active) setRenderStatus(status);
+      });
+      void window.kickRecorder.getCommentVideoStatus().then(status => {
+        if (active && status) setRenderStatus(status);
+      }).catch(() => undefined);
       void window.kickRecorder.getRecordingStatuses().then(statuses => {
         if (!active) return;
         setRecordingStates(Object.fromEntries(statuses.map(status => [status.slug.toLowerCase(), status])));
@@ -198,6 +232,7 @@ export default function App() {
       active = false;
       unsubscribeUpdate?.();
       unsubscribeRecording?.();
+      unsubscribeCommentVideo?.();
     };
   }, []);
 
@@ -458,6 +493,76 @@ export default function App() {
       if (filePath) setSettings(prev => ({ ...prev, ffmpegPath: filePath }));
     } catch (error) {
       setRecordingError(error instanceof Error ? error.message : "ffmpeg.exeを選択できませんでした。");
+    }
+  }
+
+  async function chooseCommentVideo() {
+    if (!window.kickRecorder) return;
+    setCommentFileError("");
+    try {
+      const filePath = await window.kickRecorder.selectCommentVideo();
+      if (filePath) {
+        setCommentVideoPath(filePath);
+        setCommentOutputPath("");
+      }
+    } catch (error) {
+      setCommentFileError(error instanceof Error ? error.message : "元動画を選択できませんでした。");
+    }
+  }
+
+  async function chooseCommentFile() {
+    if (!window.kickRecorder) return;
+    setCommentFileError("");
+    setCommentFilePreview(null);
+    try {
+      const filePath = await window.kickRecorder.selectCommentFile();
+      if (!filePath) return;
+      setCommentFilePath(filePath);
+      const preview = await window.kickRecorder.previewCommentFile(filePath);
+      setCommentFilePreview(preview);
+    } catch (error) {
+      setCommentFilePath("");
+      setCommentFileError(error instanceof Error ? error.message : "コメントファイルを読み込めませんでした。");
+    }
+  }
+
+  async function chooseCommentOutput() {
+    if (!window.kickRecorder || !commentVideoPath) return;
+    setCommentFileError("");
+    try {
+      const filePath = await window.kickRecorder.selectCommentVideoOutput(commentVideoPath);
+      if (filePath) setCommentOutputPath(filePath);
+    } catch (error) {
+      setCommentFileError(error instanceof Error ? error.message : "出力先を選択できませんでした。");
+    }
+  }
+
+  async function startCommentVideoRender() {
+    if (!window.kickRecorder || !commentVideoPath || !commentFilePath || !commentOutputPath) return;
+    setIsStartingRender(true);
+    setCommentFileError("");
+    try {
+      const status = await window.kickRecorder.renderCommentVideo({
+        videoPath: commentVideoPath,
+        commentsPath: commentFilePath,
+        outputPath: commentOutputPath,
+        ...renderOptions
+      });
+      setRenderStatus(status);
+    } catch (error) {
+      setCommentFileError(error instanceof Error ? error.message : "コメント付き動画を生成できませんでした。");
+    } finally {
+      setIsStartingRender(false);
+    }
+  }
+
+  async function cancelCommentVideoRender() {
+    if (!window.kickRecorder) return;
+    try {
+      const status = await window.kickRecorder.cancelCommentVideo();
+      if (status) setRenderStatus(status);
+    } catch (error) {
+      setCommentFileError(error instanceof Error ? error.message : "動画生成をキャンセルできませんでした。");
     }
   }
 
