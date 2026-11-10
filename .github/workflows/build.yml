@@ -75,7 +75,8 @@ jobs:
           if ($refName -ne "v$version") {
             throw "リリース参照 $refName と package.json のバージョン v$version が一致しません。"
           }
-      - name: GitHub Releases用のバージョンタグを作成
+      - name: GitHub Releases用のバージョンタグを確認
+        id: release_tag
         if: ${{ startsWith(github.ref, 'refs/heads/release/') }}
         shell: pwsh
         run: |
@@ -89,20 +90,20 @@ jobs:
             git fetch --tags origin
             if ($LASTEXITCODE -ne 0) { throw "既存タグを取得できませんでした。" }
             $tagCommit = git rev-list -n 1 $tag
-            $headCommit = git rev-parse HEAD
-            $mergeBase = git merge-base $tagCommit $headCommit
-            if ($mergeBase -ne $tagCommit) {
-              throw "タグ $tag がリリースブランチに含まれていません。既存タグは変更しません。"
-            }
+            if (-not $tagCommit) { throw "既存タグ $tag を読み取れませんでした。" }
+            "should_publish=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            Write-Host "既存のバージョン $tag は変更しません。公開処理をスキップします。"
           } else {
             git tag $tag
             if ($LASTEXITCODE -ne 0) { throw "タグを作成できませんでした。" }
             git push origin $tag
             if ($LASTEXITCODE -ne 0) { throw "GitHubへタグをpushできませんでした。" }
+            "should_publish=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           }
       - name: 依存パッケージをインストール
         run: npm install --no-audit --no-fund --no-package-lock
       - name: β版インストーラーと更新情報をGitHub Releasesへ公開
+        if: ${{ startsWith(github.ref, 'refs/tags/v') || steps.release_tag.outputs.should_publish == 'true' }}
         run: npm run publish:win
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
