@@ -22,6 +22,7 @@ type ActiveRecording = {
   stopRequested: boolean;
   filePath: string;
   stderrTail: string;
+  settled: boolean;
 };
 
 function validateSlug(value: unknown): string {
@@ -107,7 +108,8 @@ export class KickRecordingManager {
       child,
       stopRequested: false,
       filePath: prefix,
-      stderrTail: ""
+      stderrTail: "",
+      settled: false
     };
     this.active.set(slug, session);
 
@@ -129,6 +131,7 @@ export class KickRecordingManager {
     });
 
     child.once("error", error => {
+      session.settled = true;
       this.active.delete(slug);
       this.onEvent({
         slug,
@@ -141,6 +144,8 @@ export class KickRecordingManager {
     });
 
     child.once("close", (code, signal) => {
+      if (session.settled) return;
+      session.settled = true;
       this.active.delete(slug);
       if (session.stopRequested || code === 0) {
         this.onEvent({
