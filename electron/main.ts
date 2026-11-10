@@ -597,6 +597,9 @@ function registerIpcHandlers(): void {
       scrollDurationSeconds: typeof values.scrollDurationSeconds === "number"
         ? Math.max(5, Math.min(30, values.scrollDurationSeconds))
         : 12,
+      timeOffsetSeconds: typeof values.timeOffsetSeconds === "number"
+        ? Math.max(-3600, Math.min(3600, Math.round(values.timeOffsetSeconds)))
+        : 0,
       includeUsername: values.includeUsername !== false,
       respectPosition: values.respectPosition !== false
     });
