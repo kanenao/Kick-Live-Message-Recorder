@@ -13,6 +13,8 @@ type AppSettings = {
   autoRecordOnStreamStart: boolean;
   saveChat: boolean;
   outputDirectory: string;
+  ytDlpPath: string;
+  ffmpegPath: string;
   autoMonitorEnabled: boolean;
   monitorIntervalSeconds: number;
   notifyOnLive: boolean;
@@ -32,6 +34,17 @@ type ChannelCheck = {
   startedAt: string | null;
 };
 
+type RecordingStatus = {
+  slug: string;
+  status: "starting" | "recording" | "reconnecting" | "stopping" | "stopped" | "error";
+  startedAt: string;
+  filePath: string;
+  progress: string;
+  message: string;
+  reconnectCount: number;
+  exitCode?: number | null;
+};
+
 type UpdateStatus = {
   status: "idle" | "checking" | "available" | "downloading" | "downloaded" | "not-available" | "error";
   currentVersion: string;
@@ -40,13 +53,15 @@ type UpdateStatus = {
   message: string;
 };
 
-const APP_VERSION = "0.1.0-beta.5";
+const APP_VERSION = "0.1.0-beta.6";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
   autoRecordOnStreamStart: true,
   saveChat: true,
   outputDirectory: "",
+  ytDlpPath: "",
+  ffmpegPath: "",
   autoMonitorEnabled: true,
   monitorIntervalSeconds: 60,
   notifyOnLive: true
@@ -83,6 +98,8 @@ function normalizeState(value: unknown): PersistedState {
       autoRecordOnStreamStart: settings.autoRecordOnStreamStart !== false,
       saveChat: settings.saveChat !== false,
       outputDirectory: typeof settings.outputDirectory === "string" ? settings.outputDirectory : "",
+      ytDlpPath: typeof settings.ytDlpPath === "string" ? settings.ytDlpPath : "",
+      ffmpegPath: typeof settings.ffmpegPath === "string" ? settings.ffmpegPath : "",
       autoMonitorEnabled: settings.autoMonitorEnabled !== false,
       monitorIntervalSeconds: typeof settings.monitorIntervalSeconds === "number"
         ? Math.max(30, Math.min(3600, Math.round(settings.monitorIntervalSeconds)))
@@ -123,6 +140,8 @@ export default function App() {
   const [isCheckingChannels, setIsCheckingChannels] = useState(false);
   const [lastChannelCheck, setLastChannelCheck] = useState("");
   const [monitorError, setMonitorError] = useState("");
+  const [recordingStates, setRecordingStates] = useState<Record<string, RecordingStatus>>({});
+  const [recordingError, setRecordingError] = useState("");
   const previousChecksRef = useRef<Record<string, ChannelCheck>>({});
   const [appVersion, setAppVersion] = useState(APP_VERSION);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({
@@ -131,11 +150,12 @@ export default function App() {
     message: "起動時に自動で更新を確認します。"
   });
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
-  const activeCount = useMemo(() => channels.filter(c => c.recording).length, [channels]);
+  const activeCount = useMemo(() => Object.values(recordingStates).filter(s => ["starting", "recording", "reconnecting", "stopping"].includes(s.status)).length, [recordingStates]);
 
   useEffect(() => {
     let active = true;
     let unsubscribeUpdate: (() => void) | undefined;
+    let unsubscribeRecording: (() => void) | undefined;
     void loadState().then(state => {
       if (!active) return;
       setChannels(state.channels);
@@ -151,6 +171,13 @@ export default function App() {
       unsubscribeUpdate = window.kickRecorder.onUpdateStatus(status => {
         if (active) setUpdateStatus(status);
       });
+      unsubscribeRecording = window.kickRecorder.onRecordingStatus(status => {
+        if (active) setRecordingStates(prev => ({ ...prev, [status.slug.toLowerCase()]: status }));
+      });
+      void window.kickRecorder.getRecordingStatuses().then(statuses => {
+        if (!active) return;
+        setRecordingStates(Object.fromEntries(statuses.map(status => [status.slug.toLowerCase(), status])));
+      }).catch(() => undefined);
       void window.kickRecorder.getAppInfo().then(info => {
         if (!active) return;
         setAppDataDirectory(info.dataDirectory);
@@ -170,6 +197,7 @@ export default function App() {
     return () => {
       active = false;
       unsubscribeUpdate?.();
+      unsubscribeRecording?.();
     };
   }, []);
 
@@ -213,6 +241,22 @@ export default function App() {
             !previous.isLive
           ) {
             void window.kickRecorder.notifyLive(result.slug).catch(() => undefined);
+          }
+          const registeredChannel = channels.find(channel => channel.name.toLowerCase() === result.slug.toLowerCase());
+          if (
+            settings.autoRecordOnStreamStart &&
+            settings.ytDlpPath.trim() &&
+            registeredChannel?.mode === "auto" &&
+            result.found &&
+            result.isLive &&
+            previous?.found &&
+            !previous.isLive
+          ) {
+            void window.kickRecorder.startRecording(result.slug).then(status => {
+              setRecordingStates(prev => ({ ...prev, [result.slug.toLowerCase()]: status }));
+            }).catch(error => {
+              setRecordingError(error instanceof Error ? error.message : `${result.slug} の自動録画を開始できませんでした。`);
+            });
           }
         }
 
@@ -397,6 +441,47 @@ export default function App() {
     }
   }
 
+  async function chooseYtDlp() {
+    if (!window.kickRecorder) return;
+    try {
+      const filePath = await window.kickRecorder.selectYtDlp();
+      if (filePath) setSettings(prev => ({ ...prev, ytDlpPath: filePath }));
+    } catch (error) {
+      setRecordingError(error instanceof Error ? error.message : "yt-dlp.exeを選択できませんでした。");
+    }
+  }
+
+  async function chooseFfmpeg() {
+    if (!window.kickRecorder) return;
+    try {
+      const filePath = await window.kickRecorder.selectFfmpeg();
+      if (filePath) setSettings(prev => ({ ...prev, ffmpegPath: filePath }));
+    } catch (error) {
+      setRecordingError(error instanceof Error ? error.message : "ffmpeg.exeを選択できませんでした。");
+    }
+  }
+
+  async function startRecording(slug: string) {
+    if (!window.kickRecorder) return;
+    setRecordingError("");
+    try {
+      const status = await window.kickRecorder.startRecording(slug);
+      setRecordingStates(prev => ({ ...prev, [slug.toLowerCase()]: status }));
+    } catch (error) {
+      setRecordingError(error instanceof Error ? error.message : `${slug} の録画を開始できませんでした。`);
+    }
+  }
+
+  async function stopRecording(slug: string) {
+    if (!window.kickRecorder) return;
+    try {
+      const status = await window.kickRecorder.stopRecording(slug);
+      if (status) setRecordingStates(prev => ({ ...prev, [slug.toLowerCase()]: status }));
+    } catch (error) {
+      setRecordingError(error instanceof Error ? error.message : `${slug} の録画を停止できませんでした。`);
+    }
+  }
+
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark">K</div><div><strong>Kick Recorder</strong><small>配信・チャット保存</small></div></div>
@@ -433,7 +518,10 @@ export default function App() {
             {channels.length === 0 && <div className="empty-inline">まだチャンネルが登録されていません。</div>}
             {channels.map(c => <div className="channel-row" key={c.id}>
               <div className="channel-icon">{c.name.slice(0,1).toUpperCase()}</div>
-              <div className="channel-info"><strong>{c.name}</strong><small>{c.url}</small></div>
+              <div className="channel-info">
+                <strong>{c.name}</strong><small>{c.url}</small>
+                {recordingStates[c.name.toLowerCase()] && <small className={recordingStates[c.name.toLowerCase()].status === "error" ? "recording-status error" : "recording-status"}>{recordingStates[c.name.toLowerCase()].message}{recordingStates[c.name.toLowerCase()].progress ? ` · ${recordingStates[c.name.toLowerCase()].progress}` : ""}</small>}
+              </div>
               <span className="mode-tag">{c.mode === "auto" ? "自動録画" : "手動録画"}</span>
               <span className={channelChecks[c.name.toLowerCase()]?.found
                 ? (channelChecks[c.name.toLowerCase()].isLive ? "live-status live" : "live-status offline")
@@ -442,33 +530,45 @@ export default function App() {
                   ? (channelChecks[c.name.toLowerCase()].isLive ? `配信中 · ${channelChecks[c.name.toLowerCase()].viewerCount.toLocaleString("ja-JP")}人` : "オフライン")
                   : (channelChecks[c.name.toLowerCase()] ? "チャンネル未検出" : "未確認")}
               </span>
+              {["starting", "recording", "reconnecting", "stopping"].includes(recordingStates[c.name.toLowerCase()]?.status ?? "")
+                ? <button className="small-action stop-record-button" onClick={() => void stopRecording(c.name)} disabled={recordingStates[c.name.toLowerCase()]?.status === "stopping"}>{recordingStates[c.name.toLowerCase()]?.status === "reconnecting" ? "再接続中・停止" : "録画停止"}</button>
+                : <button className="small-action start-record-button" onClick={() => void startRecording(c.name)} disabled={!isDesktop || !channelChecks[c.name.toLowerCase()]?.isLive}>録画開始</button>}
               <button className="small-action" onClick={() => setChannels(prev => prev.map(x => x.id === c.id ? {...x, mode: x.mode === "auto" ? "manual" : "auto"} : x))}>録画方式を変更</button>
               <button className="remove" aria-label={`${c.name}を削除`} onClick={() => setChannels(prev => prev.filter(x => x.id !== c.id))}>×</button>
             </div>)}
           </div>
-          <div className="notice">Kick公式APIによる手動確認と定期監視に対応しました。映像・音声の録画とチャット保存は、今後の段階で実装します。{lastChannelCheck && ` 最終確認：${lastChannelCheck}`}</div>
+          {recordingError && <div className="storage-error">{recordingError}</div>}
+          <div className="notice">手動録画は配信中のチャンネルで「録画開始」を押してください。自動録画は配信開始を次回監視で検出したときに開始します。チャット保存は引き続き開発中です。{lastChannelCheck && ` 最終確認：${lastChannelCheck}`}</div>
         </section>
 
         <section className="panel lower-panel">
           <div className="panel-heading"><div><h2>最近の録画</h2><p>保存された配信がここに表示されます</p></div><button className="text-button" onClick={() => setTab("library")}>すべて見る →</button></div>
-          <div className="empty-state"><div className="empty-icon">▣</div><strong>録画はまだありません</strong><span>録画機能は今後のアップデートで追加します。</span></div>
+          <div className="empty-state"><div className="empty-icon">▣</div><strong>保存済み録画の一覧は未実装です</strong><span>録画ファイルは設定した保存先のチャンネル別フォルダーに保存されます。</span></div>
         </section>
       </>}
 
       {tab === "library" && <section className="panel">
         <div className="panel-heading"><div><h2>録画ライブラリ</h2><p>配信映像とチャットの保存履歴</p></div></div>
-        <div className="empty-state"><div className="empty-icon">▤</div><strong>保存された録画はありません</strong><span>録画機能を実装すると、ここで検索・再生できます。</span></div>
+        <div className="empty-state"><div className="empty-icon">▤</div><strong>録画ライブラリは次の段階で実装します</strong><span>録画ファイルは保存先フォルダーから直接確認できます。</span></div>
       </section>}
 
       {tab === "settings" && <section className="panel">
         <div className="panel-heading"><div><h2>基本設定</h2><p>β版の録画動作・保存先の設定</p></div></div>
         <div className="setting-row">
-          <div><strong>配信開始時に自動録画</strong><small>自動録画モードのチャンネルで使用します（録画機能は開発中）</small></div>
+          <div><strong>配信開始時に自動録画</strong><small>自動録画モードのチャンネルで、配信開始を検出したとき録画を開始します</small></div>
           <label className="setting-control"><input type="checkbox" checked={settings.autoRecordOnStreamStart} onChange={e => setSettings(prev => ({ ...prev, autoRecordOnStreamStart: e.target.checked }))} /><span>{settings.autoRecordOnStreamStart ? "有効" : "無効"}</span></label>
         </div>
         <div className="setting-row">
-          <div><strong>チャットを保存</strong><small>配信映像とチャットを一緒に保存する機能の設定</small></div>
+          <div><strong>チャットを保存</strong><small>チャットの取得・保存機能はまだ実装されていません</small></div>
           <label className="setting-control"><input type="checkbox" checked={settings.saveChat} onChange={e => setSettings(prev => ({ ...prev, saveChat: e.target.checked }))} /><span>{settings.saveChat ? "有効" : "無効"}</span></label>
+        </div>
+
+        <div className="settings-subsection">
+          <div className="settings-subheading"><h3>録画エンジン（yt-dlp / FFmpeg）</h3><span className={settings.ytDlpPath ? "api-state connected" : "api-state"}>{settings.ytDlpPath ? "yt-dlp設定済み" : "未設定"}</span></div>
+          <p className="settings-help">録画には外部ツールが必要です。yt-dlp.exeを必須設定し、映像・音声の結合が必要な配信ではFFmpegを利用します。ツールは同梱していません。公式配布元から取得し、利用条件・ライセンスを確認してください。</p>
+          <div className="setting-row"><div><strong>yt-dlp.exe（必須）</strong><small>{settings.ytDlpPath || "未選択"}</small></div><button className="small-action" onClick={() => void chooseYtDlp()} disabled={!isDesktop}>実行ファイルを選択</button></div>
+          <div className="setting-row"><div><strong>ffmpeg.exe（推奨）</strong><small>{settings.ffmpegPath || "未選択（PATH上のFFmpegを使用）"}</small></div><div className="folder-picker"><button className="small-action" onClick={() => void chooseFfmpeg()} disabled={!isDesktop}>実行ファイルを選択</button><button className="small-action" onClick={() => setSettings(prev => ({ ...prev, ffmpegPath: "" }))} disabled={!settings.ffmpegPath}>解除</button></div></div>
+          <div className="settings-help">yt-dlp公式配布：github.com/yt-dlp/yt-dlp/releases ／ FFmpeg公式サイト：ffmpeg.org</div>
         </div>
 
         <div className="settings-subsection monitor-settings">
