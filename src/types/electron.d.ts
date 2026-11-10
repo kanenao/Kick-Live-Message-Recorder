@@ -24,7 +24,23 @@ type KickRecorderAppState = {
 type KickRecorderAppInfo = {
   version: string;
   dataDirectory: string;
+  defaultOutputDirectory: string;
   isPackaged: boolean;
+};
+
+type KickRecorderRecordingFile = {
+  path: string;
+  name: string;
+  extension: string;
+  size: number;
+  modifiedAt: string;
+};
+
+type KickRecorderRecordingEvent = {
+  slug: string;
+  status: "starting" | "recording" | "stopped" | "error";
+  filePath?: string;
+  message?: string;
 };
 
 type KickRecorderCredentialsStatus = {
@@ -66,6 +82,12 @@ declare global {
       checkForUpdates: () => Promise<KickRecorderUpdateStatus>;
       installUpdate: () => Promise<{ ok: boolean }>;
       onUpdateStatus: (callback: (status: KickRecorderUpdateStatus) => void) => () => void;
+      startRecording: (slug: string) => Promise<{ ok: true; outputDirectory: string }>;
+      stopRecording: (slug: string) => Promise<{ ok: true }>;
+      listRecordings: () => Promise<KickRecorderRecordingFile[]>;
+      openRecording: (filePath: string) => Promise<{ ok: true }>;
+      revealRecording: (filePath: string) => Promise<{ ok: true }>;
+      onRecordingStatus: (callback: (event: KickRecorderRecordingEvent) => void) => () => void;
     };
   }
 }
