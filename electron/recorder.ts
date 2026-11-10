@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -22,7 +22,7 @@ export type RecorderConfig = {
 type Session = {
   info: RecordingStatus;
   config: RecorderConfig;
-  child: ChildProcessWithoutNullStreams | null;
+  child: ChildProcess | null;
   stopping: boolean;
   fatalError?: string;
   restartTimer?: NodeJS.Timeout;
@@ -145,7 +145,7 @@ export class RecorderManager {
     if (config.ffmpegPath) args.push("--ffmpeg-location", config.ffmpegPath);
     args.push(`https://kick.com/${slug}`);
 
-    let child: ChildProcessWithoutNullStreams;
+    let child: ChildProcess;
     try {
       child = spawn(config.ytDlpPath, args, {
         cwd: config.outputDirectory,
@@ -162,7 +162,7 @@ export class RecorderManager {
     }
     session.child = child;
 
-    child.stdout.on("data", (chunk: Buffer) => {
+    child.stdout?.on("data", (chunk: Buffer) => {
       const lines = chunk.toString("utf8").split(/\r?\n/).map(line => line.trim()).filter(Boolean);
       const lastLine = lines.at(-1);
       if (!lastLine) return;
@@ -174,7 +174,7 @@ export class RecorderManager {
       }
     });
 
-    child.stderr.on("data", (chunk: Buffer) => {
+    child.stderr?.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8").trim();
       if (!text) return;
       const lastLine = text.split(/\r?\n/).at(-1)?.trim();
