@@ -75,6 +75,30 @@ jobs:
           if ($refName -ne "v$version") {
             throw "リリース参照 $refName と package.json のバージョン v$version が一致しません。"
           }
+      - name: GitHub Releases用のバージョンタグを作成
+        if: ${{ startsWith(github.ref, 'refs/heads/release/') }}
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          $tag = "v$version"
+          $existingRemote = git ls-remote --tags origin "refs/tags/$tag"
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHubのタグ情報を確認できませんでした。"
+          }
+          if ($existingRemote) {
+            git fetch origin "refs/tags/$tag:refs/tags/$tag"
+            if ($LASTEXITCODE -ne 0) { throw "既存タグを取得できませんでした。" }
+            $tagCommit = git rev-list -n 1 $tag
+            $headCommit = git rev-parse HEAD
+            if ($tagCommit -ne $headCommit) {
+              throw "タグ $tag は別のコミットを指しています。既存タグは変更しません。"
+            }
+          } else {
+            git tag $tag
+            if ($LASTEXITCODE -ne 0) { throw "タグを作成できませんでした。" }
+            git push origin $tag
+            if ($LASTEXITCODE -ne 0) { throw "GitHubへタグをpushできませんでした。" }
+          }
       - name: 依存パッケージをインストール
         run: npm install --no-audit --no-fund --no-package-lock
       - name: β版インストーラーと更新情報をGitHub Releasesへ公開
