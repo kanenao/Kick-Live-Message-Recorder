@@ -665,7 +665,7 @@ export default function App() {
         </div>
         <div className="notice">
           コメントの時刻を元動画の再生位置として扱います。NicoConvAssで作成したASS字幕は、そのまま表示スタイルを保って合成できます。
-          JSON・CSV・XML・TXT・SRTのログは、横スクロールコメントに変換します。
+          JSON・CSV・XML・TXT・SRTのログは、横スクロールコメントに変換します。Kickのチャット自動取得はまだ未実装のため、現在は外部で保存したコメントファイルを読み込んでください。
         </div>
 
         <div className="comment-file-card">
