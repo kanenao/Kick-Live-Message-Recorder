@@ -1,8 +1,8 @@
 {
   "name": "kick-live-message-recorder",
-  "version": "0.1.0-beta.2",
+  "version": "0.1.0-beta.3",
   "private": true,
-  "description": "Kick livestream recorder and chat archive",
+  "description": "Kick配信の録画・チャット保存 Windowsアプリ",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && cross-env KICK_RECORDER_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
@@ -12,11 +12,13 @@
     "build:electron": "tsc -p tsconfig.electron.json",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.electron.json",
-    "dist:win": "npm run build && electron-builder --win nsis --publish never"
+    "dist:win": "npm run build && electron-builder --win nsis --publish never",
+    "publish:win": "npm run build && electron-builder --win nsis --publish always"
   },
   "dependencies": {
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "electron-updater": "^6.8.12"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",
@@ -51,7 +53,8 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "verifyUpdateCodeSignature": false
     },
     "nsis": {
       "oneClick": false,
@@ -59,8 +62,25 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Kick Recorder"
-    }
+      "shortcutName": "Kick Recorder",
+      "language": 1041,
+      "installerLanguages": [
+        "ja_JP"
+      ],
+      "displayLanguageSelector": false
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "kanenao",
+        "repo": "Kick-Live-Message-Recorder",
+        "releaseType": "prerelease"
+      }
+    ]
   },
-  "author": "kanenao"
+  "author": "kanenao",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kanenao/Kick-Live-Message-Recorder.git"
+  }
 }
