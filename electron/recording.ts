@@ -101,7 +101,7 @@ export class KickRecordingManager {
 
     const child = spawn(findYtDlp(), args, {
       windowsHide: true,
-      stdio: ["ignore", "pipe", "pipe"]
+      stdio: ["pipe", "pipe", "pipe"]
     });
     const session: ActiveRecording = {
       child,
