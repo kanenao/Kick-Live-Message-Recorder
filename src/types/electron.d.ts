@@ -15,6 +15,9 @@ type KickRecorderAppState = {
     autoRecordOnStreamStart: boolean;
     saveChat: boolean;
     outputDirectory: string;
+    autoMonitorEnabled: boolean;
+    monitorIntervalSeconds: number;
+    notifyOnLive: boolean;
   };
 };
 
@@ -53,6 +56,7 @@ declare global {
       loadState: () => Promise<KickRecorderAppState>;
       saveState: (state: KickRecorderAppState) => Promise<{ ok: boolean }>;
       selectOutputDirectory: () => Promise<string | null>;
+      notifyLive: (slug: string) => Promise<{ ok: boolean }>;
       getAppInfo: () => Promise<KickRecorderAppInfo>;
       getKickCredentialsStatus: () => Promise<KickRecorderCredentialsStatus>;
       saveKickCredentials: (credentials: { clientId: string; clientSecret: string }) => Promise<{ ok: boolean; clientId: string }>;
