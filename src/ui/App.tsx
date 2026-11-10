@@ -29,7 +29,7 @@ type ChannelCheck = {
   startedAt: string | null;
 };
 
-const APP_VERSION = "0.1.0-beta.1";
+const APP_VERSION = "0.1.0-beta.2";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -50,7 +50,7 @@ function normalizeState(value: unknown): PersistedState {
         typeof channel === "object" &&
         typeof channel.id === "number" &&
         typeof channel.name === "string" &&
-        /^[a-zA-Z0-9_]+$/.test(channel.name) &&
+        /^[a-zA-Z0-9_]{1,25}$/.test(channel.name) &&
         (channel.mode === "auto" || channel.mode === "manual")
       ).map(channel => ({
         id: channel.id,
@@ -158,7 +158,7 @@ export default function App() {
       .replace(/^https?:\/\/(www\.)?kick\.com\//i, "")
       .split(/[/?#]/)[0]
       .replace(/\/$/, "");
-    if (!raw || !/^[a-zA-Z0-9_]+$/.test(raw) || channels.some(c => c.name.toLowerCase() === raw.toLowerCase())) return;
+    if (!raw || !/^[a-zA-Z0-9_]{1,25}$/.test(raw) || channels.some(c => c.name.toLowerCase() === raw.toLowerCase())) return;
 
     setChannels(prev => [...prev, {
       id: Date.now(),
