@@ -1,8 +1,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import {
-  copyFileSync, existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync
+  copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync
 } from "node:fs";
-import { basename, dirname, extname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, parse, resolve } from "node:path";
 
 export type RenderStatus = {
   status: "idle" | "preparing" | "rendering" | "completed" | "cancelled" | "error";
@@ -437,7 +437,9 @@ export class CommentVideoRenderer {
     progressPercent: 0, commentCount: 0, videoPath: "", outputPath: ""
   };
   private temporaryAssPath = "";
+  private temporaryVideoPath = "";
   private cancelled = false;
+  private active = false;
 
   constructor(private readonly onUpdate: (status: RenderStatus) => void) {}
 
@@ -449,7 +451,7 @@ export class CommentVideoRenderer {
   }
 
   async start(options: CommentRenderOptions): Promise<RenderStatus> {
-    if (this.child) throw new Error("コメント付き動画の生成はすでに実行中です。");
+    if (this.active) throw new Error("コメント付き動画の生成はすでに実行中です。");
     const videoPath = resolve(options.videoPath);
     const commentsPath = resolve(options.commentsPath);
     const outputPath = resolve(options.outputPath);
@@ -464,19 +466,35 @@ export class CommentVideoRenderer {
     }
 
     this.cancelled = false;
+    this.active = true;
     this.status = {
       status: "preparing", message: "コメントを読み込み、動画情報を確認しています。",
       progressPercent: 0, commentCount: 0, videoPath, outputPath
     };
     this.publish();
 
-    const parsed = readCommentFile(commentsPath);
-    const info = await probeVideo(videoPath, ffmpegPath);
-    if (this.cancelled) return this.getStatus();
+    let parsed: ReturnType<typeof readCommentFile>;
+    let info: MediaInfo;
+    try {
+      parsed = readCommentFile(commentsPath);
+      info = await probeVideo(videoPath, ffmpegPath);
+    } catch (error) {
+      this.active = false;
+      this.status = { ...this.status, status: "error", message: "コメントまたは動画情報を読み込めませんでした。", error: error instanceof Error ? error.message : String(error) };
+      this.publish();
+      throw error;
+    }
+    if (this.cancelled) {
+      this.active = false;
+      this.status = { ...this.status, status: "cancelled", message: "動画生成をキャンセルしました。" };
+      this.publish();
+      return this.getStatus();
+    }
     mkdirSync(dirname(outputPath), { recursive: true });
 
     const token = String(process.pid) + "_" + String(Date.now());
     this.temporaryAssPath = join(dirname(outputPath), "_klmr_comments_" + token + ".ass");
+    this.temporaryVideoPath = join(dirname(outputPath), parse(outputPath).name + ".rendering-" + token + ".mp4");
     if (parsed.isAss) copyFileSync(commentsPath, this.temporaryAssPath);
     else writeFileSync(this.temporaryAssPath, makeAss(parsed.comments, info, options), "utf8");
 
@@ -488,7 +506,7 @@ export class CommentVideoRenderer {
       "-c:v", "libx264", "-preset", "medium", "-crf", "20",
       "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
       "-movflags", "+faststart", "-progress", "pipe:1", "-nostats",
-      outputPath
+      this.temporaryVideoPath
     ];
 
     this.status = {
@@ -541,14 +559,21 @@ export class CommentVideoRenderer {
       });
       this.cleanupTemporaryAss();
       if (this.cancelled) {
+        this.cleanupTemporaryVideo();
         this.status = { ...this.status, status: "cancelled", message: "動画生成をキャンセルしました。", progressPercent: 0 };
       } else {
+        if (existsSync(outputPath)) unlinkSync(outputPath);
+        renameSync(this.temporaryVideoPath, outputPath);
+        this.temporaryVideoPath = "";
         this.status = { ...this.status, status: "completed", message: "コメント付き動画の生成が完了しました。", progressPercent: 100 };
       }
+      this.active = false;
       this.publish();
       return this.getStatus();
     } catch (error) {
+      this.active = false;
       this.cleanupTemporaryAss();
+      this.cleanupTemporaryVideo();
       this.status = {
         ...this.status, status: "error",
         message: "コメント付き動画の生成に失敗しました。",
@@ -560,12 +585,19 @@ export class CommentVideoRenderer {
   }
 
   cancel(): RenderStatus {
-    if (!this.child) return this.getStatus();
+    if (!this.active) return this.getStatus();
     this.cancelled = true;
     this.status = { ...this.status, message: "動画生成をキャンセルしています。" };
     this.publish();
-    this.child.kill();
+    if (this.child) this.child.kill();
     return this.getStatus();
+  }
+
+  private cleanupTemporaryVideo(): void {
+    if (this.temporaryVideoPath && existsSync(this.temporaryVideoPath)) {
+      try { unlinkSync(this.temporaryVideoPath); } catch { /* best-effort cleanup */ }
+    }
+    this.temporaryVideoPath = "";
   }
 
   private cleanupTemporaryAss(): void {
