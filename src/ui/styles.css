@@ -58,3 +58,8 @@
 .recording-file-info small{font-size:10px;color:#7e8794;margin-top:5px}
 .recording-file-row button{white-space:nowrap}
 @media(max-width:1050px){.recording-file-row{flex-wrap:wrap}.recording-file-info{flex-basis:70%}.recording-file-row button{margin-left:48px}}
+
+.channel-row{flex-wrap:wrap}
+.channel-row .channel-info{flex:1 1 160px}
+.channel-row .recording-action{flex:0 0 auto}
+@media(max-width:1050px){.channel-row{align-items:center}.channel-row .channel-info{flex:1 1 130px}.channel-row .live-status{order:2}.channel-row .recording-action{order:3}}
