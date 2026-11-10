@@ -12,7 +12,7 @@ import {
   type MenuItemConstructorOptions
 } from "electron";
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { basename, dirname, extname, join, parse } from "node:path";
+import { dirname, extname, join, parse } from "node:path";
 import { autoUpdater } from "electron-updater";
 import { RecorderManager } from "./recorder";
 import { CommentVideoRenderer, type CommentRenderOptions } from "./commentVideo";
