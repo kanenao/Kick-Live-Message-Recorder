@@ -1,8 +1,9 @@
-name: Beta build
+name: β版ビルド・自動更新配布
 
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -12,37 +13,64 @@ permissions:
 
 jobs:
   quality:
-    name: Type check and renderer build
+    name: 型チェック・アプリビルド
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Install dependencies
+      - name: 依存パッケージをインストール
         run: npm install --no-audit --no-fund --no-package-lock
-      - name: Type check
+      - name: 型チェック
         run: npm run typecheck
-      - name: Build application
+      - name: アプリをビルド
         run: npm run build
 
   windows-installer:
-    name: Build Windows beta installer
+    name: Windows β版インストーラーを作成
     runs-on: windows-latest
     needs: quality
+    if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Install dependencies
+      - name: 依存パッケージをインストール
         run: npm install --no-audit --no-fund --no-package-lock
-      - name: Build NSIS installer
+      - name: Windowsインストーラーを作成
         run: npm run dist:win
-      - name: Upload beta installer
+      - name: インストーラーを保存
         uses: actions/upload-artifact@v4
         with:
           name: Kick-Recorder-beta-windows
           path: release/*.exe
           if-no-files-found: error
           retention-days: 14
+
+  publish-release:
+    name: GitHub Releasesへ自動更新版を公開
+    runs-on: windows-latest
+    needs: quality
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: バージョンとタグの一致を確認
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          if ("v$version" -ne "$env:GITHUB_REF_NAME") {
+            throw "タグ $env:GITHUB_REF_NAME と package.json のバージョン v$version が一致しません。"
+          }
+      - name: 依存パッケージをインストール
+        run: npm install --no-audit --no-fund --no-package-lock
+      - name: β版インストーラーと更新情報をGitHub Releasesへ公開
+        run: npm run publish:win
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
