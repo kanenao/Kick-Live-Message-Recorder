@@ -44,7 +44,7 @@ jobs:
       - name: インストーラーを保存
         uses: actions/upload-artifact@v4
         with:
-          name: Kick-Recorder-beta-windows
+          name: Kick-Live-Message-Recorder-beta-windows
           path: release/*.exe
           if-no-files-found: error
           retention-days: 14
@@ -117,7 +117,7 @@ jobs:
           $releases = Invoke-RestMethod -Headers $headers -Uri $uri
           $matches = @($releases | Where-Object { $_.tag_name -eq $tag })
           if ($matches.Count -gt 1) {
-            $installerName = "Kick-Recorder-Setup-$version.exe"
+            $installerName = "Kick-Live-Message-Recorder-Setup-$version.exe"
             $keep = $matches | Where-Object {
               ($_.assets.name -contains $installerName) -and ($_.assets.name -contains "latest.yml")
             } | Select-Object -First 1
@@ -132,6 +132,21 @@ jobs:
             }
           } else {
             Write-Host "同一タグの重複Releaseはありません。"
+          }
+      - name: GitHub Releaseを1件だけ先に作成
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = node -p "require('./package.json').version"
+          $tag = "v$version"
+          $repo = "kanenao/Kick-Live-Message-Recorder"
+          gh release view $tag --repo $repo *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --repo $repo --title $version --notes "Kick Live Message Recorder $version" --prerelease
+            if ($LASTEXITCODE -ne 0) { throw "GitHub Releaseを作成できませんでした。" }
+          } else {
+            Write-Host "GitHub Release $tag はすでに存在します。"
           }
       - name: 依存パッケージをインストール
         run: npm install --no-audit --no-fund --no-package-lock
