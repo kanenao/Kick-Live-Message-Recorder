@@ -263,7 +263,7 @@ function normalizeState(input: unknown): AppState {
           typeof channel.id !== "number" ||
           !Number.isFinite(channel.id) ||
           typeof channel.name !== "string" ||
-          !/^[a-zA-Z0-9_]{1,50}$/.test(channel.name) ||
+          !/^[a-zA-Z0-9_]{1,25}$/.test(channel.name) ||
           (channel.mode !== "auto" && channel.mode !== "manual")
         ) return [];
 
