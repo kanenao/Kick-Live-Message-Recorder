@@ -15,11 +15,13 @@ Kick のライブ配信を録画し、チャットを保存する Windows デス
 - Electronデスクトップアプリの起動基盤
 - チャンネル一覧と基本設定のPC内保存
 - 録画データ保存先フォルダーの選択
+- Kick公式APIで登録チャンネルの配信中/オフライン状態を手動確認
+- Client SecretはElectron safeStorageで暗号化して保存（Windows環境）
 - GitHub Actionsによる型チェック・Windowsインストーラー作成
 
 ## これから実装する機能
 
-- Kick公式APIによる配信状態の検知
+- Kick公式APIによる配信状態の定期検知と自動録画連携
 - 自動録画の開始・終了、手動録画の開始・停止
 - 映像・音声の保存
 - チャットの取得・時刻付き保存
@@ -41,6 +43,10 @@ npm run dist:win
 ```
 
 GitHub Actionsでは、型チェック・ビルド後にWindows向けNSISインストーラーを作成し、ActionsのArtifactsに14日間保存します。
+
+## Kick API接続設定
+
+Kick Developerでアプリを作成し、発行されたClient IDとClient Secretをアプリの設定画面に登録してください。Client SecretはWindowsのElectron safeStorageで暗号化し、レンダラーには渡しません。配信状態の確認にはKick公式の `GET /public/v1/channels` を利用します。最大50チャンネルずつ問い合わせ、ストリームキーや配信URLなどの機密フィールドは使用しません。
 
 ## データ保存
 
