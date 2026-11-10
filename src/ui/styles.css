@@ -46,3 +46,5 @@
 .monitor-settings{margin-top:24px}
 .monitor-status-line{font-size:10px;color:#84dba5;padding:12px 2px 0;line-height:1.7}
 .monitor-error{margin:10px 0 0}
+
+.recording-status{display:block!important;color:#75d99d!important;margin-top:5px;max-width:320px;white-space:normal;overflow-wrap:anywhere;line-height:1.5}.recording-status.error{color:#f09a9a!important}.start-record-button{color:#7ce1a6;border-color:#39634a}.stop-record-button{color:#ffb1a5;border-color:#70413c}.channel-row{flex-wrap:wrap}.channel-info{min-width:180px}.channel-info small.recording-status{font-size:9px}
