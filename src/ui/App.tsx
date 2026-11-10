@@ -20,6 +20,15 @@ type PersistedState = {
   settings: AppSettings;
 };
 
+type ChannelCheck = {
+  slug: string;
+  found: boolean;
+  isLive: boolean;
+  streamTitle: string;
+  viewerCount: number;
+  startedAt: string | null;
+};
+
 const APP_VERSION = "0.1.0-beta.1";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
@@ -86,6 +95,14 @@ export default function App() {
   const [storageError, setStorageError] = useState("");
   const [appDataDirectory, setAppDataDirectory] = useState("");
   const [isDesktop, setIsDesktop] = useState(false);
+  const [kickClientId, setKickClientId] = useState("");
+  const [kickClientSecret, setKickClientSecret] = useState("");
+  const [kickCredentialsConfigured, setKickCredentialsConfigured] = useState(false);
+  const [kickEncryptionAvailable, setKickEncryptionAvailable] = useState(false);
+  const [kickMessage, setKickMessage] = useState("");
+  const [channelChecks, setChannelChecks] = useState<Record<string, ChannelCheck>>({});
+  const [isCheckingChannels, setIsCheckingChannels] = useState(false);
+  const [lastChannelCheck, setLastChannelCheck] = useState("");
   const activeCount = useMemo(() => channels.filter(c => c.recording).length, [channels]);
 
   useEffect(() => {
@@ -104,6 +121,12 @@ export default function App() {
       setIsDesktop(true);
       void window.kickRecorder.getAppInfo().then(info => {
         if (active) setAppDataDirectory(info.dataDirectory);
+      }).catch(() => undefined);
+      void window.kickRecorder.getKickCredentialsStatus().then(status => {
+        if (!active) return;
+        setKickCredentialsConfigured(status.configured);
+        setKickEncryptionAvailable(status.encryptionAvailable);
+        setKickClientId(status.clientId);
       }).catch(() => undefined);
     }
 
@@ -148,6 +171,69 @@ export default function App() {
     setNewChannel("");
   }
 
+  async function saveKickApiCredentials() {
+    if (!window.kickRecorder) return;
+    if (!kickClientId.trim() || !kickClientSecret) {
+      setKickMessage("Client IDとClient Secretを入力してください。");
+      return;
+    }
+    try {
+      const result = await window.kickRecorder.saveKickCredentials({
+        clientId: kickClientId.trim(),
+        clientSecret: kickClientSecret
+      });
+      setKickClientId(result.clientId);
+      setKickClientSecret("");
+      setKickCredentialsConfigured(true);
+      setKickMessage("Kick APIの認証情報を暗号化して保存しました。");
+    } catch (error) {
+      setKickMessage(error instanceof Error ? error.message : "認証情報を保存できませんでした。");
+    }
+  }
+
+  async function clearKickApiCredentials() {
+    if (!window.kickRecorder) return;
+    try {
+      await window.kickRecorder.clearKickCredentials();
+      setKickClientId("");
+      setKickClientSecret("");
+      setKickCredentialsConfigured(false);
+      setChannelChecks({});
+      setKickMessage("Kick APIの認証情報を削除しました。");
+    } catch {
+      setKickMessage("認証情報を削除できませんでした。");
+    }
+  }
+
+  async function refreshChannelStatuses() {
+    if (!window.kickRecorder) {
+      setKickMessage("Kick APIの確認にはWindowsデスクトップ版が必要です。");
+      return;
+    }
+    if (channels.length === 0) {
+      setKickMessage("先にチャンネルを登録してください。");
+      return;
+    }
+    if (!kickCredentialsConfigured) {
+      setKickMessage("設定画面でKick APIのClient IDとClient Secretを登録してください。");
+      setTab("settings");
+      return;
+    }
+
+    setIsCheckingChannels(true);
+    setKickMessage("");
+    try {
+      const results = await window.kickRecorder.checkKickChannels(channels.map(channel => channel.name));
+      setChannelChecks(Object.fromEntries(results.map(result => [result.slug.toLowerCase(), result])));
+      setLastChannelCheck(new Date().toLocaleString("ja-JP"));
+      setKickMessage("Kick公式APIから配信状態を更新しました。");
+    } catch (error) {
+      setKickMessage(error instanceof Error ? error.message : "配信状態を取得できませんでした。");
+    } finally {
+      setIsCheckingChannels(false);
+    }
+  }
+
   async function chooseOutputDirectory() {
     if (!window.kickRecorder) return;
     try {
@@ -185,7 +271,7 @@ export default function App() {
         </section>
 
         <section className="panel">
-          <div className="panel-heading"><div><h2>チャンネル管理</h2><p>録画・監視したいKickチャンネルを登録</p></div><span className="count-pill">{channels.length} CHANNELS</span></div>
+          <div className="panel-heading"><div><h2>チャンネル管理</h2><p>録画・監視したいKickチャンネルを登録</p></div><div className="panel-heading-actions"><span className="count-pill">{channels.length} CHANNELS</span><button className="small-action refresh-button" onClick={() => void refreshChannelStatuses()} disabled={!isDesktop || isCheckingChannels || channels.length === 0}>{isCheckingChannels ? "確認中..." : "配信状態を更新"}</button></div></div>
           <div className="add-channel">
             <input value={newChannel} onChange={e => setNewChannel(e.target.value)} onKeyDown={e => e.key === "Enter" && addChannel()} placeholder="チャンネル名 または kick.com のURL" aria-label="Kickチャンネル名またはURL" />
             <button onClick={addChannel}>＋ 追加する</button>
@@ -196,12 +282,18 @@ export default function App() {
               <div className="channel-icon">{c.name.slice(0,1).toUpperCase()}</div>
               <div className="channel-info"><strong>{c.name}</strong><small>{c.url}</small></div>
               <span className="mode-tag">{c.mode === "auto" ? "自動録画" : "手動録画"}</span>
-              <span className="waiting"><i /> {c.status}</span>
+              <span className={channelChecks[c.name.toLowerCase()]?.found
+                ? (channelChecks[c.name.toLowerCase()].isLive ? "live-status live" : "live-status offline")
+                : (channelChecks[c.name.toLowerCase()] ? "live-status missing" : "live-status unknown")}>
+                {channelChecks[c.name.toLowerCase()]?.found
+                  ? (channelChecks[c.name.toLowerCase()].isLive ? `配信中 · ${channelChecks[c.name.toLowerCase()].viewerCount.toLocaleString("ja-JP")}人` : "オフライン")
+                  : (channelChecks[c.name.toLowerCase()] ? "チャンネル未検出" : "未確認")}
+              </span>
               <button className="small-action" onClick={() => setChannels(prev => prev.map(x => x.id === c.id ? {...x, mode: x.mode === "auto" ? "manual" : "auto"} : x))}>方式変更</button>
               <button className="remove" aria-label={`${c.name}を削除`} onClick={() => setChannels(prev => prev.filter(x => x.id !== c.id))}>×</button>
             </div>)}
           </div>
-          <div className="notice">β版の準備段階です。チャンネル登録と設定の保存が利用できます。Kick接続・実際の録画・チャット取得は次の更新で実装します。</div>
+          <div className="notice">Kick公式APIによる配信状態の確認に対応しました。録画・チャット取得は引き続き開発中です。{lastChannelCheck && ` 最終確認：${lastChannelCheck}`}</div>
         </section>
 
         <section className="panel lower-panel">
@@ -230,6 +322,27 @@ export default function App() {
           <div className="folder-picker">
             <button className="small-action" onClick={() => void chooseOutputDirectory()} disabled={!isDesktop}>フォルダーを選択</button>
           </div>
+        </div>
+
+        <div className="settings-subsection">
+          <div className="settings-subheading">
+            <h3>Kick API接続</h3>
+            <span className={kickCredentialsConfigured ? "api-state connected" : "api-state"}>{kickCredentialsConfigured ? "認証情報登録済み" : "未設定"}</span>
+          </div>
+          <p className="settings-help">Kick Developerで作成したアプリのClient IDとClient Secretを入力します。SecretはWindowsの暗号化機能で保護し、画面側やログには保存しません。</p>
+          <label className="credential-field">Client ID
+            <input value={kickClientId} onChange={event => setKickClientId(event.target.value)} placeholder="Kick DeveloperのClient ID" autoComplete="off" disabled={!isDesktop} />
+          </label>
+          <label className="credential-field">Client Secret
+            <input type="password" value={kickClientSecret} onChange={event => setKickClientSecret(event.target.value)} placeholder={kickCredentialsConfigured ? "保存済み（変更する場合のみ入力）" : "Kick DeveloperのClient Secret"} autoComplete="new-password" disabled={!isDesktop} />
+          </label>
+          <div className="credential-actions">
+            <button className="primary-small" onClick={() => void saveKickApiCredentials()} disabled={!isDesktop || !kickEncryptionAvailable}>認証情報を保存</button>
+            <button className="small-action" onClick={() => void clearKickApiCredentials()} disabled={!isDesktop || !kickCredentialsConfigured}>認証情報を削除</button>
+          </div>
+          {kickMessage && <div className="api-message" role="status">{kickMessage}</div>}
+          {!isDesktop && <div className="notice">Kick APIの認証情報登録はWindowsデスクトップ版で利用できます。</div>}
+          {isDesktop && !kickEncryptionAvailable && <div className="storage-error">Windowsの暗号化ストレージが利用できないため、認証情報は保存できません。</div>}
         </div>
         {appDataDirectory && <div className="data-path-note">アプリ設定データ: {appDataDirectory}</div>}
         {!isDesktop && <div className="notice">保存先フォルダーの選択はWindowsデスクトップ版で利用できます。ブラウザープレビューでは設定をブラウザー内に保存します。</div>}
