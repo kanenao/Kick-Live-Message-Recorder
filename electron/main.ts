@@ -12,9 +12,10 @@ import {
   type MenuItemConstructorOptions
 } from "electron";
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, extname, join, parse } from "node:path";
 import { autoUpdater } from "electron-updater";
 import { RecorderManager } from "./recorder";
+import { CommentVideoRenderer, type CommentRenderOptions } from "./commentVideo";
 
 // Chromiumが提供する標準メニューやコンテキストメニューも日本語で表示する。
 app.commandLine.appendSwitch("lang", "ja-JP");
@@ -370,6 +371,7 @@ function initializeAutoUpdater(): void {
 
 let mainWindow: BrowserWindow | null = null;
 let recorderManager: RecorderManager | null = null;
+let commentVideoRenderer: CommentVideoRenderer | null = null;
 
 function normalizeState(input: unknown): AppState {
   if (!input || typeof input !== "object") return DEFAULT_STATE;
@@ -526,6 +528,88 @@ function registerIpcHandlers(): void {
   ipcMain.handle("recording:get-statuses", event => {
     assertTrustedSender(event);
     return recorderManager?.getAllStatuses() ?? [];
+  });
+
+  ipcMain.handle("comment-video:select-video", async event => {
+    assertTrustedSender(event);
+    if (!mainWindow) return null;
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: "コメントを重ねる元動画を選択",
+      properties: ["openFile"],
+      filters: [{ name: "動画ファイル", extensions: ["mp4", "mkv", "mov", "avi", "webm", "m4v"] }]
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
+  });
+
+  ipcMain.handle("comment-video:select-comments", async event => {
+    assertTrustedSender(event);
+    if (!mainWindow) return null;
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: "コメントログまたはASS字幕を選択",
+      properties: ["openFile"],
+      filters: [{ name: "コメントファイル", extensions: ["ass", "json", "csv", "xml", "txt", "srt"] }]
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
+  });
+
+  ipcMain.handle("comment-video:select-output", async (event, videoInput: unknown) => {
+    assertTrustedSender(event);
+    if (!mainWindow) return null;
+    if (typeof videoInput !== "string" || !videoInput.trim()) {
+      throw new Error("先に元動画を選択してください。");
+    }
+    const videoPath = videoInput.trim();
+    const defaultPath = join(dirname(videoPath), parse(videoPath).name + "_コメント付き.mp4");
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: "コメント付き動画の保存先",
+      defaultPath,
+      buttonLabel: "保存先を決定",
+      filters: [{ name: "MP4動画", extensions: ["mp4"] }]
+    });
+    if (result.canceled || !result.filePath) return null;
+    return extname(result.filePath).toLowerCase() === ".mp4" ? result.filePath : result.filePath + ".mp4";
+  });
+
+  ipcMain.handle("comment-video:preview", (event, input: unknown) => {
+    assertTrustedSender(event);
+    if (typeof input !== "string" || !input.trim()) throw new Error("コメントファイルを選択してください。");
+    if (!commentVideoRenderer) throw new Error("コメント合成エンジンを初期化できていません。");
+    return commentVideoRenderer.preview(input.trim());
+  });
+
+  ipcMain.handle("comment-video:start", async (event, input: unknown) => {
+    assertTrustedSender(event);
+    if (!input || typeof input !== "object") throw new Error("動画生成の設定が不正です。");
+    if (!commentVideoRenderer) throw new Error("コメント合成エンジンを初期化できていません。");
+    const values = input as Partial<CommentRenderOptions>;
+    if (
+      typeof values.videoPath !== "string" || values.videoPath.length > 4096 ||
+      typeof values.commentsPath !== "string" || values.commentsPath.length > 4096 ||
+      typeof values.outputPath !== "string" || values.outputPath.length > 4096
+    ) throw new Error("元動画・コメントファイル・保存先を指定してください。");
+    const settings = readState().settings;
+    return commentVideoRenderer.start({
+      videoPath: values.videoPath,
+      commentsPath: values.commentsPath,
+      outputPath: values.outputPath,
+      ffmpegPath: settings.ffmpegPath,
+      fontSize: typeof values.fontSize === "number" ? Math.max(18, Math.min(64, Math.round(values.fontSize))) : 36,
+      scrollDurationSeconds: typeof values.scrollDurationSeconds === "number"
+        ? Math.max(5, Math.min(30, values.scrollDurationSeconds))
+        : 12,
+      includeUsername: values.includeUsername !== false,
+      respectPosition: values.respectPosition !== false
+    });
+  });
+
+  ipcMain.handle("comment-video:cancel", event => {
+    assertTrustedSender(event);
+    return commentVideoRenderer?.cancel() ?? null;
+  });
+
+  ipcMain.handle("comment-video:get-status", event => {
+    assertTrustedSender(event);
+    return commentVideoRenderer?.getStatus() ?? null;
   });
 
   ipcMain.handle("app:notify-live", (event, slug: unknown) => {
@@ -776,7 +860,13 @@ if (!hasSingleInstanceLock) {
     recorderManager = new RecorderManager(status => {
       mainWindow?.webContents.send("recording:status", status);
     });
-    app.on("before-quit", () => recorderManager?.stopAll());
+    commentVideoRenderer = new CommentVideoRenderer(status => {
+      mainWindow?.webContents.send("comment-video:status", status);
+    });
+    app.on("before-quit", () => {
+      recorderManager?.stopAll();
+      commentVideoRenderer?.cancel();
+    });
     registerIpcHandlers();
     app.setAppUserModelId("jp.kanenao.kickrecorder");
     createJapaneseApplicationMenu();
