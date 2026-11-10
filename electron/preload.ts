@@ -32,6 +32,14 @@ type KickCredentialsStatus = {
   clientId: string;
 };
 
+type UpdateStatus = {
+  status: "idle" | "checking" | "available" | "downloading" | "downloaded" | "not-available" | "error";
+  currentVersion: string;
+  availableVersion?: string;
+  percent?: number;
+  message: string;
+};
+
 type KickChannelCheck = {
   slug: string;
   found: boolean;
@@ -50,7 +58,15 @@ const api = {
   saveKickCredentials: (credentials: { clientId: string; clientSecret: string }): Promise<{ ok: boolean; clientId: string }> =>
     ipcRenderer.invoke("kick:save-credentials", credentials),
   clearKickCredentials: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("kick:clear-credentials"),
-  checkKickChannels: (slugs: string[]): Promise<KickChannelCheck[]> => ipcRenderer.invoke("kick:check-channels", slugs)
+  checkKickChannels: (slugs: string[]): Promise<KickChannelCheck[]> => ipcRenderer.invoke("kick:check-channels", slugs),
+  getUpdateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke("updater:get-status"),
+  checkForUpdates: (): Promise<UpdateStatus> => ipcRenderer.invoke("updater:check"),
+  installUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("updater:install"),
+  onUpdateStatus: (callback: (status: UpdateStatus) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: UpdateStatus): void => callback(status);
+    ipcRenderer.on("updater:status", listener);
+    return () => ipcRenderer.removeListener("updater:status", listener);
+  }
 };
 
 contextBridge.exposeInMainWorld("kickRecorder", api);
