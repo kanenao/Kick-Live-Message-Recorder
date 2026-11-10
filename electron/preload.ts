@@ -13,6 +13,9 @@ type AppSettings = {
   autoRecordOnStreamStart: boolean;
   saveChat: boolean;
   outputDirectory: string;
+  autoMonitorEnabled: boolean;
+  monitorIntervalSeconds: number;
+  notifyOnLive: boolean;
 };
 
 type AppState = {
@@ -53,6 +56,7 @@ const api = {
   loadState: (): Promise<AppState> => ipcRenderer.invoke("app:load-state"),
   saveState: (state: AppState): Promise<{ ok: boolean }> => ipcRenderer.invoke("app:save-state", state),
   selectOutputDirectory: (): Promise<string | null> => ipcRenderer.invoke("app:select-output-directory"),
+  notifyLive: (slug: string): Promise<{ ok: boolean }> => ipcRenderer.invoke("app:notify-live", slug),
   getAppInfo: (): Promise<AppInfo> => ipcRenderer.invoke("app:get-info"),
   getKickCredentialsStatus: (): Promise<KickCredentialsStatus> => ipcRenderer.invoke("kick:get-credentials-status"),
   saveKickCredentials: (credentials: { clientId: string; clientSecret: string }): Promise<{ ok: boolean; clientId: string }> =>
