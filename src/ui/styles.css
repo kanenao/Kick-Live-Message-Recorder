@@ -7,3 +7,25 @@
 .folder-picker{display:flex;align-items:center;gap:10px}
 .folder-picker button:disabled{opacity:.45;cursor:not-allowed}
 .data-path-note{font-size:10px;color:#697482;padding:12px 2px 0;overflow-wrap:anywhere}
+
+.panel-heading-actions{display:flex;align-items:center;gap:10px}
+.refresh-button{white-space:nowrap}
+.live-status{font-size:10px;white-space:nowrap;padding:6px 8px;border-radius:5px;background:#292d35;color:#9ca5b2}
+.live-status.live{background:#183c2b;color:#77e3a4}
+.live-status.offline{background:#292d35;color:#a3aab5}
+.live-status.missing{background:#3a2b21;color:#e1b47e}
+.live-status.unknown{background:#292d35;color:#838d9a}
+.settings-subsection{margin-top:26px;padding-top:21px;border-top:1px solid #2b2f38}
+.settings-subheading{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.settings-subheading h3{font-size:14px;margin:0}
+.api-state{font-size:9px;color:#d5b879;background:#3a3221;padding:5px 8px;border-radius:5px}
+.api-state.connected{color:#77e3a4;background:#183c2b}
+.settings-help{font-size:10px;color:#858e9b;line-height:1.7;margin:0 0 15px}
+.credential-field{display:flex;flex-direction:column;gap:7px;color:#aab2bf;font-size:10px;margin:12px 0}
+.credential-field input{width:100%;max-width:540px;background:#11141a;border:1px solid #343945;border-radius:7px;padding:10px 12px;color:#edf0f5;outline:none;font-size:11px}
+.credential-field input:focus{border-color:#55c98d}
+.credential-field input:disabled{opacity:.45;cursor:not-allowed}
+.credential-actions{display:flex;gap:9px;margin-top:14px}
+.primary-small{border:0;background:#51d895;color:#10251a;border-radius:6px;padding:8px 12px;font-size:10px;font-weight:700;cursor:pointer}
+.primary-small:disabled{opacity:.45;cursor:not-allowed}
+.api-message{font-size:10px;color:#80d9a2;margin-top:12px;line-height:1.6}
