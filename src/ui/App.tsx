@@ -53,7 +53,7 @@ type UpdateStatus = {
   message: string;
 };
 
-const APP_VERSION = "0.1.0-beta.6";
+const APP_VERSION = "0.1.0-beta.7";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -484,7 +484,7 @@ export default function App() {
 
   return <div className="app-shell">
     <aside className="sidebar">
-      <div className="brand"><div className="brand-mark">K</div><div><strong>Kick Recorder</strong><small>配信・チャット保存</small></div></div>
+      <div className="brand"><div className="brand-mark">K</div><div><strong>Kick Live Message Recorder</strong><small>配信・チャット保存</small></div></div>
       <div className="nav-label">メインメニュー</div>
       <button className={tab === "dashboard" ? "nav-item selected" : "nav-item"} onClick={() => setTab("dashboard")}>▦ <span>ダッシュボード</span></button>
       <button className={tab === "library" ? "nav-item selected" : "nav-item"} onClick={() => setTab("library")}>▤ <span>録画ライブラリ</span></button>
@@ -653,7 +653,7 @@ export default function App() {
         {!isDesktop && <div className="notice">保存先フォルダーの選択はWindowsデスクトップ版で利用できます。ブラウザープレビューでは設定をブラウザー内に保存します。</div>}
       </section>}
 
-      <footer>Kick Recorder <span>•</span> β版 {appVersion} <span>•</span> 日本語版</footer>
+      <footer>Kick Live Message Recorder <span>•</span> β版 {appVersion} <span>•</span> 日本語版</footer>
     </main>
   </div>;
 }
