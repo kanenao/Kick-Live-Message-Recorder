@@ -14,6 +14,7 @@ import {
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { autoUpdater } from "electron-updater";
+import { RecorderManager } from "./recorder";
 
 // Chromiumが提供する標準メニューやコンテキストメニューも日本語で表示する。
 app.commandLine.appendSwitch("lang", "ja-JP");
@@ -31,6 +32,8 @@ type AppSettings = {
   autoRecordOnStreamStart: boolean;
   saveChat: boolean;
   outputDirectory: string;
+  ytDlpPath: string;
+  ffmpegPath: string;
   autoMonitorEnabled: boolean;
   monitorIntervalSeconds: number;
   notifyOnLive: boolean;
@@ -47,6 +50,8 @@ const DEFAULT_STATE: AppState = {
     autoRecordOnStreamStart: true,
     saveChat: true,
     outputDirectory: "",
+    ytDlpPath: "",
+    ffmpegPath: "",
     autoMonitorEnabled: true,
     monitorIntervalSeconds: 60,
     notifyOnLive: true
@@ -357,6 +362,7 @@ function initializeAutoUpdater(): void {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let recorderManager: RecorderManager | null = null;
 
 function normalizeState(input: unknown): AppState {
   if (!input || typeof input !== "object") return DEFAULT_STATE;
@@ -397,6 +403,8 @@ function normalizeState(input: unknown): AppState {
       outputDirectory: typeof settings.outputDirectory === "string"
         ? settings.outputDirectory.slice(0, 4096)
         : "",
+      ytDlpPath: typeof settings.ytDlpPath === "string" ? settings.ytDlpPath.slice(0, 4096) : "",
+      ffmpegPath: typeof settings.ffmpegPath === "string" ? settings.ffmpegPath.slice(0, 4096) : "",
       autoMonitorEnabled: settings.autoMonitorEnabled !== false,
       monitorIntervalSeconds: typeof settings.monitorIntervalSeconds === "number" &&
         Number.isFinite(settings.monitorIntervalSeconds)
@@ -461,6 +469,56 @@ function registerIpcHandlers(): void {
       properties: ["openDirectory", "createDirectory"]
     });
     return result.canceled ? null : (result.filePaths[0] ?? null);
+  });
+
+  ipcMain.handle("recording:select-yt-dlp", async event => {
+    assertTrustedSender(event);
+    if (!mainWindow) return null;
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: "yt-dlp.exe を選択",
+      properties: ["openFile"],
+      filters: [{ name: "Windows実行ファイル", extensions: ["exe"] }]
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
+  });
+
+  ipcMain.handle("recording:select-ffmpeg", async event => {
+    assertTrustedSender(event);
+    if (!mainWindow) return null;
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: "ffmpeg.exe を選択",
+      properties: ["openFile"],
+      filters: [{ name: "Windows実行ファイル", extensions: ["exe"] }]
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
+  });
+
+  ipcMain.handle("recording:start", (event, input: unknown) => {
+    assertTrustedSender(event);
+    if (typeof input !== "string" || !/^[a-zA-Z0-9_]{1,25}$/.test(input)) {
+      throw new Error("録画するチャンネル名が正しくありません。");
+    }
+    if (!recorderManager) throw new Error("録画エンジンを初期化できていません。");
+    const settings = readState().settings;
+    return recorderManager.start(input, {
+      ytDlpPath: settings.ytDlpPath,
+      ffmpegPath: settings.ffmpegPath,
+      outputDirectory: settings.outputDirectory || join(app.getPath("videos"), "Kick Recorder")
+    });
+  });
+
+  ipcMain.handle("recording:stop", (event, input: unknown) => {
+    assertTrustedSender(event);
+    if (typeof input !== "string" || !/^[a-zA-Z0-9_]{1,25}$/.test(input)) {
+      throw new Error("停止するチャンネル名が正しくありません。");
+    }
+    if (!recorderManager) throw new Error("録画エンジンを初期化できていません。");
+    return recorderManager.stop(input);
+  });
+
+  ipcMain.handle("recording:get-statuses", event => {
+    assertTrustedSender(event);
+    return recorderManager?.getAllStatuses() ?? [];
   });
 
   ipcMain.handle("app:notify-live", (event, slug: unknown) => {
@@ -708,6 +766,10 @@ if (!hasSingleInstanceLock) {
   });
 
   app.whenReady().then(() => {
+    recorderManager = new RecorderManager(status => {
+      mainWindow?.webContents.send("recording:status", status);
+    });
+    app.on("before-quit", () => recorderManager?.stopAll());
     registerIpcHandlers();
     app.setAppUserModelId("jp.kanenao.kickrecorder");
     createJapaneseApplicationMenu();
