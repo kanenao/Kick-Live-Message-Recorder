@@ -52,6 +52,32 @@ type KickRecorderRecordingStatus = {
   exitCode?: number | null;
 };
 
+type KickRecorderCommentVideoStatus = {
+  status: "idle" | "preparing" | "rendering" | "completed" | "cancelled" | "error";
+  message: string;
+  progressPercent: number;
+  commentCount: number;
+  videoPath: string;
+  outputPath: string;
+  error?: string;
+};
+
+type KickRecorderCommentFilePreview = {
+  count: number;
+  format: string;
+  usesExistingAss: boolean;
+};
+
+type KickRecorderCommentRenderOptions = {
+  videoPath: string;
+  commentsPath: string;
+  outputPath: string;
+  fontSize: number;
+  scrollDurationSeconds: number;
+  includeUsername: boolean;
+  respectPosition: boolean;
+};
+
 type KickRecorderChannelCheck = {
   slug: string;
   found: boolean;
@@ -79,6 +105,14 @@ declare global {
       stopRecording: (slug: string) => Promise<KickRecorderRecordingStatus | null>;
       getRecordingStatuses: () => Promise<KickRecorderRecordingStatus[]>;
       onRecordingStatus: (callback: (status: KickRecorderRecordingStatus) => void) => () => void;
+      selectCommentVideo: () => Promise<string | null>;
+      selectCommentFile: () => Promise<string | null>;
+      selectCommentVideoOutput: (videoPath: string) => Promise<string | null>;
+      previewCommentFile: (filePath: string) => Promise<KickRecorderCommentFilePreview>;
+      renderCommentVideo: (options: KickRecorderCommentRenderOptions) => Promise<KickRecorderCommentVideoStatus>;
+      cancelCommentVideo: () => Promise<KickRecorderCommentVideoStatus | null>;
+      getCommentVideoStatus: () => Promise<KickRecorderCommentVideoStatus | null>;
+      onCommentVideoStatus: (callback: (status: KickRecorderCommentVideoStatus) => void) => () => void;
       getUpdateStatus: () => Promise<KickRecorderUpdateStatus>;
       checkForUpdates: () => Promise<KickRecorderUpdateStatus>;
       installUpdate: () => Promise<{ ok: boolean }>;
