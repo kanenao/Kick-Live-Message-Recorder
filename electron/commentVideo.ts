@@ -371,7 +371,7 @@ function makeAss(comments: ImportedComment[], info: MediaInfo, options: CommentR
     const duration = Math.max(4, travelBase * ((width + commentWidth + 40) / width));
     let laneIndex = scrollFreeAt.findIndex(freeAt => freeAt <= commentTime);
     if (laneIndex < 0) laneIndex = scrollFreeAt.indexOf(Math.min(...scrollFreeAt));
-    scrollFreeAt[laneIndex] = commentTime + duration * 0.45 + 0.7 + 0.7;
+    scrollFreeAt[laneIndex] = commentTime + duration * 0.45 + 0.7;
     const y = margin + laneIndex * lineHeight;
     const move = "\\move(" + Math.round(width + 30) + "," + y + "," +
       Math.round(-commentWidth - 30) + "," + y + ",0," + Math.round(duration * 1000) + ")";
