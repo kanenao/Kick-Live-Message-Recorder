@@ -167,7 +167,7 @@ export default function App() {
     status: "idle", message: "動画とコメントファイルを選択してください。", progressPercent: 0,
     commentCount: 0, videoPath: "", outputPath: ""
   });
-  const [renderOptions, setRenderOptions] = useState({ fontSize: 36, scrollDurationSeconds: 12, includeUsername: true, respectPosition: true });
+  const [renderOptions, setRenderOptions] = useState({ fontSize: 36, scrollDurationSeconds: 12, timeOffsetSeconds: 0, includeUsername: true, respectPosition: true });
   const [isStartingRender, setIsStartingRender] = useState(false);
   const previousChecksRef = useRef<Record<string, ChannelCheck>>({});
   const [appVersion, setAppVersion] = useState(APP_VERSION);
@@ -714,6 +714,10 @@ export default function App() {
               <option value={20}>かなりゆっくり（約20秒）</option>
               <option value={24}>非常にゆっくり（約24秒）</option>
             </select>
+          </div>
+          <div className="setting-row">
+            <div><strong>コメント時刻の補正</strong><small>ログの時刻が動画よりずれている場合に秒単位で調整します（＋は後ろへ、－は前へ）</small></div>
+            <input className="setting-select" type="number" min={-3600} max={3600} step={1} value={renderOptions.timeOffsetSeconds} onChange={event => setRenderOptions(prev => ({ ...prev, timeOffsetSeconds: Math.max(-3600, Math.min(3600, Number(event.target.value) || 0)) }))} />
           </div>
           <div className="setting-row">
             <div><strong>投稿者名をコメントに付ける</strong><small>ログに投稿者名がある場合、コメントの先頭に表示します</small></div>
