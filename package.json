@@ -1,6 +1,6 @@
 {
   "name": "kick-live-message-recorder",
-  "version": "0.1.0-beta.5",
+  "version": "0.1.0-beta.9",
   "private": true,
   "description": "Kick配信の監視・録画・チャット保存 Windowsアプリ",
   "main": "dist-electron/main.js",
@@ -35,7 +35,7 @@
   },
   "build": {
     "appId": "jp.kanenao.kickrecorder",
-    "productName": "Kick Recorder",
+    "productName": "Kick Live Message Recorder",
     "asar": true,
     "directories": {
       "output": "release"
@@ -62,7 +62,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Kick Recorder",
+      "shortcutName": "Kick Live Message Recorder",
       "language": 1041,
       "installerLanguages": [
         "ja_JP"
@@ -76,11 +76,18 @@
         "repo": "Kick-Live-Message-Recorder",
         "releaseType": "prerelease"
       }
+    ],
+    "extraResources": [
+      {
+        "from": "vendor/win-x64/yt-dlp.exe",
+        "to": "tools/yt-dlp.exe"
+      }
     ]
   },
   "author": "kanenao",
   "repository": {
     "type": "git",
     "url": "https://github.com/kanenao/Kick-Live-Message-Recorder.git"
-  }
+  },
+  "productName": "Kick Live Message Recorder"
 }
