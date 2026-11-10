@@ -39,6 +39,17 @@ jobs:
           node-version: 22
       - name: 依存パッケージをインストール
         run: npm install --no-audit --no-fund --no-package-lock
+      - name: yt-dlp Windows版を取得してアプリへ同梱
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "vendor/win-x64" | Out-Null
+          $target = "vendor/win-x64/yt-dlp.exe"
+          Invoke-WebRequest -Uri "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" -OutFile $target
+          if ((Get-Item $target).Length -lt 10000000) {
+            throw "yt-dlp.exe のダウンロードサイズが不正です。"
+          }
+          & $target --version
+          if ($LASTEXITCODE -ne 0) { throw "yt-dlp.exe を実行できませんでした。" }
       - name: Windowsインストーラーを作成
         run: npm run dist:win
       - name: インストーラーを保存
