@@ -30,6 +30,14 @@ type KickRecorderCredentialsStatus = {
   clientId: string;
 };
 
+type KickRecorderUpdateStatus = {
+  status: "idle" | "checking" | "available" | "downloading" | "downloaded" | "not-available" | "error";
+  currentVersion: string;
+  availableVersion?: string;
+  percent?: number;
+  message: string;
+};
+
 type KickRecorderChannelCheck = {
   slug: string;
   found: boolean;
@@ -50,6 +58,10 @@ declare global {
       saveKickCredentials: (credentials: { clientId: string; clientSecret: string }) => Promise<{ ok: boolean; clientId: string }>;
       clearKickCredentials: () => Promise<{ ok: boolean }>;
       checkKickChannels: (slugs: string[]) => Promise<KickRecorderChannelCheck[]>;
+      getUpdateStatus: () => Promise<KickRecorderUpdateStatus>;
+      checkForUpdates: () => Promise<KickRecorderUpdateStatus>;
+      installUpdate: () => Promise<{ ok: boolean }>;
+      onUpdateStatus: (callback: (status: KickRecorderUpdateStatus) => void) => () => void;
     };
   }
 }
