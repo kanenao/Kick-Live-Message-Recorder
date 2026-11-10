@@ -26,7 +26,23 @@ type AppState = {
 type AppInfo = {
   version: string;
   dataDirectory: string;
+  defaultOutputDirectory: string;
   isPackaged: boolean;
+};
+
+type RecordingFile = {
+  path: string;
+  name: string;
+  extension: string;
+  size: number;
+  modifiedAt: string;
+};
+
+type RecordingEvent = {
+  slug: string;
+  status: "starting" | "recording" | "stopped" | "error";
+  filePath?: string;
+  message?: string;
 };
 
 type KickCredentialsStatus = {
@@ -70,6 +86,20 @@ const api = {
     const listener = (_event: Electron.IpcRendererEvent, status: UpdateStatus): void => callback(status);
     ipcRenderer.on("updater:status", listener);
     return () => ipcRenderer.removeListener("updater:status", listener);
+  },
+  startRecording: (slug: string): Promise<{ ok: true; outputDirectory: string }> =>
+    ipcRenderer.invoke("recording:start", slug),
+  stopRecording: (slug: string): Promise<{ ok: true }> =>
+    ipcRenderer.invoke("recording:stop", slug),
+  listRecordings: (): Promise<RecordingFile[]> => ipcRenderer.invoke("recording:list"),
+  openRecording: (filePath: string): Promise<{ ok: true }> =>
+    ipcRenderer.invoke("recording:open", filePath),
+  revealRecording: (filePath: string): Promise<{ ok: true }> =>
+    ipcRenderer.invoke("recording:reveal", filePath),
+  onRecordingStatus: (callback: (event: RecordingEvent) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, event: RecordingEvent): void => callback(event);
+    ipcRenderer.on("recording:status", listener);
+    return () => ipcRenderer.removeListener("recording:status", listener);
   }
 };
 
