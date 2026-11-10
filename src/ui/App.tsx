@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Channel = {
   id: number;
@@ -13,6 +13,9 @@ type AppSettings = {
   autoRecordOnStreamStart: boolean;
   saveChat: boolean;
   outputDirectory: string;
+  autoMonitorEnabled: boolean;
+  monitorIntervalSeconds: number;
+  notifyOnLive: boolean;
 };
 
 type PersistedState = {
@@ -37,13 +40,16 @@ type UpdateStatus = {
   message: string;
 };
 
-const APP_VERSION = "0.1.0-beta.3";
+const APP_VERSION = "0.1.0-beta.4";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
   autoRecordOnStreamStart: true,
   saveChat: true,
-  outputDirectory: ""
+  outputDirectory: "",
+  autoMonitorEnabled: true,
+  monitorIntervalSeconds: 60,
+  notifyOnLive: true
 };
 
 function normalizeState(value: unknown): PersistedState {
@@ -76,7 +82,12 @@ function normalizeState(value: unknown): PersistedState {
     settings: {
       autoRecordOnStreamStart: settings.autoRecordOnStreamStart !== false,
       saveChat: settings.saveChat !== false,
-      outputDirectory: typeof settings.outputDirectory === "string" ? settings.outputDirectory : ""
+      outputDirectory: typeof settings.outputDirectory === "string" ? settings.outputDirectory : "",
+      autoMonitorEnabled: settings.autoMonitorEnabled !== false,
+      monitorIntervalSeconds: typeof settings.monitorIntervalSeconds === "number"
+        ? Math.max(30, Math.min(3600, Math.round(settings.monitorIntervalSeconds)))
+        : 60,
+      notifyOnLive: settings.notifyOnLive !== false
     }
   };
 }
@@ -111,6 +122,8 @@ export default function App() {
   const [channelChecks, setChannelChecks] = useState<Record<string, ChannelCheck>>({});
   const [isCheckingChannels, setIsCheckingChannels] = useState(false);
   const [lastChannelCheck, setLastChannelCheck] = useState("");
+  const [monitorError, setMonitorError] = useState("");
+  const previousChecksRef = useRef<Record<string, ChannelCheck>>({});
   const [appVersion, setAppVersion] = useState(APP_VERSION);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({
     status: "idle",
@@ -159,6 +172,80 @@ export default function App() {
       unsubscribeUpdate?.();
     };
   }, []);
+
+  const monitorSlugs = useMemo(
+    () => channels.map(channel => channel.name),
+    [channels]
+  );
+
+  useEffect(() => {
+    if (
+      !isReady ||
+      !isDesktop ||
+      !kickCredentialsConfigured ||
+      !settings.autoMonitorEnabled ||
+      monitorSlugs.length === 0 ||
+      !window.kickRecorder
+    ) return;
+
+    let stopped = false;
+    let running = false;
+
+    const runAutomaticCheck = async () => {
+      if (running || stopped || !window.kickRecorder) return;
+      running = true;
+      try {
+        const results = await window.kickRecorder.checkKickChannels(monitorSlugs);
+        if (stopped) return;
+
+        const nextChecks = Object.fromEntries(
+          results.map(result => [result.slug.toLowerCase(), result])
+        );
+        const previousChecks = previousChecksRef.current;
+
+        for (const result of results) {
+          const previous = previousChecks[result.slug.toLowerCase()];
+          if (
+            settings.notifyOnLive &&
+            result.found &&
+            result.isLive &&
+            previous?.found &&
+            !previous.isLive
+          ) {
+            void window.kickRecorder.notifyLive(result.slug).catch(() => undefined);
+          }
+        }
+
+        previousChecksRef.current = nextChecks;
+        setChannelChecks(nextChecks);
+        setLastChannelCheck(new Date().toLocaleString("ja-JP"));
+        setMonitorError("");
+      } catch (error) {
+        if (!stopped) {
+          setMonitorError(error instanceof Error ? error.message : "自動監視でエラーが発生しました。次回の確認時に再試行します。");
+        }
+      } finally {
+        running = false;
+      }
+    };
+
+    void runAutomaticCheck();
+    const interval = Math.max(30, Math.min(3600, settings.monitorIntervalSeconds)) * 1000;
+    const timer = window.setInterval(() => void runAutomaticCheck(), interval);
+
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [
+    isReady,
+    isDesktop,
+    kickCredentialsConfigured,
+    settings.autoMonitorEnabled,
+    settings.monitorIntervalSeconds,
+    settings.notifyOnLive,
+    monitorSlugs
+  ]);
 
   useEffect(() => {
     if (!isReady) return;
@@ -226,6 +313,7 @@ export default function App() {
       setKickClientSecret("");
       setKickCredentialsConfigured(false);
       setChannelChecks({});
+      previousChecksRef.current = {};
       setKickMessage("Kick APIの認証情報を削除しました。");
     } catch {
       setKickMessage("認証情報を削除できませんでした。");
@@ -251,11 +339,15 @@ export default function App() {
     setKickMessage("");
     try {
       const results = await window.kickRecorder.checkKickChannels(channels.map(channel => channel.name));
-      setChannelChecks(Object.fromEntries(results.map(result => [result.slug.toLowerCase(), result])));
+      const nextChecks = Object.fromEntries(results.map(result => [result.slug.toLowerCase(), result]));
+      previousChecksRef.current = nextChecks;
+      setChannelChecks(nextChecks);
       setLastChannelCheck(new Date().toLocaleString("ja-JP"));
+      setMonitorError("");
       setKickMessage("Kick公式APIから配信状態を更新しました。");
     } catch (error) {
       setKickMessage(error instanceof Error ? error.message : "配信状態を取得できませんでした。");
+      setMonitorError(error instanceof Error ? error.message : "配信状態を取得できませんでした。");
     } finally {
       setIsCheckingChannels(false);
     }
@@ -354,7 +446,7 @@ export default function App() {
               <button className="remove" aria-label={`${c.name}を削除`} onClick={() => setChannels(prev => prev.filter(x => x.id !== c.id))}>×</button>
             </div>)}
           </div>
-          <div className="notice">Kick公式APIによる配信状態の確認に対応しました。録画・チャット取得は引き続き開発中です。{lastChannelCheck && ` 最終確認：${lastChannelCheck}`}</div>
+          <div className="notice">Kick公式APIによる手動確認と定期監視に対応しました。映像・音声の録画とチャット保存は、今後の段階で実装します。{lastChannelCheck && ` 最終確認：${lastChannelCheck}`}</div>
         </section>
 
         <section className="panel lower-panel">
@@ -377,6 +469,38 @@ export default function App() {
         <div className="setting-row">
           <div><strong>チャットを保存</strong><small>配信映像とチャットを一緒に保存する機能の設定</small></div>
           <label className="setting-control"><input type="checkbox" checked={settings.saveChat} onChange={e => setSettings(prev => ({ ...prev, saveChat: e.target.checked }))} /><span>{settings.saveChat ? "有効" : "無効"}</span></label>
+        </div>
+
+        <div className="settings-subsection monitor-settings">
+          <div className="settings-subheading">
+            <h3>配信の自動監視（KickChecker参考）</h3>
+            <span className={settings.autoMonitorEnabled ? "api-state connected" : "api-state"}>{settings.autoMonitorEnabled ? "自動監視：有効" : "自動監視：停止中"}</span>
+          </div>
+          <div className="setting-row">
+            <div><strong>登録チャンネルを自動で確認</strong><small>アプリ起動中にKick公式APIで配信状態を定期確認します</small></div>
+            <label className="setting-control"><input type="checkbox" checked={settings.autoMonitorEnabled} onChange={e => setSettings(prev => ({ ...prev, autoMonitorEnabled: e.target.checked }))} /><span>{settings.autoMonitorEnabled ? "有効" : "無効"}</span></label>
+          </div>
+          <div className="setting-row">
+            <div><strong>監視間隔</strong><small>短くするとAPIへの問い合わせ回数が増えます</small></div>
+            <select className="setting-select" value={settings.monitorIntervalSeconds} onChange={e => setSettings(prev => ({ ...prev, monitorIntervalSeconds: Number(e.target.value) }))}>
+              <option value={30}>30秒</option>
+              <option value={60}>1分</option>
+              <option value={120}>2分</option>
+              <option value={300}>5分</option>
+              <option value={600}>10分</option>
+            </select>
+          </div>
+          <div className="setting-row">
+            <div><strong>配信開始をWindows通知で知らせる</strong><small>前回オフラインで、今回配信中になった場合に通知します</small></div>
+            <label className="setting-control"><input type="checkbox" checked={settings.notifyOnLive} onChange={e => setSettings(prev => ({ ...prev, notifyOnLive: e.target.checked }))} /><span>{settings.notifyOnLive ? "有効" : "無効"}</span></label>
+          </div>
+          <div className="monitor-status-line">
+            {isDesktop && kickCredentialsConfigured && settings.autoMonitorEnabled
+              ? `監視中 · ${settings.monitorIntervalSeconds}秒ごと`
+              : (!isDesktop ? "Windowsデスクトップ版で利用できます" : (!kickCredentialsConfigured ? "Kick APIの認証情報を登録してください" : "自動監視は停止中"))}
+            {lastChannelCheck && ` · 最終確認：${lastChannelCheck}`}
+          </div>
+          {monitorError && <div className="storage-error monitor-error">自動監視エラー：{monitorError} 次回の確認時に再試行します。</div>}
         </div>
         <div className="setting-row">
           <div><strong>録画・データの保存先</strong><small>{settings.outputDirectory || "未指定（初期設定の保存場所を使用）"}</small></div>
