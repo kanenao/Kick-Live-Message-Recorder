@@ -54,6 +54,32 @@ type RecordingStatus = {
   exitCode?: number | null;
 };
 
+type CommentVideoRenderStatus = {
+  status: "idle" | "preparing" | "rendering" | "completed" | "cancelled" | "error";
+  message: string;
+  progressPercent: number;
+  commentCount: number;
+  videoPath: string;
+  outputPath: string;
+  error?: string;
+};
+
+type CommentFilePreview = {
+  count: number;
+  format: string;
+  usesExistingAss: boolean;
+};
+
+type CommentVideoRenderOptions = {
+  videoPath: string;
+  commentsPath: string;
+  outputPath: string;
+  fontSize: number;
+  scrollDurationSeconds: number;
+  includeUsername: boolean;
+  respectPosition: boolean;
+};
+
 type KickChannelCheck = {
   slug: string;
   found: boolean;
@@ -83,6 +109,18 @@ const api = {
     const listener = (_event: Electron.IpcRendererEvent, status: RecordingStatus): void => callback(status);
     ipcRenderer.on("recording:status", listener);
     return () => ipcRenderer.removeListener("recording:status", listener);
+  },
+  selectCommentVideo: (): Promise<string | null> => ipcRenderer.invoke("comment-video:select-video"),
+  selectCommentFile: (): Promise<string | null> => ipcRenderer.invoke("comment-video:select-comments"),
+  selectCommentVideoOutput: (videoPath: string): Promise<string | null> => ipcRenderer.invoke("comment-video:select-output", videoPath),
+  previewCommentFile: (filePath: string): Promise<CommentFilePreview> => ipcRenderer.invoke("comment-video:preview", filePath),
+  renderCommentVideo: (options: CommentVideoRenderOptions): Promise<CommentVideoRenderStatus> => ipcRenderer.invoke("comment-video:start", options),
+  cancelCommentVideo: (): Promise<CommentVideoRenderStatus | null> => ipcRenderer.invoke("comment-video:cancel"),
+  getCommentVideoStatus: (): Promise<CommentVideoRenderStatus | null> => ipcRenderer.invoke("comment-video:get-status"),
+  onCommentVideoStatus: (callback: (status: CommentVideoRenderStatus) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: CommentVideoRenderStatus): void => callback(status);
+    ipcRenderer.on("comment-video:status", listener);
+    return () => ipcRenderer.removeListener("comment-video:status", listener);
   },
   getUpdateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke("updater:get-status"),
   checkForUpdates: (): Promise<UpdateStatus> => ipcRenderer.invoke("updater:check"),
