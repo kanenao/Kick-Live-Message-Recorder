@@ -19,6 +19,13 @@ import { RecorderManager } from "./recorder";
 // Chromiumが提供する標準メニューやコンテキストメニューも日本語で表示する。
 app.commandLine.appendSwitch("lang", "ja-JP");
 
+// 旧バージョン「Kick Recorder」のユーザーデータ保存先を維持する。
+// productNameを変更するとElectronのuserData既定フォルダー名も変わるため、
+// 既存のチャンネル・API認証情報・設定を新バージョンでも引き継ぐ。
+const legacyUserDataDirectory = join(app.getPath("appData"), "Kick Recorder");
+mkdirSync(legacyUserDataDirectory, { recursive: true });
+app.setPath("userData", legacyUserDataDirectory);
+
 type Channel = {
   id: number;
   name: string;
