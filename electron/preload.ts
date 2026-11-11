@@ -101,7 +101,12 @@ type KickChannelCheck = {
   slug: string;
   found: boolean;
   isLive: boolean;
+  displayName: string;
+  profilePicture: string | null;
+  broadcasterUserId: number | null;
   streamTitle: string;
+  categoryName: string;
+  categoryThumbnail: string | null;
   viewerCount: number;
   startedAt: string | null;
 };
@@ -110,7 +115,13 @@ const api = {
   loadState: (): Promise<AppState> => ipcRenderer.invoke("app:load-state"),
   saveState: (state: AppState): Promise<{ ok: boolean }> => ipcRenderer.invoke("app:save-state", state),
   selectOutputDirectory: (): Promise<string | null> => ipcRenderer.invoke("app:select-output-directory"),
-  notifyLive: (slug: string): Promise<{ ok: boolean }> => ipcRenderer.invoke("app:notify-live", slug),
+  notifyLive: (slug: string, details?: {
+    displayName?: string;
+    streamTitle?: string;
+    categoryName?: string;
+    startedAt?: string | null;
+    viewerCount?: number;
+  }): Promise<{ ok: boolean }> => ipcRenderer.invoke("app:notify-live", slug, details),
   getAppInfo: (): Promise<AppInfo> => ipcRenderer.invoke("app:get-info"),
   getKickCredentialsStatus: (): Promise<KickCredentialsStatus> => ipcRenderer.invoke("kick:get-credentials-status"),
   saveKickCredentials: (credentials: { clientId: string; clientSecret: string }): Promise<{ ok: boolean; clientId: string }> =>
