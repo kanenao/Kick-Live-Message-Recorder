@@ -27,7 +27,24 @@ jobs:
       - name: アプリをビルド
         run: npm run build
       - name: Electron file URL向けの相対アセットパスを検証
-        run: node -e "const fs=require('node:fs'); const html=fs.readFileSync('dist/index.html','utf8'); if (!html.includes('src=\\"./assets/') || !html.includes('href=\\"./assets/') || html.includes('src=\\"/assets/') || html.includes('href=\\"/assets/')) throw new Error('dist/index.html のアセットURLがElectron file://向けの相対パスではありません'); console.log('Electron向け相対アセットパス OK');"
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const html = fs.readFileSync("dist/index.html", "utf8");
+          const assets = [...html.matchAll(/(?:src|href)=["']([^"']+)["']/g)]
+            .map(match => match[1])
+            .filter(path => /\\.(js|css)(?:$|\\?)/i.test(path));
+          console.log("生成されたアセットURL:", assets);
+          if (assets.length < 2) {
+            throw new Error("JS/CSSアセットURLを dist/index.html から検出できません。");
+          }
+          const invalid = assets.filter(path => !path.startsWith("./"));
+          if (invalid.length) {
+            throw new Error("Electron file://で読み込めないアセットURLがあります: " + invalid.join(", "));
+          }
+          console.log("Electron向け相対アセットパス OK");
+          NODE
 
   windows-installer:
     name: Windows β版インストーラーを作成
