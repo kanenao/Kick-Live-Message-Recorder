@@ -75,18 +75,10 @@ type KickRecorderChatMessage = {
 
 type KickRecorderChatStatus = {
   running: boolean;
-  tunnelUrl: string;
-  webhookUrl: string;
+  connectedChannels: number;
   messageCount: number;
   lastMessageAt: string | null;
   message: string;
-};
-
-type KickRecorderChatSubscriptionResult = {
-  slug: string;
-  status: "subscribed" | "already-subscribed" | "failed";
-  message: string;
-  subscriptionId?: string;
 };
 
 type KickRecorderChannelCheck = {
@@ -111,11 +103,10 @@ declare global {
       testKickConnection: () => Promise<{ ok: boolean; message: string }>;
       clearKickCredentials: () => Promise<{ ok: boolean }>;
       checkKickChannels: (slugs: string[]) => Promise<KickRecorderChannelCheck[]>;
-      startChatReceiver: () => Promise<KickRecorderChatStatus>;
+      startChatReceiver: (slugs: string[]) => Promise<KickRecorderChatStatus>;
       stopChatReceiver: () => Promise<KickRecorderChatStatus>;
       getChatReceiverStatus: () => Promise<KickRecorderChatStatus>;
       listChatMessages: (limit: number) => Promise<KickRecorderChatMessage[]>;
-      subscribeChatEvents: (slugs: string[]) => Promise<KickRecorderChatSubscriptionResult[]>;
       copyText: (value: string) => Promise<{ ok: boolean }>;
       onChatMessage: (callback: (message: KickRecorderChatMessage) => void) => () => void;
       onChatStatus: (callback: (status: KickRecorderChatStatus) => void) => () => void;
