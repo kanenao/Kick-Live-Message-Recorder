@@ -58,6 +58,9 @@
 .recording-file-info strong{font-size:12px;color:#e8edf3}
 .recording-file-info small{font-size:10px;color:#7e8794;margin-top:5px}
 .recording-file-row button{white-space:nowrap}
+.danger-small{border:1px solid #754044;background:#3a2226;color:#ffb3b8;border-radius:6px;padding:8px 12px;font-size:10px;font-weight:700;cursor:pointer}
+.danger-small:hover:not(:disabled){background:#512b30;border-color:#a6535b}
+.danger-small:disabled{opacity:.45;cursor:not-allowed}
 @media(max-width:1050px){.recording-file-row{flex-wrap:wrap}.recording-file-info{flex-basis:70%}.recording-file-row button{margin-left:48px}}
 
 .channel-row{flex-wrap:wrap}
