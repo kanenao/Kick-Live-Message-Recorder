@@ -40,13 +40,16 @@ type AppSettings = {
 
 type AppState = {
   channels: Channel[];
+  recordingOnlyChannels: Channel[];
   settings: AppSettings;
 };
 
 const DEFAULT_STATE: AppState = {
   channels: [],
+  recordingOnlyChannels: [],
   settings: {
     autoRecordOnStreamStart: true,
+    autoReceiveChat: true,
     saveChat: true,
     outputDirectory: "",
     autoMonitorEnabled: true,
@@ -401,37 +404,42 @@ function normalizeState(input: unknown): AppState {
   if (!input || typeof input !== "object") return DEFAULT_STATE;
   const candidate = input as Partial<AppState>;
 
-  const channels = Array.isArray(candidate.channels)
-    ? candidate.channels.slice(0, 200).flatMap((item): Channel[] => {
-        if (!item || typeof item !== "object") return [];
-        const channel = item as Partial<Channel>;
-        if (
-          typeof channel.id !== "number" ||
-          !Number.isFinite(channel.id) ||
-          typeof channel.name !== "string" ||
-          !/^[a-zA-Z0-9_]{1,25}$/.test(channel.name) ||
-          (channel.mode !== "auto" && channel.mode !== "manual")
-        ) return [];
+  const normalizeChannels = (items: unknown, recordingOnly = false): Channel[] =>
+    Array.isArray(items)
+      ? items.slice(0, 200).flatMap((item): Channel[] => {
+          if (!item || typeof item !== "object") return [];
+          const channel = item as Partial<Channel>;
+          if (
+            typeof channel.id !== "number" ||
+            !Number.isFinite(channel.id) ||
+            typeof channel.name !== "string" ||
+            !/^[a-zA-Z0-9_]{1,25}$/.test(channel.name) ||
+            (!recordingOnly && channel.mode !== "auto" && channel.mode !== "manual")
+          ) return [];
 
-        return [{
-          id: channel.id,
-          name: channel.name,
-          url: `https://kick.com/${channel.name}`,
-          mode: channel.mode,
-          status: "待機中",
-          recording: false
-        }];
-      })
-    : [];
+          return [{
+            id: channel.id,
+            name: channel.name,
+            url: `https://kick.com/${channel.name}`,
+            mode: recordingOnly ? "manual" : channel.mode as "auto" | "manual",
+            status: "待機中",
+            recording: false
+          }];
+        })
+      : [];
 
+  const channels = normalizeChannels(candidate.channels);
+  const recordingOnlyChannels = normalizeChannels(candidate.recordingOnlyChannels, true);
   const settings = candidate.settings && typeof candidate.settings === "object"
     ? candidate.settings
     : DEFAULT_STATE.settings;
 
   return {
     channels,
+    recordingOnlyChannels,
     settings: {
       autoRecordOnStreamStart: settings.autoRecordOnStreamStart !== false,
+      autoReceiveChat: settings.autoReceiveChat !== false,
       saveChat: settings.saveChat !== false,
       outputDirectory: typeof settings.outputDirectory === "string"
         ? settings.outputDirectory.slice(0, 4096)
