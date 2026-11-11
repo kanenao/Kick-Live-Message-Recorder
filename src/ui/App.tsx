@@ -20,6 +20,7 @@ type AppSettings = {
   recordingRetryCount: number;
   recordingRetryDelaySeconds: number;
   notifyOnLive: boolean;
+  showRecordingPreview: boolean;
 };
 
 type PersistedState = {
@@ -90,7 +91,7 @@ type RecordingEvent = {
   isVod?: boolean;
 };
 
-const APP_VERSION = "0.1.0-beta.25";
+const APP_VERSION = "0.1.0-beta.26";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -103,7 +104,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   monitorIntervalSeconds: 60,
   recordingRetryCount: 5,
   recordingRetryDelaySeconds: 10,
-  notifyOnLive: true
+  notifyOnLive: true,
+  showRecordingPreview: true
 };
 
 function normalizeState(value: unknown): PersistedState {
@@ -166,7 +168,8 @@ function normalizeState(value: unknown): PersistedState {
       recordingRetryDelaySeconds: typeof settings.recordingRetryDelaySeconds === "number"
         ? Math.max(5, Math.min(60, Math.round(settings.recordingRetryDelaySeconds)))
         : 10,
-      notifyOnLive: settings.notifyOnLive !== false
+      notifyOnLive: settings.notifyOnLive !== false,
+      showRecordingPreview: settings.showRecordingPreview !== false
     }
   };
 }
@@ -269,14 +272,23 @@ export default function App() {
     }
     return [...unique.values()];
   }, [channels, recordingOnlyChannels]);
-  const liveChannelCards = useMemo(() => channels.flatMap(channel => {
-    const live = channelChecks[channel.name.toLowerCase()];
-    return live?.found && live.isLive ? [{ channel, live }] : [];
-  }).sort((a, b) => {
-    const aStart = a.live.startedAt ? Date.parse(a.live.startedAt) : 0;
-    const bStart = b.live.startedAt ? Date.parse(b.live.startedAt) : 0;
-    return bStart - aStart;
-  }), [channels, channelChecks]);
+  const liveChannelCards = useMemo(() => {
+    const watchedChannels = [
+      ...channels.map(channel => ({ channel, isRecordingOnly: false })),
+      ...recordingOnlyChannels.map(channel => ({ channel, isRecordingOnly: true }))
+    ];
+    const uniqueChannels = new Map<string, (typeof watchedChannels)[number]>();
+    for (const item of watchedChannels) uniqueChannels.set(item.channel.name.toLowerCase(), item);
+
+    return [...uniqueChannels.values()].flatMap(({ channel, isRecordingOnly }) => {
+      const live = channelChecks[channel.name.toLowerCase()];
+      return live?.found && live.isLive ? [{ channel, live, isRecordingOnly }] : [];
+    }).sort((a, b) => {
+      const aStart = a.live.startedAt ? Date.parse(a.live.startedAt) : 0;
+      const bStart = b.live.startedAt ? Date.parse(b.live.startedAt) : 0;
+      return bStart - aStart;
+    });
+  }, [channels, recordingOnlyChannels, channelChecks]);
   const [previewSelection, setPreviewSelection] = useState("");
   const previewChannel = activeRecordingChannels.find(channel => channel.name === previewSelection) ?? activeRecordingChannels[0] ?? null;
 
@@ -378,8 +390,8 @@ export default function App() {
   }, []);
 
   const monitorSlugs = useMemo(
-    () => channels.map(channel => channel.name),
-    [channels]
+    () => [...new Set([...channels, ...recordingOnlyChannels].map(channel => channel.name.toLowerCase()))].slice(0, 200),
+    [channels, recordingOnlyChannels]
   );
 
   const autoChatSlugs = useMemo(() => {
@@ -713,8 +725,8 @@ export default function App() {
       setKickMessage("Kick APIの確認にはWindowsデスクトップ版が必要です。");
       return;
     }
-    if (channels.length === 0) {
-      setKickMessage("先にチャンネルを登録してください。");
+    if (monitorSlugs.length === 0) {
+      setKickMessage("先にチャンネル管理または録画専用へチャンネルを登録してください。");
       return;
     }
     if (!kickCredentialsConfigured) {
@@ -726,7 +738,7 @@ export default function App() {
     setIsCheckingChannels(true);
     setKickMessage("");
     try {
-      const results = await window.kickRecorder.checkKickChannels(channels.map(channel => channel.name));
+      const results = await window.kickRecorder.checkKickChannels(monitorSlugs);
       for (const result of results) {
         const channel = channels.find(item => item.name.toLowerCase() === result.slug.toLowerCase());
         if (
@@ -976,9 +988,9 @@ export default function App() {
           <div className="stat-card accent"><span>現在のバージョン</span><strong className="version-value">{appVersion}</strong><small>{isReady ? "インストール済み" : "起動情報を読み込み中"}</small></div>
         </section>
 
-        {channels.length > 0 && <section className="panel live-now-panel">
+        {monitorSlugs.length > 0 && <section className="panel live-now-panel">
           <div className="panel-heading">
-            <div><h2>LIVE中の配信者</h2><p>登録チャンネルの現在の配信情報を自動更新します</p></div>
+            <div><h2>LIVE中の配信者</h2><p>チャンネル管理・録画専用に登録した配信者の情報を自動更新します</p></div>
             <span className="live-status live">LIVE · {liveChannelCards.length}件</span>
           </div>
           {!kickCredentialsConfigured
@@ -988,7 +1000,7 @@ export default function App() {
               : liveChannelCards.length === 0
                 ? <div className="empty-inline">{monitorError ? "LIVE情報を取得できませんでした。ネットワークとKick APIの設定を確認してください。" : "現在LIVE中の登録配信者はいません。配信を検知すると、ここにタイトルや開始時刻などが表示されます。"}</div>
                 : <div className="live-stream-grid">
-                    {liveChannelCards.map(({ channel, live }) => <article className="live-stream-card" key={channel.id}>
+                    {liveChannelCards.map(({ channel, live, isRecordingOnly }) => <article className="live-stream-card" key={channel.name.toLowerCase()}>
                       <div className="live-stream-header">
                         {live.profilePicture
                           ? <img className="live-stream-avatar" src={live.profilePicture} alt="" />
@@ -1006,7 +1018,7 @@ export default function App() {
                         <div><small>配信時間</small><strong className="live-elapsed">{formatLiveElapsed(live.startedAt, liveClock)}</strong></div>
                         <div><small>視聴者数</small><strong>{live.viewerCount.toLocaleString("ja-JP")} 人</strong></div>
                       </div>
-                      <div className="live-stream-footer"><span>https://kick.com/{channel.name}</span><span>監視中</span></div>
+                      <div className="live-stream-footer"><span>https://kick.com/{channel.name}</span><span>{isRecordingOnly ? "録画専用・監視中" : "監視中"}</span></div>
                     </article>)}
                   </div>}
           <div className="live-now-footer">
@@ -1015,7 +1027,7 @@ export default function App() {
           </div>
         </section>}
 
-        {activeRecordingChannels.length > 0 && <section className="panel live-preview-panel">
+        {settings.showRecordingPreview && activeRecordingChannels.length > 0 && <section className="panel live-preview-panel">
           <div className="panel-heading">
             <div><h2>録画中の映像プレビュー</h2><p>Kick公式プレーヤーで現在録画している配信を表示します</p></div>
             <span className="live-status live">● LIVE · {activeRecordingChannels.length}件</span>
@@ -1045,7 +1057,7 @@ export default function App() {
         </section>}
 
         <section className="panel">
-          <div className="panel-heading"><div><h2>チャンネル管理</h2><p>録画・監視したいKickチャンネルを登録</p></div><div className="panel-heading-actions"><span className="count-pill">登録数：{channels.length}件</span><button className="small-action refresh-button" onClick={() => void refreshChannelStatuses()} disabled={!isDesktop || isCheckingChannels || channels.length === 0}>{isCheckingChannels ? "確認中..." : "配信状態を更新"}</button></div></div>
+          <div className="panel-heading"><div><h2>チャンネル管理</h2><p>録画・監視したいKickチャンネルを登録</p></div><div className="panel-heading-actions"><span className="count-pill">登録数：{channels.length}件</span><button className="small-action refresh-button" onClick={() => void refreshChannelStatuses()} disabled={!isDesktop || isCheckingChannels || monitorSlugs.length === 0}>{isCheckingChannels ? "確認中..." : "配信状態を更新"}</button></div></div>
           <div className="add-channel">
             <input value={newChannel} onChange={e => setNewChannel(e.target.value)} onKeyDown={e => e.key === "Enter" && addChannel()} placeholder="チャンネル名 または kick.com のURL" aria-label="Kickチャンネル名またはURL" />
             <button onClick={addChannel}>＋ 追加する</button>
@@ -1099,7 +1111,7 @@ export default function App() {
           <div><h2>録画専用チャンネル</h2><p>配信監視・自動録画は行わず、必要なときに録画を開始するチャンネルを登録します</p></div>
           <span className="count-pill">登録数：{recordingOnlyChannels.length}件</span>
         </div>
-        {activeRecordingChannels.length > 0 && <section className="panel live-preview-panel">
+        {settings.showRecordingPreview && activeRecordingChannels.length > 0 && <section className="panel live-preview-panel">
           <div className="panel-heading">
             <div><h2>録画中の映像プレビュー</h2><p>Kick公式プレーヤーで現在録画している配信を表示します</p></div>
             <span className="live-status live">● LIVE · {activeRecordingChannels.length}件</span>
@@ -1248,6 +1260,14 @@ export default function App() {
               <option value={30}>30秒</option>
               <option value={60}>60秒</option>
             </select>
+          </div>
+        </div>
+
+        <div className="settings-subsection">
+          <div className="settings-subheading"><h3>配信プレビュー</h3><span className={settings.showRecordingPreview ? "api-state connected" : "api-state"}>{settings.showRecordingPreview ? "表示：ON" : "表示：OFF"}</span></div>
+          <div className="setting-row">
+            <div><strong>録画中の映像プレビューを表示</strong><small>ダッシュボードと録画専用画面のプレーヤー表示を切り替えます。OFFにしても録画・コメント取得は継続します。</small></div>
+            <label className="setting-control"><input type="checkbox" checked={settings.showRecordingPreview} onChange={e => setSettings(prev => ({ ...prev, showRecordingPreview: e.target.checked }))} /><span>{settings.showRecordingPreview ? "有効" : "無効"}</span></label>
           </div>
         </div>
 
