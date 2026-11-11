@@ -84,7 +84,7 @@ type RecordingEvent = {
   message?: string;
 };
 
-const APP_VERSION = "0.1.0-beta.20";
+const APP_VERSION = "0.1.0-beta.21";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -184,6 +184,10 @@ export default function App() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [newChannel, setNewChannel] = useState("");
   const [newRecordingOnlyChannel, setNewRecordingOnlyChannel] = useState("");
+  const [vodUrl, setVodUrl] = useState("");
+  const [vodSlug, setVodSlug] = useState("");
+  const [vodDownloadStatus, setVodDownloadStatus] = useState("");
+  const [vodDownloadActive, setVodDownloadActive] = useState(false);
   const [tab, setTab] = useState<"dashboard" | "recording" | "library" | "settings">("dashboard");
   const [isReady, setIsReady] = useState(false);
   const [storageError, setStorageError] = useState("");
@@ -271,6 +275,11 @@ export default function App() {
       unsubscribeRecording = window.kickRecorder.onRecordingStatus((event: RecordingEvent) => {
         if (!active) return;
         const isRecording = event.status === "starting" || event.status === "recording";
+        if (vodSlug && event.slug === vodSlug) {
+          setVodDownloadStatus(event.message ?? "過去配信を処理しています。");
+          if (event.status === "recording") setVodDownloadActive(true);
+          if (event.status === "stopped" || event.status === "error") setVodDownloadActive(false);
+        }
         setChannels(previous => previous.map(channel =>
           channel.name.toLowerCase() === event.slug ? { ...channel, recording: isRecording } : channel
         ));
@@ -703,6 +712,23 @@ export default function App() {
     }
   }
 
+  async function downloadPastBroadcast() {
+    if (!window.kickRecorder) { setVodDownloadStatus("Windowsデスクトップ版で利用できます。"); return; }
+    const match = vodUrl.trim().match(/^https:\/\/(?:www\.)?kick\.com\/([a-zA-Z0-9_-]{1,40})\/videos\/[a-f0-9-]{20,40}\/?(?:[?#].*)?$/i);
+    if (!match) { setVodDownloadStatus("Kickの過去配信URLを入力してください（https://kick.com/チャンネル/videos/動画ID）。"); return; }
+    const slug = match[1].toLowerCase();
+    setVodSlug(slug); setVodDownloadActive(false); setVodDownloadStatus("過去配信のダウンロードを準備しています...");
+    try {
+      const result = await window.kickRecorder.startRecording(slug, vodUrl.trim());
+      setVodDownloadActive(true); setVodDownloadStatus(`ダウンロードを開始しました。保存先：${result.outputDirectory}`);
+    } catch (error) { setVodDownloadActive(false); setVodDownloadStatus(error instanceof Error ? error.message : "過去配信のダウンロードに失敗しました。"); }
+  }
+
+  async function stopPastBroadcastDownload() {
+    if (!window.kickRecorder || !vodSlug) return;
+    try { await window.kickRecorder.stopRecording(vodSlug); setVodDownloadStatus("停止要求を送信しました。"); }
+    catch (error) { setVodDownloadStatus(error instanceof Error ? error.message : "停止できませんでした。"); }
+  }
   async function openRecordingFile(filePath: string) {
     if (!window.kickRecorder) return;
     try {
@@ -903,7 +929,17 @@ export default function App() {
             </label>}
           </div>
         </section>}
-                <div className="setting-row">
+                <section className="panel vod-download-panel">
+          <div className="panel-heading"><div><h2>過去の配信（VOD）を録画</h2><p>KickのVideosページから過去配信のURLをコピーして貼り付けます</p></div></div>
+          <div className="add-channel">
+            <input value={vodUrl} onChange={event => setVodUrl(event.target.value)} placeholder="https://kick.com/channel/videos/動画ID" aria-label="Kick過去配信URL" />
+            <button className="primary-small" onClick={() => void downloadPastBroadcast()} disabled={!isDesktop || vodDownloadActive}>過去配信をダウンロード</button>
+            {vodDownloadActive && <button className="remove" onClick={() => void stopPastBroadcastDownload()}>停止</button>}
+          </div>
+          {vodDownloadStatus && <div className="api-message" role="status">{vodDownloadStatus}</div>}
+          <div className="notice">公開状態で取得可能なVODが対象です。配信時間に応じてダウンロードに時間がかかり、保存容量と通信量を消費します。VODのコメント履歴は現在のライブコメント自動取得では取得できません。</div>
+        </section>
+        <div className="setting-row">
           <div><strong>録画専用チャンネルのコメントを自動取得</strong><small>ONにするとアプリ起動時・チャンネル追加時にコメントへ自動接続します。通常チャンネル側の設定とは別に管理できます。</small></div>
           <label className="setting-control"><input type="checkbox" checked={settings.autoReceiveChatForRecordingOnly} onChange={event => setSettings(previous => ({ ...previous, autoReceiveChatForRecordingOnly: event.target.checked }))} /><span>{settings.autoReceiveChatForRecordingOnly ? "自動取得：有効" : "自動取得：無効"}</span></label>
         </div>
