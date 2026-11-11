@@ -165,6 +165,8 @@ const api = {
   stopRecording: (slug: string, isVod = false): Promise<{ ok: true }> =>
     ipcRenderer.invoke("recording:stop", slug, isVod),
   listRecordings: (): Promise<RecordingFile[]> => ipcRenderer.invoke("recording:list"),
+  deleteRecording: (filePath: string): Promise<{ ok: true; name: string }> =>
+    ipcRenderer.invoke("recording:delete", filePath),
   openRecording: (filePath: string): Promise<{ ok: true }> =>
     ipcRenderer.invoke("recording:open", filePath),
   revealRecording: (filePath: string): Promise<{ ok: true }> =>
