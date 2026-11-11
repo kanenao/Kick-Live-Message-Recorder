@@ -40,7 +40,7 @@ type ActiveRecording = {
 };
 
 function validateSlug(value: unknown): string {
-  if (typeof value !== "string" || !/^[a-zA-Z0-9_]{1,25}$/.test(value)) {
+  if (typeof value !== "string" || !/^[a-zA-Z0-9_-]{1,40}$/.test(value)) {
     throw new Error("Kickチャンネル名が不正です。");
   }
   return value.toLowerCase();
