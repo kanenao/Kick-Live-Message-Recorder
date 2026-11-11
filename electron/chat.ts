@@ -162,6 +162,7 @@ export class KickChatReceiver {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private tokenRefreshTimer: NodeJS.Timeout | null = null;
   private reconnectAttempt = 0;
+  private operationGeneration = 0;
   private stopping = true;
   private messageCount = 0;
   private lastMessageAt: string | null = null;
@@ -199,16 +200,19 @@ export class KickChatReceiver {
       .map(value => value.toLowerCase()))].slice(0, 50);
     if (slugs.length === 0) throw new Error("先にダッシュボードでKickチャンネルを登録してください。");
 
-    await this.stop(false);
+    const generation = ++this.operationGeneration;
+    this.clearActiveConnection();
     this.desiredSlugs = slugs;
     this.stopping = false;
     this.reconnectAttempt = 0;
     this.publishStatus("Kickのコメント受信先を準備しています。");
 
     try {
-      await this.connect();
+      await this.connect(generation, slugs);
+      if (generation !== this.operationGeneration) return this.getStatus();
       return this.getStatus();
     } catch (error) {
+      if (generation !== this.operationGeneration) return this.getStatus();
       this.stopping = true;
       this.desiredSlugs = [];
       this.clearTimers();
@@ -219,8 +223,15 @@ export class KickChatReceiver {
   }
 
   async stop(publish = true): Promise<ChatReceiverStatus> {
+    this.operationGeneration += 1;
     this.stopping = true;
     this.desiredSlugs = [];
+    this.clearActiveConnection();
+    if (publish) this.publishStatus("コメント受信を停止しました。");
+    return this.getStatus();
+  }
+
+  private clearActiveConnection(): void {
     this.connectedSlugs = [];
     this.channelByFeed.clear();
     this.clearTimers();
@@ -231,8 +242,6 @@ export class KickChatReceiver {
       socket.close(1000, "Application stopped");
       socket.terminate();
     }
-    if (publish) this.publishStatus("コメント受信を停止しました。");
-    return this.getStatus();
   }
 
   private clearTimers(): void {
@@ -242,10 +251,11 @@ export class KickChatReceiver {
     this.tokenRefreshTimer = null;
   }
 
-  private async connect(): Promise<void> {
+  private async connect(generation: number, requestedSlugs: string[] = [...this.desiredSlugs]): Promise<void> {
     const resolved: ResolvedChannel[] = [];
-    for (let offset = 0; offset < this.desiredSlugs.length; offset += 5) {
-      const batch = this.desiredSlugs.slice(offset, offset + 5);
+    for (let offset = 0; offset < requestedSlugs.length; offset += 5) {
+      if (generation !== this.operationGeneration || this.stopping) return;
+      const batch = requestedSlugs.slice(offset, offset + 5);
       const results = await Promise.all(batch.map(async slug => {
         try {
           return await resolveChatroom(slug);
@@ -257,6 +267,7 @@ export class KickChatReceiver {
       resolved.push(...results);
     }
 
+    if (generation !== this.operationGeneration || this.stopping) return;
     const clientId = randomUUID();
     const [connectionUrl, token] = await Promise.all([
       createRealtimeConnection(clientId),
@@ -267,10 +278,11 @@ export class KickChatReceiver {
       feedMap.set("chatrooms." + channel.chatroomId + ".v2", channel.slug);
     }
 
-    await this.openSocket(connectionUrl, token, feedMap);
+    if (generation !== this.operationGeneration || this.stopping) return;
+    await this.openSocket(connectionUrl, token, feedMap, generation);
   }
 
-  private openSocket(connectionUrl: string, token: string, feedMap: Map<string, string>): Promise<void> {
+  private openSocket(connectionUrl: string, token: string, feedMap: Map<string, string>, generation: number): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const socket = new WebSocket(connectionUrl, {
         headers: {
@@ -364,6 +376,10 @@ export class KickChatReceiver {
               if (pending.size === 0 && !settled) {
                 settled = true;
                 clearTimeout(commandTimeout);
+                if (generation !== this.operationGeneration || this.stopping) {
+                  socket.close(1000, "Superseded connection");
+                  return;
+                }
                 this.connectedSlugs = [...new Set(feedMap.values())];
                 this.reconnectAttempt = 0;
                 this.publishStatus("コメント受信中（" + this.connectedSlugs.length + "チャンネル）。");
@@ -386,7 +402,7 @@ export class KickChatReceiver {
 
       socket.once("close", (code, reason) => {
         clearTimeout(commandTimeout);
-        if (this.socket !== socket) return;
+        if (this.socket !== socket || generation !== this.operationGeneration) return;
         this.socket = null;
         this.connectedSlugs = [];
         if (!settled) {
@@ -411,7 +427,8 @@ export class KickChatReceiver {
       this.reconnectTimer = null;
       if (this.stopping) return;
       this.publishStatus("Kickへ再接続しています。");
-      void this.connect().catch(error => {
+      const generation = this.operationGeneration;
+      void this.connect(generation).catch(error => {
         const detail = error instanceof Error ? error.message : String(error);
         this.publishStatus("再接続に失敗しました：" + detail + " 次回も自動で再試行します。");
         this.scheduleReconnect();
