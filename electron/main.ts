@@ -76,7 +76,12 @@ type KickChannelCheck = {
   slug: string;
   found: boolean;
   isLive: boolean;
+  displayName: string;
+  profilePicture: string | null;
+  broadcasterUserId: number | null;
   streamTitle: string;
+  categoryName: string;
+  categoryThumbnail: string | null;
   viewerCount: number;
   startedAt: string | null;
 };
@@ -91,6 +96,7 @@ type KickChannelPayload = {
     slug?: string;
     broadcaster_user_id?: number;
     stream_title?: string;
+    category?: { name?: string; thumbnail?: string } | null;
     stream?: {
       is_live?: boolean;
       viewer_count?: number;
@@ -99,7 +105,22 @@ type KickChannelPayload = {
   }>;
 };
 
+type KickUsersPayload = {
+  data?: Array<{
+    user_id?: number;
+    name?: string;
+    profile_picture?: string;
+  }>;
+};
+
+type CachedKickUserProfile = {
+  name: string;
+  profilePicture: string | null;
+  expiresAt: number;
+};
+
 let cachedKickToken: { value: string; expiresAt: number } | null = null;
+const kickUserProfileCache = new Map<number, CachedKickUserProfile>();
 let kickChannelRateLimitUntil = 0;
 
 function getKickChannelRateLimitWaitSeconds(response?: Response): number {
@@ -278,24 +299,94 @@ async function checkKickChannels(input: unknown): Promise<KickChannelCheck[]> {
     for (const channel of payload.data) {
       if (typeof channel.slug !== "string") continue;
       const stream = channel.stream;
+      const broadcasterUserId = typeof channel.broadcaster_user_id === "number" &&
+        Number.isSafeInteger(channel.broadcaster_user_id) && channel.broadcaster_user_id > 0
+        ? channel.broadcaster_user_id
+        : null;
+      const category = channel.category;
       resultBySlug.set(channel.slug.toLowerCase(), {
         slug: channel.slug.toLowerCase(),
         found: true,
         isLive: stream?.is_live === true,
+        displayName: channel.slug,
+        profilePicture: null,
+        broadcasterUserId,
         streamTitle: typeof channel.stream_title === "string" ? channel.stream_title : "",
+        categoryName: typeof category?.name === "string" ? category.name : "",
+        categoryThumbnail: typeof category?.thumbnail === "string" ? category.thumbnail : null,
         viewerCount: typeof stream?.viewer_count === "number" ? stream.viewer_count : 0,
         startedAt: typeof stream?.start_time === "string" ? stream.start_time : null
       });
     }
   }
 
-  return slugs.map(slug => resultBySlug.get(slug) ?? {
-    slug,
-    found: false,
-    isLive: false,
-    streamTitle: "",
-    viewerCount: 0,
-    startedAt: null
+  // 表示名とプロフィール画像はユーザー情報APIから取得。6時間キャッシュし、定期監視の追加API呼び出しを抑える。
+  const userIds = [...new Set([...resultBySlug.values()]
+    .map(channel => channel.broadcasterUserId)
+    .filter((id): id is number => id !== null))];
+  const now = Date.now();
+  const unresolvedUserIds = userIds.filter(id => {
+    const cached = kickUserProfileCache.get(id);
+    return !cached || cached.expiresAt <= now;
+  });
+
+  for (let offset = 0; offset < unresolvedUserIds.length; offset += 100) {
+    const batch = unresolvedUserIds.slice(offset, offset + 100);
+    const usersUrl = new URL("https://api.kick.com/public/v1/users");
+    for (const id of batch) usersUrl.searchParams.append("id", String(id));
+    try {
+      const usersResponse = await fetch(usersUrl, {
+        headers: { "Authorization": `Bearer ${accessToken}`, "Accept": "application/json" },
+        signal: AbortSignal.timeout(10_000)
+      });
+      if (usersResponse.ok) {
+        const usersPayload = await usersResponse.json() as KickUsersPayload;
+        if (Array.isArray(usersPayload.data)) {
+          for (const user of usersPayload.data) {
+            if (typeof user.user_id !== "number" || !Number.isSafeInteger(user.user_id) ||
+              typeof user.name !== "string" || !user.name.trim()) continue;
+            const picture = typeof user.profile_picture === "string" &&
+              /^https:\/\//i.test(user.profile_picture)
+              ? user.profile_picture
+              : null;
+            kickUserProfileCache.set(user.user_id, {
+              name: user.name.trim().slice(0, 100),
+              profilePicture: picture,
+              expiresAt: now + 6 * 60 * 60 * 1000
+            });
+          }
+        }
+      }
+    } catch {
+      // ユーザー表示名APIだけ失敗した場合でも、配信監視とLIVE状態表示は継続する。
+    }
+  }
+
+  return slugs.map(slug => {
+    const result = resultBySlug.get(slug);
+    if (!result) {
+      return {
+        slug,
+        found: false,
+        isLive: false,
+        displayName: slug,
+        profilePicture: null,
+        broadcasterUserId: null,
+        streamTitle: "",
+        categoryName: "",
+        categoryThumbnail: null,
+        viewerCount: 0,
+        startedAt: null
+      };
+    }
+    const profile = result.broadcasterUserId
+      ? kickUserProfileCache.get(result.broadcasterUserId)
+      : undefined;
+    return {
+      ...result,
+      displayName: profile?.name ?? result.displayName,
+      profilePicture: profile?.profilePicture ?? null
+    };
   });
 }
 
