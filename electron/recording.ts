@@ -117,7 +117,7 @@ export class KickRecordingManager {
       if (
         target === currentPath ||
         target.startsWith(`${basePrefix}.`) ||
-        /^_retry\\d+\\./i.test(target.slice(basePrefix.length))
+        target.startsWith(`${basePrefix}_retry`)
       ) return true;
     }
     return false;
