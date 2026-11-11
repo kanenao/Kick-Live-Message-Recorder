@@ -297,6 +297,39 @@ export default function App() {
     () => channels.map(channel => channel.name),
     [channels]
   );
+  const monitorSlugKey = monitorSlugs.join("|");
+
+  useEffect(() => {
+    if (!isReady || !isDesktop || !window.kickRecorder) return;
+    const slugs = monitorSlugKey ? monitorSlugKey.split("|") : [];
+    let active = true;
+
+    if (!settings.autoReceiveChat || slugs.length === 0) {
+      void window.kickRecorder.stopChatReceiver().then(status => {
+        if (active) setChatStatus(status);
+      }).catch(error => {
+        if (active) setChatSetupMessage(error instanceof Error ? error.message : "チャット受信を停止できませんでした。");
+      });
+      if (settings.autoReceiveChat && slugs.length === 0) {
+        setChatSetupMessage("チャンネル管理に登録すると、コメントを自動取得します。");
+      }
+      return () => { active = false; };
+    }
+
+    setIsStartingChat(true);
+    setChatSetupMessage("登録チャンネルのコメントを自動取得しています...");
+    void window.kickRecorder.startChatReceiver(slugs).then(status => {
+      if (!active) return;
+      setChatStatus(status);
+      setChatSetupMessage(status.connectedChannels + "チャンネルのコメントを自動取得しています。");
+    }).catch(error => {
+      if (active) setChatSetupMessage(error instanceof Error ? error.message : "コメントの自動取得を開始できませんでした。");
+    }).finally(() => {
+      if (active) setIsStartingChat(false);
+    });
+
+    return () => { active = false; };
+  }, [isReady, isDesktop, settings.autoReceiveChat, monitorSlugKey]);
 
   useEffect(() => {
     if (tab !== "library" || !isDesktop || !window.kickRecorder) return;
