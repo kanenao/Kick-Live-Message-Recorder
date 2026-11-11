@@ -57,6 +57,38 @@ type KickRecorderUpdateStatus = {
   message: string;
 };
 
+type KickRecorderChatMessage = {
+  eventId: string;
+  messageId: string;
+  channelSlug: string;
+  broadcasterUserId: number | null;
+  senderUsername: string;
+  senderUserId: number | null;
+  content: string;
+  createdAt: string;
+  receivedAt: string;
+  usernameColor: string | null;
+  badges: string[];
+  emotes: Array<{ emoteId: string; positions: Array<{ start: number; end: number }> }>;
+  replyToMessageId: string | null;
+};
+
+type KickRecorderChatStatus = {
+  running: boolean;
+  tunnelUrl: string;
+  webhookUrl: string;
+  messageCount: number;
+  lastMessageAt: string | null;
+  message: string;
+};
+
+type KickRecorderChatSubscriptionResult = {
+  slug: string;
+  status: "subscribed" | "already-subscribed" | "failed";
+  message: string;
+  subscriptionId?: string;
+};
+
 type KickRecorderChannelCheck = {
   slug: string;
   found: boolean;
@@ -79,6 +111,14 @@ declare global {
       testKickConnection: () => Promise<{ ok: boolean; message: string }>;
       clearKickCredentials: () => Promise<{ ok: boolean }>;
       checkKickChannels: (slugs: string[]) => Promise<KickRecorderChannelCheck[]>;
+      startChatReceiver: () => Promise<KickRecorderChatStatus>;
+      stopChatReceiver: () => Promise<KickRecorderChatStatus>;
+      getChatReceiverStatus: () => Promise<KickRecorderChatStatus>;
+      listChatMessages: (limit: number) => Promise<KickRecorderChatMessage[]>;
+      subscribeChatEvents: (slugs: string[]) => Promise<KickRecorderChatSubscriptionResult[]>;
+      copyText: (value: string) => Promise<{ ok: boolean }>;
+      onChatMessage: (callback: (message: KickRecorderChatMessage) => void) => () => void;
+      onChatStatus: (callback: (status: KickRecorderChatStatus) => void) => () => void;
       getUpdateStatus: () => Promise<KickRecorderUpdateStatus>;
       checkForUpdates: () => Promise<KickRecorderUpdateStatus>;
       installUpdate: () => Promise<{ ok: boolean }>;

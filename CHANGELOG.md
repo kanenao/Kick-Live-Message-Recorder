@@ -1,5 +1,14 @@
 # 更新履歴
 
+## 0.1.0-beta.12
+
+- Kick公式Webhookで `chat.message.sent` を受信するローカルHTTPサーバーを追加。
+- Cloudflare Tunnelを同梱し、Windowsアプリから公開HTTPS URLを発行できるように変更。
+- Kick公開鍵を取得してWebhook署名（RSA-SHA256）を検証し、重複イベントを除外。
+- 登録チャンネルのBroadcaster User IDを取得し、チャットイベント購読をKick APIへ登録。
+- コメントをチャンネル・日付ごとのJSONLファイルに保存し、直近コメントをアプリ内に表示。
+- チャット保存のON/OFFを設定可能に変更。
+
 ## 0.1.0-beta.11
 
 - Kick APIのClient Credentials認証を単独で確認できる「接続テスト」を追加。

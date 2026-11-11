@@ -63,3 +63,29 @@
 .channel-row .channel-info{flex:1 1 160px}
 .channel-row .recording-action{flex:0 0 auto}
 @media(max-width:1050px){.channel-row{align-items:center}.channel-row .channel-info{flex:1 1 130px}.channel-row .live-status{order:2}.channel-row .recording-action{order:3}}
+
+.chat-settings{margin-top:28px}
+.chat-receiver-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:12px 0}
+.chat-count{font-size:10px;color:#8c96a4}
+.webhook-url-row{display:flex;align-items:flex-end;gap:10px;max-width:860px}
+.webhook-url-row .credential-field{flex:1;min-width:200px;margin:6px 0}
+.webhook-url-input{max-width:none!important;font-size:10px!important}
+.webhook-url-row button{margin-bottom:6px;white-space:nowrap}
+.chat-subscription-results{border:1px solid #303641;border-radius:7px;margin:12px 0;overflow:hidden}
+.chat-subscription-result{display:flex;align-items:flex-start;gap:12px;padding:9px 11px;border-bottom:1px solid #303641;font-size:10px;color:#93dcae}
+.chat-subscription-result:last-child{border-bottom:0}
+.chat-subscription-result strong{min-width:120px;color:#e8edf3}
+.chat-subscription-result.failed{color:#e3a3a3}
+.chat-preview{margin-top:18px;border:1px solid #303641;border-radius:8px;overflow:hidden}
+.chat-preview-heading{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#20242c;border-bottom:1px solid #303641}
+.chat-preview-heading strong{font-size:11px}
+.chat-preview-heading span{font-size:9px;color:#87919f}
+.chat-preview-list{max-height:340px;overflow:auto}
+.chat-preview-item{padding:9px 12px;border-bottom:1px solid #292e37}
+.chat-preview-item:last-child{border-bottom:0}
+.chat-preview-meta{display:flex;align-items:center;gap:10px;font-size:10px}
+.chat-preview-meta strong{color:#80dfa6}
+.chat-preview-meta span,.chat-preview-meta time{color:#778292}
+.chat-preview-meta time{margin-left:auto;font-variant-numeric:tabular-nums}
+.chat-preview-content{font-size:11px;color:#e1e5ec;white-space:pre-wrap;overflow-wrap:anywhere;margin-top:5px;line-height:1.6}
+@media(max-width:760px){.webhook-url-row{align-items:stretch;flex-direction:column;gap:2px}.webhook-url-row button{align-self:flex-start;margin:0}}

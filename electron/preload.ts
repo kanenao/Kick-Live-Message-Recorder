@@ -59,6 +59,38 @@ type UpdateStatus = {
   message: string;
 };
 
+type ChatMessage = {
+  eventId: string;
+  messageId: string;
+  channelSlug: string;
+  broadcasterUserId: number | null;
+  senderUsername: string;
+  senderUserId: number | null;
+  content: string;
+  createdAt: string;
+  receivedAt: string;
+  usernameColor: string | null;
+  badges: string[];
+  emotes: Array<{ emoteId: string; positions: Array<{ start: number; end: number }> }>;
+  replyToMessageId: string | null;
+};
+
+type ChatReceiverStatus = {
+  running: boolean;
+  tunnelUrl: string;
+  webhookUrl: string;
+  messageCount: number;
+  lastMessageAt: string | null;
+  message: string;
+};
+
+type ChatSubscriptionResult = {
+  slug: string;
+  status: "subscribed" | "already-subscribed" | "failed";
+  message: string;
+  subscriptionId?: string;
+};
+
 type KickChannelCheck = {
   slug: string;
   found: boolean;
@@ -80,6 +112,22 @@ const api = {
   testKickConnection: (): Promise<{ ok: boolean; message: string }> => ipcRenderer.invoke("kick:test-connection"),
   clearKickCredentials: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("kick:clear-credentials"),
   checkKickChannels: (slugs: string[]): Promise<KickChannelCheck[]> => ipcRenderer.invoke("kick:check-channels", slugs),
+  startChatReceiver: (): Promise<ChatReceiverStatus> => ipcRenderer.invoke("chat:start"),
+  stopChatReceiver: (): Promise<ChatReceiverStatus> => ipcRenderer.invoke("chat:stop"),
+  getChatReceiverStatus: (): Promise<ChatReceiverStatus> => ipcRenderer.invoke("chat:get-status"),
+  listChatMessages: (limit: number): Promise<ChatMessage[]> => ipcRenderer.invoke("chat:list", limit),
+  subscribeChatEvents: (slugs: string[]): Promise<ChatSubscriptionResult[]> => ipcRenderer.invoke("chat:subscribe", slugs),
+  copyText: (value: string): Promise<{ ok: boolean }> => ipcRenderer.invoke("app:copy-text", value),
+  onChatMessage: (callback: (message: ChatMessage) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, message: ChatMessage): void => callback(message);
+    ipcRenderer.on("chat:message", listener);
+    return () => ipcRenderer.removeListener("chat:message", listener);
+  },
+  onChatStatus: (callback: (status: ChatReceiverStatus) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: ChatReceiverStatus): void => callback(status);
+    ipcRenderer.on("chat:status", listener);
+    return () => ipcRenderer.removeListener("chat:status", listener);
+  },
   getUpdateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke("updater:get-status"),
   checkForUpdates: (): Promise<UpdateStatus> => ipcRenderer.invoke("updater:check"),
   installUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("updater:install"),
