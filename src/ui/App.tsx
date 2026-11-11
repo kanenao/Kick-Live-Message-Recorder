@@ -17,6 +17,8 @@ type AppSettings = {
   outputDirectory: string;
   autoMonitorEnabled: boolean;
   monitorIntervalSeconds: number;
+  recordingRetryCount: number;
+  recordingRetryDelaySeconds: number;
   notifyOnLive: boolean;
 };
 
@@ -93,6 +95,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   outputDirectory: "",
   autoMonitorEnabled: true,
   monitorIntervalSeconds: 60,
+  recordingRetryCount: 5,
+  recordingRetryDelaySeconds: 10,
   notifyOnLive: true
 };
 
@@ -150,6 +154,12 @@ function normalizeState(value: unknown): PersistedState {
       monitorIntervalSeconds: typeof settings.monitorIntervalSeconds === "number"
         ? Math.max(10, Math.min(3600, Math.round(settings.monitorIntervalSeconds)))
         : 60,
+      recordingRetryCount: typeof settings.recordingRetryCount === "number"
+        ? Math.max(0, Math.min(10, Math.round(settings.recordingRetryCount)))
+        : 5,
+      recordingRetryDelaySeconds: typeof settings.recordingRetryDelaySeconds === "number"
+        ? Math.max(5, Math.min(60, Math.round(settings.recordingRetryDelaySeconds)))
+        : 10,
       notifyOnLive: settings.notifyOnLive !== false
     }
   };
@@ -902,6 +912,33 @@ export default function App() {
         <div className="setting-row">
           <div><strong>チャットを保存</strong><small>受信したコメントをJSONL形式で保存します。画面にもリアルタイム表示します。</small></div>
           <label className="setting-control"><input type="checkbox" checked={settings.saveChat} onChange={event => setSettings(previous => ({ ...previous, saveChat: event.target.checked }))} /><span>{settings.saveChat ? "有効" : "無効"}</span></label>
+        </div>
+
+        <div className="settings-subsection recording-retry-settings">
+          <div className="settings-subheading">
+            <h3>録画の自動再接続</h3>
+            <span className="api-state connected">通信エラー対策</span>
+          </div>
+          <div className="setting-row">
+            <div><strong>予期しない録画終了時に再接続</strong><small>通信切断などで録画が異常終了した場合だけ再試行します。手動停止・正常な配信終了では再接続しません。</small></div>
+            <select className="setting-select" value={settings.recordingRetryCount} onChange={e => setSettings(prev => ({ ...prev, recordingRetryCount: Number(e.target.value) }))}>
+              <option value={0}>再接続しない</option>
+              <option value={1}>1回</option>
+              <option value={3}>3回</option>
+              <option value={5}>5回（推奨）</option>
+              <option value={10}>10回</option>
+            </select>
+          </div>
+          <div className="setting-row">
+            <div><strong>再接続までの待ち時間</strong><small>再接続する前に待機する秒数です。再接続ごとの録画は別ファイルとして保存します。</small></div>
+            <select className="setting-select" value={settings.recordingRetryDelaySeconds} onChange={e => setSettings(prev => ({ ...prev, recordingRetryDelaySeconds: Number(e.target.value) }))}>
+              <option value={5}>5秒</option>
+              <option value={10}>10秒</option>
+              <option value={15}>15秒</option>
+              <option value={30}>30秒</option>
+              <option value={60}>60秒</option>
+            </select>
+          </div>
         </div>
 
         <div className="settings-subsection monitor-settings">
