@@ -37,6 +37,8 @@ type AppSettings = {
   outputDirectory: string;
   autoMonitorEnabled: boolean;
   monitorIntervalSeconds: number;
+  recordingRetryCount: number;
+  recordingRetryDelaySeconds: number;
   notifyOnLive: boolean;
 };
 
@@ -57,6 +59,8 @@ const DEFAULT_STATE: AppState = {
     outputDirectory: "",
     autoMonitorEnabled: true,
     monitorIntervalSeconds: 60,
+    recordingRetryCount: 5,
+    recordingRetryDelaySeconds: 10,
     notifyOnLive: true
   }
 };
@@ -453,6 +457,14 @@ function normalizeState(input: unknown): AppState {
         Number.isFinite(settings.monitorIntervalSeconds)
         ? Math.max(10, Math.min(3600, Math.round(settings.monitorIntervalSeconds)))
         : 60,
+      recordingRetryCount: typeof settings.recordingRetryCount === "number" &&
+        Number.isFinite(settings.recordingRetryCount)
+        ? Math.max(0, Math.min(10, Math.round(settings.recordingRetryCount)))
+        : 5,
+      recordingRetryDelaySeconds: typeof settings.recordingRetryDelaySeconds === "number" &&
+        Number.isFinite(settings.recordingRetryDelaySeconds)
+        ? Math.max(5, Math.min(60, Math.round(settings.recordingRetryDelaySeconds)))
+        : 10,
       notifyOnLive: settings.notifyOnLive !== false
     }
   };
@@ -622,7 +634,11 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("recording:start", (event, slug: unknown) => {
     assertTrustedSender(event);
-    return recordingManager.start(slug, getRecordingOutputDirectory());
+    const settings = readState().settings;
+    return recordingManager.start(slug, getRecordingOutputDirectory(), {
+      retryCount: settings.recordingRetryCount,
+      retryDelaySeconds: settings.recordingRetryDelaySeconds
+    });
   });
 
   ipcMain.handle("recording:stop", (event, slug: unknown) => {
