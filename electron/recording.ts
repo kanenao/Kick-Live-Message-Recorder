@@ -17,12 +17,23 @@ export type RecordingFile = {
   modifiedAt: string;
 };
 
+export type RecordingOptions = {
+  retryCount?: number;
+  retryDelaySeconds?: number;
+};
+
 type ActiveRecording = {
-  child: ChildProcessWithoutNullStreams;
+  child: ChildProcessWithoutNullStreams | null;
   stopRequested: boolean;
   filePath: string;
+  basePrefix: string;
+  outputDirectory: string;
   stderrTail: string;
-  settled: boolean;
+  retriesUsed: number;
+  maxRetries: number;
+  retryDelayMs: number;
+  attempt: number;
+  retryTimer: NodeJS.Timeout | null;
 };
 
 function validateSlug(value: unknown): string {
@@ -66,6 +77,11 @@ function timestampForFilename(date: Date): string {
   ].join("");
 }
 
+function boundedInteger(value: unknown, fallback: number, minimum: number, maximum: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.max(minimum, Math.min(maximum, Math.round(value)));
+}
+
 export class KickRecordingManager {
   private readonly active = new Map<string, ActiveRecording>();
 
@@ -75,7 +91,11 @@ export class KickRecordingManager {
     return this.active.has(slug.toLowerCase());
   }
 
-  start(inputSlug: unknown, inputDirectory: unknown): { ok: true; outputDirectory: string } {
+  start(
+    inputSlug: unknown,
+    inputDirectory: unknown,
+    options: RecordingOptions = {}
+  ): { ok: true; outputDirectory: string } {
     const slug = validateSlug(inputSlug);
     if (this.active.has(slug)) {
       throw new Error(`${slug} はすでに録画中です。`);
@@ -87,9 +107,39 @@ export class KickRecordingManager {
     if (!outputDirectory) throw new Error("録画の保存先が設定されていません。");
 
     mkdirSync(outputDirectory, { recursive: true });
-    const prefix = join(outputDirectory, `${slug}_${timestampForFilename(new Date())}`);
-    const outputTemplate = `${prefix}.%(ext)s`;
-    const url = `https://kick.com/${slug}`;
+    const basePrefix = join(outputDirectory, `${slug}_${timestampForFilename(new Date())}`);
+    const session: ActiveRecording = {
+      child: null,
+      stopRequested: false,
+      filePath: basePrefix,
+      basePrefix,
+      outputDirectory,
+      stderrTail: "",
+      retriesUsed: 0,
+      maxRetries: boundedInteger(options.retryCount, 5, 0, 10),
+      retryDelayMs: boundedInteger(options.retryDelaySeconds, 10, 5, 60) * 1000,
+      attempt: 0,
+      retryTimer: null
+    };
+
+    this.active.set(slug, session);
+    this.onEvent({ slug, status: "starting", filePath: basePrefix, message: "録画プロセスを起動しています。" });
+    this.launch(slug, session);
+
+    return { ok: true, outputDirectory };
+  }
+
+  private launch(slug: string, session: ActiveRecording): void {
+    if (session.stopRequested || this.active.get(slug) !== session) return;
+
+    session.attempt += 1;
+    session.stderrTail = "";
+    const suffix = session.attempt === 1
+      ? ""
+      : `_retry${String(session.attempt).padStart(2, "0")}`;
+    const prefix = `${session.basePrefix}${suffix}`;
+    session.filePath = prefix;
+
     const ffmpegPath = findFfmpeg();
     const args = [
       "--no-warnings",
@@ -104,32 +154,36 @@ export class KickRecordingManager {
       "--fragment-retries", "10",
       "--retry-sleep", "linear=1::5",
       "--format", "best",
-      "--output", outputTemplate,
+      "--output", `${prefix}.%(ext)s`,
       "--print", "after_move:filepath",
       ...(ffmpegPath ? ["--ffmpeg-location", ffmpegPath] : []),
-      url
+      `https://kick.com/${slug}`
     ];
 
-    this.onEvent({ slug, status: "starting", message: "録画プロセスを起動しています。" });
+    let child: ChildProcessWithoutNullStreams;
+    try {
+      child = spawn(findYtDlp(), args, {
+        windowsHide: true,
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+    } catch (error) {
+      this.finishAttempt(slug, session, null, null, error instanceof Error ? error : new Error(String(error)));
+      return;
+    }
 
-    const child = spawn(findYtDlp(), args, {
-      windowsHide: true,
-      stdio: ["pipe", "pipe", "pipe"]
-    });
-    const session: ActiveRecording = {
-      child,
-      stopRequested: false,
-      filePath: prefix,
-      stderrTail: "",
-      settled: false
+    session.child = child;
+    let attemptSettled = false;
+    const settle = (code: number | null, signal: NodeJS.Signals | null, error?: Error): void => {
+      if (attemptSettled) return;
+      attemptSettled = true;
+      this.finishAttempt(slug, session, code, signal, error);
     };
-    this.active.set(slug, session);
 
     child.stdout.on("data", (chunk: Buffer | string) => {
-      const text = String(chunk);
-      for (const line of text.split(/\r?\n/)) {
+      const output = String(chunk);
+      for (const line of output.split(/\r?\n/)) {
         const trimmed = line.trim();
-        if (trimmed && !trimmed.startsWith("[") && (trimmed.includes("/") || trimmed.includes("\\\\"))) {
+        if (trimmed && !trimmed.startsWith("[") && (trimmed.includes("/") || trimmed.includes("\\"))) {
           session.filePath = trimmed;
         }
       }
@@ -139,51 +193,83 @@ export class KickRecordingManager {
     });
 
     child.once("spawn", () => {
-      this.onEvent({ slug, status: "recording", filePath: prefix, message: "録画を開始しました。" });
-    });
-
-    child.once("error", error => {
-      session.settled = true;
-      this.active.delete(slug);
-      this.onEvent({
-        slug,
-        status: "error",
-        filePath: session.filePath,
-        message: error.message.includes("ENOENT")
-          ? "yt-dlp.exe が見つかりません。同梱ファイルまたはPATHを確認してください。"
-          : `録画プロセスを起動できませんでした：${error.message}`
-      });
-    });
-
-    child.once("close", (code, signal) => {
-      if (session.settled) return;
-      session.settled = true;
-      this.active.delete(slug);
-      if (session.stopRequested || code === 0) {
-        this.onEvent({
-          slug,
-          status: "stopped",
-          filePath: session.filePath,
-          message: session.stopRequested ? "録画を停止しました。" : "配信が終了し、録画を完了しました。"
-        });
+      if (session.stopRequested) {
+        child.kill();
         return;
       }
-      const stderr = session.stderrTail.trim();
-      const lowerStderr = stderr.toLowerCase();
-      const detail = stderr.split(/\r?\n/).filter(Boolean).slice(-3).join(" ");
-      const message = lowerStderr.includes("ffmpeg could not be found")
-        || lowerStderr.includes("ffmpeg not found")
-        ? "ffmpeg.exe が見つかりません。アプリを最新版に更新して再インストールしてください。"
-        : detail || `録画が異常終了しました（終了コード：${String(code)}、signal：${String(signal)}）。`;
       this.onEvent({
         slug,
-        status: "error",
-        filePath: session.filePath,
-        message
+        status: "recording",
+        filePath: prefix,
+        message: session.attempt === 1
+          ? "録画を開始しました。"
+          : `再接続に成功しました（${session.attempt - 1}/${session.maxRetries}回目）。`
       });
     });
 
-    return { ok: true, outputDirectory };
+    child.once("error", error => settle(null, null, error));
+    child.once("close", (code, signal) => settle(code, signal));
+  }
+
+  private finishAttempt(
+    slug: string,
+    session: ActiveRecording,
+    code: number | null,
+    signal: NodeJS.Signals | null,
+    spawnError?: Error
+  ): void {
+    session.child = null;
+    if (session.stopRequested || this.active.get(slug) !== session) {
+      this.active.delete(slug);
+      this.onEvent({ slug, status: "stopped", filePath: session.filePath, message: "録画を停止しました。" });
+      return;
+    }
+
+    if (!spawnError && code === 0) {
+      this.active.delete(slug);
+      this.onEvent({
+        slug,
+        status: "stopped",
+        filePath: session.filePath,
+        message: "配信が終了し、録画を完了しました。"
+      });
+      return;
+    }
+
+    const stderr = session.stderrTail.trim();
+    const lowerStderr = stderr.toLowerCase();
+    const spawnCode = spawnError && "code" in spawnError ? String(spawnError.code) : "";
+    const missingExecutable = spawnCode === "ENOENT";
+    const missingFfmpeg = lowerStderr.includes("ffmpeg could not be found")
+      || lowerStderr.includes("ffmpeg not found");
+    const detail = stderr.split(/\r?\n/).filter(Boolean).slice(-3).join(" ");
+    const terminalMessage = missingExecutable
+      ? "yt-dlp.exe が見つかりません。同梱ファイルまたはPATHを確認してください。"
+      : missingFfmpeg
+        ? "ffmpeg.exe が見つかりません。アプリを最新版に更新して再インストールしてください。"
+        : detail || (spawnError
+          ? `録画プロセスを起動できませんでした：${spawnError.message}`
+          : `録画が異常終了しました（終了コード：${String(code)}、signal：${String(signal)}）。`);
+
+    if (!missingExecutable && !missingFfmpeg && session.retriesUsed < session.maxRetries) {
+      session.retriesUsed += 1;
+      const retryNumber = session.retriesUsed;
+      const delaySeconds = Math.round(session.retryDelayMs / 1000);
+      this.onEvent({
+        slug,
+        status: "starting",
+        filePath: session.filePath,
+        message: `録画接続が切れました。${delaySeconds}秒後に再接続します（${retryNumber}/${session.maxRetries}回目）。`
+      });
+      session.retryTimer = setTimeout(() => {
+        session.retryTimer = null;
+        this.launch(slug, session);
+      }, session.retryDelayMs);
+      return;
+    }
+
+    this.active.delete(slug);
+    this.onEvent({ slug, status: "error", filePath: session.filePath, message: terminalMessage });
   }
 
   stop(inputSlug: unknown): { ok: true } {
@@ -192,21 +278,39 @@ export class KickRecordingManager {
     if (!session) throw new Error(`${slug} は録画中ではありません。`);
 
     session.stopRequested = true;
-    try {
-      session.child.kill("SIGINT");
-    } catch {
-      session.child.kill();
+    if (session.retryTimer) {
+      clearTimeout(session.retryTimer);
+      session.retryTimer = null;
+    }
+
+    if (session.child) {
+      try {
+        session.child.kill("SIGINT");
+      } catch {
+        session.child.kill();
+      }
+    } else {
+      this.active.delete(slug);
+      this.onEvent({ slug, status: "stopped", filePath: session.filePath, message: "再接続待ちを取り消し、録画を停止しました。" });
     }
     return { ok: true };
   }
 
   stopAll(): void {
-    for (const session of this.active.values()) {
+    for (const [slug, session] of this.active) {
       session.stopRequested = true;
-      try {
-        session.child.kill("SIGINT");
-      } catch {
-        session.child.kill();
+      if (session.retryTimer) {
+        clearTimeout(session.retryTimer);
+        session.retryTimer = null;
+      }
+      if (session.child) {
+        try {
+          session.child.kill("SIGINT");
+        } catch {
+          session.child.kill();
+        }
+      } else {
+        this.active.delete(slug);
       }
     }
   }
@@ -235,7 +339,7 @@ export function listRecordingFiles(outputDirectory: string): RecordingFile[] {
         modifiedAt: stats.mtime.toISOString()
       });
     } catch {
-      // ファイルが一覧取得中に削除された場合はスキップする。
+      // 録画一覧の取得中にファイルが削除された場合はスキップする。
     }
   }
 
