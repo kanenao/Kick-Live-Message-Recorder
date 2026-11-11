@@ -70,6 +70,48 @@ jobs:
           & $target --version
           if ($LASTEXITCODE -ne 0) { throw "yt-dlp.exe を実行できませんでした。" }
 
+      - name: FFmpeg LGPL版を取得してアプリへ同梱
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "vendor/win-x64" | Out-Null
+          $archiveName = "ffmpeg-n9.0-latest-win64-lgpl-9.0.zip"
+          $archivePath = Join-Path $env:RUNNER_TEMP $archiveName
+          $archiveUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/$archiveName"
+          Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath
+          if ((Get-Item $archivePath).Length -lt 80000000) {
+            throw "FFmpegアーカイブのサイズが不正です。"
+          }
+
+          $extractPath = Join-Path $env:RUNNER_TEMP "ffmpeg-extract"
+          if (Test-Path $extractPath) { Remove-Item -Recurse -Force $extractPath }
+          Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
+          $ffmpegSource = Get-ChildItem -Path $extractPath -Filter "ffmpeg.exe" -File -Recurse | Select-Object -First 1
+          if (-not $ffmpegSource) { throw "FFmpegアーカイブ内にffmpeg.exeがありません。" }
+
+          $ffmpegTarget = "vendor/win-x64/ffmpeg.exe"
+          Copy-Item -LiteralPath $ffmpegSource.FullName -Destination $ffmpegTarget -Force
+          if ((Get-Item $ffmpegTarget).Length -lt 20000000) {
+            throw "ffmpeg.exe のサイズが不正です。"
+          }
+          & $ffmpegTarget -version
+          if ($LASTEXITCODE -ne 0) { throw "同梱するffmpeg.exeを実行できませんでした。" }
+
+          $licenseTarget = "vendor/win-x64/FFmpeg-LGPL-2.1.txt"
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FFmpeg/FFmpeg/n9.0/COPYING.LGPLv2.1" -OutFile $licenseTarget
+          if ((Get-Item $licenseTarget).Length -lt 10000) {
+            throw "FFmpeg LGPLライセンス文書を取得できませんでした。"
+          }
+
+          @"
+          FFmpeg 9.0 Windows x64 (LGPL static build)
+          Binary distribution: BtbN/FFmpeg-Builds
+          Build archive: $archiveName
+          FFmpeg source: https://github.com/FFmpeg/FFmpeg/tree/n9.0
+          Build scripts and package information: https://github.com/BtbN/FFmpeg-Builds
+          License: GNU Lesser General Public License version 2.1 or later.
+          The accompanying FFmpeg-LGPL-2.1.txt contains the LGPL v2.1 license text.
+          "@ | Set-Content -Path "vendor/win-x64/FFmpeg-NOTICE.txt" -Encoding UTF8
+
       - name: Windowsインストーラーを作成
         run: npm run dist:win
       - name: インストーラーを保存
@@ -192,6 +234,48 @@ jobs:
           }
           & $target --version
           if ($LASTEXITCODE -ne 0) { throw "yt-dlp.exe を実行できませんでした。" }
+
+      - name: FFmpeg LGPL版を取得してアプリへ同梱
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "vendor/win-x64" | Out-Null
+          $archiveName = "ffmpeg-n9.0-latest-win64-lgpl-9.0.zip"
+          $archivePath = Join-Path $env:RUNNER_TEMP $archiveName
+          $archiveUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/$archiveName"
+          Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath
+          if ((Get-Item $archivePath).Length -lt 80000000) {
+            throw "FFmpegアーカイブのサイズが不正です。"
+          }
+
+          $extractPath = Join-Path $env:RUNNER_TEMP "ffmpeg-extract"
+          if (Test-Path $extractPath) { Remove-Item -Recurse -Force $extractPath }
+          Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
+          $ffmpegSource = Get-ChildItem -Path $extractPath -Filter "ffmpeg.exe" -File -Recurse | Select-Object -First 1
+          if (-not $ffmpegSource) { throw "FFmpegアーカイブ内にffmpeg.exeがありません。" }
+
+          $ffmpegTarget = "vendor/win-x64/ffmpeg.exe"
+          Copy-Item -LiteralPath $ffmpegSource.FullName -Destination $ffmpegTarget -Force
+          if ((Get-Item $ffmpegTarget).Length -lt 20000000) {
+            throw "ffmpeg.exe のサイズが不正です。"
+          }
+          & $ffmpegTarget -version
+          if ($LASTEXITCODE -ne 0) { throw "同梱するffmpeg.exeを実行できませんでした。" }
+
+          $licenseTarget = "vendor/win-x64/FFmpeg-LGPL-2.1.txt"
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FFmpeg/FFmpeg/n9.0/COPYING.LGPLv2.1" -OutFile $licenseTarget
+          if ((Get-Item $licenseTarget).Length -lt 10000) {
+            throw "FFmpeg LGPLライセンス文書を取得できませんでした。"
+          }
+
+          @"
+          FFmpeg 9.0 Windows x64 (LGPL static build)
+          Binary distribution: BtbN/FFmpeg-Builds
+          Build archive: $archiveName
+          FFmpeg source: https://github.com/FFmpeg/FFmpeg/tree/n9.0
+          Build scripts and package information: https://github.com/BtbN/FFmpeg-Builds
+          License: GNU Lesser General Public License version 2.1 or later.
+          The accompanying FFmpeg-LGPL-2.1.txt contains the LGPL v2.1 license text.
+          "@ | Set-Content -Path "vendor/win-x64/FFmpeg-NOTICE.txt" -Encoding UTF8
 
       - name: Releases用の同梱ファイルを再確認
         shell: pwsh
