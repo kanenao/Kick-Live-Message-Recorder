@@ -41,6 +41,7 @@ type AppSettings = {
   recordingRetryCount: number;
   recordingRetryDelaySeconds: number;
   notifyOnLive: boolean;
+  showRecordingPreview: boolean;
 };
 
 type AppState = {
@@ -62,7 +63,8 @@ const DEFAULT_STATE: AppState = {
     monitorIntervalSeconds: 60,
     recordingRetryCount: 5,
     recordingRetryDelaySeconds: 10,
-    notifyOnLive: true
+    notifyOnLive: true,
+    showRecordingPreview: true
   }
 };
 
@@ -561,7 +563,8 @@ function normalizeState(input: unknown): AppState {
         Number.isFinite(settings.recordingRetryDelaySeconds)
         ? Math.max(5, Math.min(60, Math.round(settings.recordingRetryDelaySeconds)))
         : 10,
-      notifyOnLive: settings.notifyOnLive !== false
+      notifyOnLive: settings.notifyOnLive !== false,
+      showRecordingPreview: settings.showRecordingPreview !== false
     }
   };
 }
