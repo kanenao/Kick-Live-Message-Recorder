@@ -271,8 +271,10 @@ export default function App() {
         setRecordingRequests(previous => ({ ...previous, [event.slug]: false }));
         if (event.status === "error") {
           setRecordingMessage(`${event.slug}：${event.message ?? "録画に失敗しました。"}`);
+        } else if (event.status === "starting") {
+          setRecordingMessage(`${event.slug}：${event.message ?? "録画を準備しています。"}`);
         } else if (event.status === "recording") {
-          setRecordingMessage(`${event.slug} の録画を開始しました。`);
+          setRecordingMessage(`${event.slug}：${event.message ?? "録画を開始しました。"}`);
         } else if (event.status === "stopped") {
           setRecordingMessage(`${event.slug}：${event.message ?? "録画を終了しました。"}`);
         }
