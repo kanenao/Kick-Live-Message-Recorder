@@ -724,6 +724,59 @@ export default function App() {
     }
   }
 
+  async function toggleRecordingWithChat(slug: string, isRecording: boolean) {
+    if (!window.kickRecorder) {
+      setRecordingMessage("録画とコメント取得はWindowsデスクトップ版で利用できます。");
+      return;
+    }
+
+    const key = slug.toLowerCase();
+    setRecordingRequests(previous => ({ ...previous, [key]: true }));
+    setRecordingMessage("");
+    try {
+      if (isRecording) {
+        await window.kickRecorder.stopRecording(slug);
+        setRecordingMessage(`${slug} の映像録画を停止しました。コメント自動取得は設定に従って継続します。`);
+        return;
+      }
+
+      // 録画専用から同時開始した場合は、次回起動後もコメント取得を継続する。
+      setSettings(previous => ({ ...previous, autoReceiveChatForRecordingOnly: true }));
+
+      let chatWarning = "";
+      if (settings.autoReceiveChatForRecordingOnly && !chatStatus.running && !isStartingChat) {
+        const chatTargets = [
+          ...(settings.autoReceiveChat ? channels : []),
+          ...recordingOnlyChannels
+        ];
+        const slugs = [...new Set(chatTargets.map(channel => channel.name.toLowerCase()))];
+        if (slugs.length > 0) {
+          setIsStartingChat(true);
+          try {
+            const status = await window.kickRecorder.startChatReceiver(slugs);
+            setChatStatus(status);
+            setChatSetupMessage(status.connectedChannels + "チャンネルのコメントを受信しています。");
+          } catch (error) {
+            chatWarning = error instanceof Error ? error.message : "コメント受信の接続に失敗しました。";
+            setChatSetupMessage(chatWarning);
+          } finally {
+            setIsStartingChat(false);
+          }
+        }
+      }
+
+      const result = await window.kickRecorder.startRecording(slug);
+      setRecordingMessage(
+        `${slug} の映像録画を開始しました。録画専用チャンネルのコメント自動取得も有効です。保存先：${result.outputDirectory}` +
+        (chatWarning ? " コメント接続エラー：" + chatWarning : "")
+      );
+    } catch (error) {
+      setRecordingMessage(error instanceof Error ? error.message : "録画・コメント取得の開始に失敗しました。");
+    } finally {
+      setRecordingRequests(previous => ({ ...previous, [key]: false }));
+    }
+  }
+
   async function downloadPastBroadcast() {
     if (!window.kickRecorder) { setVodDownloadStatus("Windowsデスクトップ版で利用できます。"); return; }
     const match = vodUrl.trim().match(/^https:\/\/(?:www\.)?kick\.com\/([a-zA-Z0-9_-]{1,40})\/videos\/[a-f0-9-]{20,40}\/?(?:[?#].*)?$/i);
@@ -738,7 +791,7 @@ export default function App() {
 
   async function stopPastBroadcastDownload() {
     if (!window.kickRecorder || !vodSlug) return;
-    try { await window.kickRecorder.stopRecording(vodSlug); setVodDownloadStatus("停止要求を送信しました。"); }
+    try { await window.kickRecorder.stopRecording(vodSlug, true); setVodDownloadStatus("停止要求を送信しました。"); }
     catch (error) { setVodDownloadStatus(error instanceof Error ? error.message : "停止できませんでした。"); }
   }
 
@@ -981,8 +1034,8 @@ export default function App() {
           <div className="notice">公開状態で取得可能なVODが対象です。コメントは配信開始からの経過時刻・投稿者名・本文を保持し、ChatフォルダーにJSONLとTXTで保存します。Kick側の非公開設定やアクセス制限、API仕様変更により取得できない場合があります。</div>
         </section>
         <div className="setting-row">
-          <div><strong>録画専用チャンネルのコメントを自動取得</strong><small>ONにするとアプリ起動時・チャンネル追加時にコメントへ自動接続します。通常チャンネル側の設定とは別に管理できます。</small></div>
-          <label className="setting-control"><input type="checkbox" checked={settings.autoReceiveChatForRecordingOnly} onChange={event => setSettings(previous => ({ ...previous, autoReceiveChatForRecordingOnly: event.target.checked }))} /><span>{settings.autoReceiveChatForRecordingOnly ? "自動取得：有効" : "自動取得：無効"}</span></label>
+          <div><strong>録画専用チャンネルの録画・コメント取得</strong><small>チャンネル一覧の「録画＋コメント取得」から映像とコメントを同時に開始できます。ONならアプリ起動時もコメントへ自動接続します。</small></div>
+          <label className="setting-control"><input type="checkbox" checked={settings.autoReceiveChatForRecordingOnly} onChange={event => setSettings(previous => ({ ...previous, autoReceiveChatForRecordingOnly: event.target.checked }))} /><span>{settings.autoReceiveChatForRecordingOnly ? "コメント自動接続：有効" : "コメント自動接続：無効"}</span></label>
         </div>
         <div className="add-channel">
           <input value={newRecordingOnlyChannel} onChange={event => setNewRecordingOnlyChannel(event.target.value)} onKeyDown={event => event.key === "Enter" && addRecordingOnlyChannel()} placeholder="録画したいKickチャンネル名 または URL" aria-label="録画専用Kickチャンネル名" />
@@ -995,14 +1048,14 @@ export default function App() {
             <div className="channel-info"><strong>{channel.name}</strong><small>{channel.url}</small></div>
             <span className="mode-tag">{settings.autoReceiveChatForRecordingOnly ? "コメント自動取得ON" : "コメント取得OFF"}</span>
             <span className={channel.recording ? "live-status live" : "live-status unknown"}>{channel.recording ? "録画中" : "録画待機"}</span>
-            <button className="primary-small recording-action" onClick={() => void toggleRecording(channel.name, channel.recording)} disabled={!isDesktop || Boolean(recordingRequests[channel.name.toLowerCase()])}>
-              {recordingRequests[channel.name.toLowerCase()] ? "処理中..." : channel.recording ? "録画停止" : "録画開始"}
+            <button className="primary-small recording-action combined-recording-action" onClick={() => void toggleRecordingWithChat(channel.name, channel.recording)} disabled={!isDesktop || Boolean(recordingRequests[channel.name.toLowerCase()])}>
+              {recordingRequests[channel.name.toLowerCase()] ? "処理中..." : channel.recording ? "録画停止" : "録画＋コメント取得"}
             </button>
             <button className="remove" aria-label={`${channel.name}を録画専用一覧から削除`} onClick={() => setRecordingOnlyChannels(previous => previous.filter(item => item.id !== channel.id))}>×</button>
           </div>)}
         </div>
         {recordingMessage && <div className="api-message" role="status">{recordingMessage}</div>}
-        <div className="notice">この一覧は手動録画専用です。配信状態の自動監視・自動録画は行いません。コメント自動取得は上の項目で個別にON／OFFできます。録画を開始したいときだけ「録画開始」を押してください。</div>
+        <div className="notice">この一覧は手動開始専用です。各チャンネルの「録画＋コメント取得」を押すと映像録画とコメント受信を同時に開始し、コメント自動接続も有効になります。録画停止後もコメント取得は設定に従って継続します。</div>
         <div className="chat-preview">
           <div className="chat-preview-heading"><strong>録画専用チャンネルの最近のコメント</strong><span>{recordingOnlyMessages.length}件</span></div>
           {recordingOnlyMessages.length === 0
