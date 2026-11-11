@@ -90,7 +90,7 @@ type RecordingEvent = {
   isVod?: boolean;
 };
 
-const APP_VERSION = "0.1.0-beta.24";
+const APP_VERSION = "0.1.0-beta.25";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -258,6 +258,7 @@ export default function App() {
   const [recordingRequests, setRecordingRequests] = useState<Record<string, boolean>>({});
   const [recordingFiles, setRecordingFiles] = useState<RecordingFile[]>([]);
   const [isLoadingRecordings, setIsLoadingRecordings] = useState(false);
+  const [deletingRecordingPath, setDeletingRecordingPath] = useState<string | null>(null);
   const [recordingMessage, setRecordingMessage] = useState("");
   const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
   const activeCount = useMemo(() => [...channels, ...recordingOnlyChannels].filter(c => c.recording).length, [channels, recordingOnlyChannels]);
@@ -887,6 +888,24 @@ export default function App() {
     }
   }
 
+  async function deleteRecordingFromLibrary(filePath: string, fileName: string) {
+    if (!window.kickRecorder || deletingRecordingPath) return;
+    const confirmed = window.confirm(`「${fileName}」を完全に削除しますか？\\n\\n削除したファイルは元に戻せません。`);
+    if (!confirmed) return;
+
+    setDeletingRecordingPath(filePath);
+    setRecordingMessage("");
+    try {
+      const result = await window.kickRecorder.deleteRecording(filePath);
+      setRecordingFiles(current => current.filter(file => file.path !== filePath));
+      setRecordingMessage(`「${result.name}」を削除しました。`);
+    } catch (error) {
+      setRecordingMessage(error instanceof Error ? error.message : "録画ファイルを削除できませんでした。");
+    } finally {
+      setDeletingRecordingPath(null);
+    }
+  }
+
   async function checkForAppUpdates() {
     if (!window.kickRecorder) {
       setUpdateStatus(prev => ({ ...prev, status: "error", message: "更新確認はWindowsデスクトップ版で利用できます。" }));
@@ -1164,7 +1183,7 @@ export default function App() {
       {tab === "library" && <section className="panel">
         <div className="panel-heading">
           <div><h2>録画ライブラリ</h2><p>このPCに保存されたKick配信映像</p></div>
-          <button className="small-action" onClick={() => setLibraryRefreshKey(value => value + 1)} disabled={!isDesktop || isLoadingRecordings}>一覧を更新</button>
+          <button className="small-action" onClick={() => setLibraryRefreshKey(value => value + 1)} disabled={!isDesktop || isLoadingRecordings || deletingRecordingPath !== null}>一覧を更新</button>
         </div>
         {recordingMessage && <div className="api-message" role="status">{recordingMessage}</div>}
         {!isDesktop
@@ -1182,6 +1201,9 @@ export default function App() {
                     </div>
                     <button className="primary-small" onClick={() => void openRecordingFile(file.path)}>再生</button>
                     <button className="small-action" onClick={() => void revealRecordingFile(file.path)}>保存先を表示</button>
+                    <button className="danger-small" onClick={() => void deleteRecordingFromLibrary(file.path, file.name)} disabled={deletingRecordingPath !== null}>
+                      {deletingRecordingPath === file.path ? "削除中..." : "削除"}
+                    </button>
                   </div>)}
                 </div>}
         <div className="data-path-note">保存先：{settings.outputDirectory || "アプリ既定のビデオフォルダー"}</div>
