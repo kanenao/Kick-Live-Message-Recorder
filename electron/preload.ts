@@ -49,6 +49,16 @@ type RecordingEvent = {
   isVod?: boolean;
 };
 
+type VodChatEvent = {
+  status: "starting" | "progress" | "completed" | "stopped" | "error";
+  slug: string;
+  videoId: string;
+  pages: number;
+  messageCount: number;
+  message: string;
+  filePaths?: string[];
+};
+
 type KickCredentialsStatus = {
   configured: boolean;
   encryptionAvailable: boolean;
@@ -112,6 +122,14 @@ const api = {
   stopChatReceiver: (): Promise<ChatReceiverStatus> => ipcRenderer.invoke("chat:stop"),
   getChatReceiverStatus: (): Promise<ChatReceiverStatus> => ipcRenderer.invoke("chat:get-status"),
   listChatMessages: (limit: number): Promise<ChatMessage[]> => ipcRenderer.invoke("chat:list", limit),
+  startVodChatDownload: (url: string): Promise<{ ok: true; outputDirectory: string }> =>
+    ipcRenderer.invoke("vod-chat:start", url),
+  stopVodChatDownload: (): Promise<{ ok: true }> => ipcRenderer.invoke("vod-chat:stop"),
+  onVodChatStatus: (callback: (event: VodChatEvent) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, event: VodChatEvent): void => callback(event);
+    ipcRenderer.on("vod-chat:status", listener);
+    return () => ipcRenderer.removeListener("vod-chat:status", listener);
+  },
   copyText: (value: string): Promise<{ ok: boolean }> => ipcRenderer.invoke("app:copy-text", value),
   onChatMessage: (callback: (message: ChatMessage) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, message: ChatMessage): void => callback(message);
