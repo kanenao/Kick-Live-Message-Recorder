@@ -130,8 +130,8 @@ const api = {
     ipcRenderer.on("updater:status", listener);
     return () => ipcRenderer.removeListener("updater:status", listener);
   },
-  startRecording: (slug: string): Promise<{ ok: true; outputDirectory: string }> =>
-    ipcRenderer.invoke("recording:start", slug),
+  startRecording: (slug: string, sourceUrl?: string): Promise<{ ok: true; outputDirectory: string }> =>
+    ipcRenderer.invoke("recording:start", slug, sourceUrl),
   stopRecording: (slug: string): Promise<{ ok: true }> =>
     ipcRenderer.invoke("recording:stop", slug),
   listRecordings: (): Promise<RecordingFile[]> => ipcRenderer.invoke("recording:list"),
