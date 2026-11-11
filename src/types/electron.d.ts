@@ -11,8 +11,10 @@ type KickRecorderChannel = {
 
 type KickRecorderAppState = {
   channels: KickRecorderChannel[];
+  recordingOnlyChannels: KickRecorderChannel[];
   settings: {
     autoRecordOnStreamStart: boolean;
+    autoReceiveChat: boolean;
     saveChat: boolean;
     outputDirectory: string;
     autoMonitorEnabled: boolean;
