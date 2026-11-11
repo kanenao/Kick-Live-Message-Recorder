@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { basename, extname, join, resolve, sep } from "node:path";
 
 export type RecordingEvent = {
@@ -107,6 +107,20 @@ export class KickRecordingManager {
 
   isRecording(slug: string): boolean {
     return this.active.has(this.sessionKey(slug.toLowerCase(), false));
+  }
+
+  isFileActive(filePath: string): boolean {
+    const target = resolve(filePath);
+    for (const session of this.active.values()) {
+      const basePrefix = resolve(session.basePrefix);
+      const currentPath = resolve(session.filePath);
+      if (
+        target === currentPath ||
+        target.startsWith(`${basePrefix}.`) ||
+        /^_retry\\d+\\./i.test(target.slice(basePrefix.length))
+      ) return true;
+    }
+    return false;
   }
 
   start(
@@ -378,6 +392,39 @@ export function listRecordingFiles(outputDirectory: string): RecordingFile[] {
   }
 
   return files.sort((a, b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt));
+}
+
+export function deleteRecordingFile(
+  outputDirectory: string,
+  inputPath: string,
+  isFileActive: (filePath: string) => boolean
+): { ok: true; name: string } {
+  const directory = resolve(outputDirectory);
+  const target = resolve(inputPath);
+  const supportedExtensions = new Set([".mp4", ".mkv", ".ts", ".webm", ".m4v", ".mov"]);
+
+  if (!isPathInsideDirectory(target, directory) || target === directory) {
+    throw new Error("録画ファイルの場所が不正です。");
+  }
+  if (!supportedExtensions.has(extname(target).toLowerCase())) {
+    throw new Error("削除できる録画ファイルではありません。");
+  }
+
+  let stats;
+  try {
+    stats = lstatSync(target);
+  } catch {
+    throw new Error("録画ファイルが見つからないか、すでに削除されています。");
+  }
+  if (!stats.isFile() || stats.isSymbolicLink()) {
+    throw new Error("通常の録画ファイル以外は削除できません。");
+  }
+  if (isFileActive(target)) {
+    throw new Error("録画中・ダウンロード中のファイルは削除できません。先に処理を停止してください。");
+  }
+
+  unlinkSync(target);
+  return { ok: true, name: basename(target) };
 }
 
 export function isPathInsideDirectory(filePath: string, directory: string): boolean {
