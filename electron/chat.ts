@@ -337,6 +337,12 @@ export class KickChatReceiver {
             continue;
           }
 
+          // Centrifugo's JSON protocol uses an empty object as a ping.
+          if (Object.keys(message).length === 0) {
+            if (subscribed && socket.readyState === WebSocket.OPEN) socket.send("{}");
+            continue;
+          }
+
           if (message.push) {
             this.handlePublication(asRecord(message.push));
             continue;
@@ -386,7 +392,7 @@ export class KickChatReceiver {
         }
       });
 
-      socket.once("error", error => {
+      socket.on("error", error => {
         if (!settled) fail(new Error("Kickのチャットサーバーへ接続できませんでした：" + error.message));
         else this.publishStatus("チャット接続エラー：" + error.message);
       });
