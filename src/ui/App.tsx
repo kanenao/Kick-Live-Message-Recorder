@@ -81,11 +81,12 @@ type RecordingEvent = {
   message?: string;
 };
 
-const APP_VERSION = "0.1.0-beta.15";
+const APP_VERSION = "0.1.0-beta.16";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
   autoRecordOnStreamStart: true,
+  autoReceiveChat: true,
   saveChat: true,
   outputDirectory: "",
   autoMonitorEnabled: true,
@@ -95,7 +96,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 function normalizeState(value: unknown): PersistedState {
   if (!value || typeof value !== "object") {
-    return { channels: [], settings: DEFAULT_SETTINGS };
+    return { channels: [], recordingOnlyChannels: [], settings: DEFAULT_SETTINGS };
   }
 
   const source = value as Partial<PersistedState>;
@@ -117,11 +118,29 @@ function normalizeState(value: unknown): PersistedState {
       }))
     : [];
 
+  const recordingOnlyChannels = Array.isArray(source.recordingOnlyChannels)
+    ? source.recordingOnlyChannels.filter((channel): channel is Channel =>
+        Boolean(channel) &&
+        typeof channel === "object" &&
+        typeof channel.id === "number" &&
+        typeof channel.name === "string" &&
+        /^[a-zA-Z0-9_]{1,25}$/.test(channel.name)
+      ).map(channel => ({
+        id: channel.id,
+        name: channel.name,
+        url: `https://kick.com/${channel.name}`,
+        mode: "manual" as const,
+        status: "待機中" as const,
+        recording: false
+      }))
+    : [];
   const settings = source.settings ?? DEFAULT_SETTINGS;
   return {
     channels,
+    recordingOnlyChannels,
     settings: {
       autoRecordOnStreamStart: settings.autoRecordOnStreamStart !== false,
+      autoReceiveChat: settings.autoReceiveChat !== false,
       saveChat: settings.saveChat !== false,
       outputDirectory: typeof settings.outputDirectory === "string" ? settings.outputDirectory : "",
       autoMonitorEnabled: settings.autoMonitorEnabled !== false,
@@ -140,17 +159,19 @@ async function loadState(): Promise<PersistedState> {
 
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? normalizeState(JSON.parse(raw) as unknown) : { channels: [], settings: DEFAULT_SETTINGS };
+    return raw ? normalizeState(JSON.parse(raw) as unknown) : { channels: [], recordingOnlyChannels: [], settings: DEFAULT_SETTINGS };
   } catch {
-    return { channels: [], settings: DEFAULT_SETTINGS };
+    return { channels: [], recordingOnlyChannels: [], settings: DEFAULT_SETTINGS };
   }
 }
 
 export default function App() {
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [recordingOnlyChannels, setRecordingOnlyChannels] = useState<Channel[]>([]);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [newChannel, setNewChannel] = useState("");
-  const [tab, setTab] = useState<"dashboard" | "library" | "settings">("dashboard");
+  const [newRecordingOnlyChannel, setNewRecordingOnlyChannel] = useState("");
+  const [tab, setTab] = useState<"dashboard" | "recording" | "library" | "settings">("dashboard");
   const [isReady, setIsReady] = useState(false);
   const [storageError, setStorageError] = useState("");
   const [appDataDirectory, setAppDataDirectory] = useState("");
@@ -188,7 +209,7 @@ export default function App() {
   const [isLoadingRecordings, setIsLoadingRecordings] = useState(false);
   const [recordingMessage, setRecordingMessage] = useState("");
   const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
-  const activeCount = useMemo(() => channels.filter(c => c.recording).length, [channels]);
+  const activeCount = useMemo(() => [...channels, ...recordingOnlyChannels].filter(c => c.recording).length, [channels, recordingOnlyChannels]);
 
   useEffect(() => {
     let active = true;
@@ -199,6 +220,7 @@ export default function App() {
     void loadState().then(state => {
       if (!active) return;
       setChannels(state.channels);
+      setRecordingOnlyChannels(state.recordingOnlyChannels);
       setSettings(state.settings);
     }).catch(() => {
       if (active) setStorageError("保存データを読み込めませんでした。");
@@ -226,10 +248,12 @@ export default function App() {
       }).catch(() => undefined);
       unsubscribeRecording = window.kickRecorder.onRecordingStatus((event: RecordingEvent) => {
         if (!active) return;
+        const isRecording = event.status === "starting" || event.status === "recording";
         setChannels(previous => previous.map(channel =>
-          channel.name.toLowerCase() === event.slug
-            ? { ...channel, recording: event.status === "starting" || event.status === "recording" }
-            : channel
+          channel.name.toLowerCase() === event.slug ? { ...channel, recording: isRecording } : channel
+        ));
+        setRecordingOnlyChannels(previous => previous.map(channel =>
+          channel.name.toLowerCase() === event.slug ? { ...channel, recording: isRecording } : channel
         ));
         setRecordingRequests(previous => ({ ...previous, [event.slug]: false }));
         if (event.status === "error") {
@@ -374,7 +398,7 @@ export default function App() {
 
   useEffect(() => {
     if (!isReady) return;
-    const state: PersistedState = { channels, settings };
+    const state: PersistedState = { channels, recordingOnlyChannels, settings };
     if (window.kickRecorder) {
       void window.kickRecorder.saveState(state).then(() => {
         setStorageError("");
@@ -390,14 +414,17 @@ export default function App() {
     } catch {
       setStorageError("ブラウザー内に設定を保存できませんでした。");
     }
-  }, [channels, settings, isReady]);
+  }, [channels, recordingOnlyChannels, settings, isReady]);
 
   function addChannel() {
     const raw = newChannel.trim()
       .replace(/^https?:\/\/(www\.)?kick\.com\//i, "")
       .split(/[/?#]/)[0]
       .replace(/\/$/, "");
-    if (!raw || !/^[a-zA-Z0-9_]{1,25}$/.test(raw) || channels.some(c => c.name.toLowerCase() === raw.toLowerCase())) return;
+    if (!raw || !/^[a-zA-Z0-9_]{1,25}$/.test(raw) || [...channels, ...recordingOnlyChannels].some(c => c.name.toLowerCase() === raw.toLowerCase())) {
+      if (raw) setRecordingMessage("このチャンネルはすでに別の一覧に登録されています。");
+      return;
+    }
 
     setChannels(prev => [...prev, {
       id: Date.now(),
@@ -408,6 +435,29 @@ export default function App() {
       recording: false
     }]);
     setNewChannel("");
+  }
+
+  function addRecordingOnlyChannel() {
+    const raw = newRecordingOnlyChannel.trim()
+      .replace(/^https?:\/\/(www\.)?kick\.com\//i, "")
+      .split(/[/?#]/)[0]
+      .replace(/\/$/, "");
+    if (!raw || !/^[a-zA-Z0-9_]{1,25}$/.test(raw) ||
+      [...channels, ...recordingOnlyChannels].some(channel => channel.name.toLowerCase() === raw.toLowerCase())) {
+      if (raw) setRecordingMessage("このチャンネルはすでに別の一覧に登録されているか、名前が正しくありません。");
+      return;
+    }
+
+    setRecordingOnlyChannels(previous => [...previous, {
+      id: Date.now(),
+      name: raw,
+      url: `https://kick.com/${raw}`,
+      mode: "manual",
+      status: "待機中",
+      recording: false
+    }]);
+    setNewRecordingOnlyChannel("");
+    setRecordingMessage(`${raw} を録画専用一覧に追加しました。配信中に「録画開始」を押してください。`);
   }
 
   async function saveKickApiCredentials() {
@@ -629,6 +679,7 @@ export default function App() {
       <div className="brand"><div className="brand-mark">K</div><div><strong>Kick Live Message Recorder</strong><small>配信映像・チャット記録</small></div></div>
       <div className="nav-label">メインメニュー</div>
       <button className={tab === "dashboard" ? "nav-item selected" : "nav-item"} onClick={() => setTab("dashboard")}>▦ <span>ダッシュボード</span></button>
+      <button className={tab === "recording" ? "nav-item selected" : "nav-item"} onClick={() => setTab("recording")}>● <span>録画専用</span></button>
       <button className={tab === "library" ? "nav-item selected" : "nav-item"} onClick={() => setTab("library")}>▤ <span>録画ライブラリ</span></button>
       <button className={tab === "settings" ? "nav-item selected" : "nav-item"} onClick={() => setTab("settings")}>⚙ <span>設定</span></button>
       <div className="sidebar-bottom"><span className="status-dot" /> β版・開発テスト中<small>現在のバージョン {appVersion}</small></div>
@@ -636,7 +687,7 @@ export default function App() {
 
     <main className="main">
       <header className="topbar">
-        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "library" ? "録画ライブラリ" : "設定"}</h1></div>
+        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "recording" ? "録画専用" : tab === "library" ? "録画ライブラリ" : "設定"}</h1></div>
         <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="beta-tag">β版</span><div className="avatar">KR</div></div>
       </header>
 
@@ -686,6 +737,33 @@ export default function App() {
         </section>
       </>}
 
+      {tab === "recording" && <section className="panel">
+        <div className="panel-heading">
+          <div><h2>録画専用チャンネル</h2><p>チャット取得や配信監視をせず、録画だけ行うチャンネルを登録します</p></div>
+          <span className="count-pill">登録数：{recordingOnlyChannels.length}件</span>
+        </div>
+        <div className="add-channel">
+          <input value={newRecordingOnlyChannel} onChange={event => setNewRecordingOnlyChannel(event.target.value)} onKeyDown={event => event.key === "Enter" && addRecordingOnlyChannel()} placeholder="録画したいKickチャンネル名 または URL" aria-label="録画専用Kickチャンネル名" />
+          <button onClick={addRecordingOnlyChannel}>＋ 録画専用に追加</button>
+        </div>
+        <div className="channel-list">
+          {recordingOnlyChannels.length === 0 && <div className="empty-inline">録画専用チャンネルはまだ登録されていません。ここに追加すると、チャット取得・自動監視の対象外で録画だけできます。</div>}
+          {recordingOnlyChannels.map(channel => <div className="channel-row" key={channel.id}>
+            <div className="channel-icon">{channel.name.slice(0,1).toUpperCase()}</div>
+            <div className="channel-info"><strong>{channel.name}</strong><small>{channel.url}</small></div>
+            <span className={channel.recording ? "live-status live" : "live-status unknown"}>{channel.recording ? "録画中" : "録画待機"}</span>
+            <button className="primary-small recording-action" onClick={() => void toggleRecording(channel.name, channel.recording)} disabled={!isDesktop || Boolean(recordingRequests[channel.name.toLowerCase()])}>
+              {recordingRequests[channel.name.toLowerCase()] ? "処理中..." : channel.recording ? "録画停止" : "録画開始"}
+            </button>
+            <button className="remove" aria-label={`${channel.name}を録画専用一覧から削除`} onClick={() => setRecordingOnlyChannels(previous => previous.filter(item => item.id !== channel.id))}>×</button>
+          </div>)}
+        </div>
+        {recordingMessage && <div className="api-message" role="status">{recordingMessage}</div>}
+        <div className="notice">この一覧は手動録画専用です。配信状態の自動監視・自動録画・Kickチャットの自動取得には含まれません。録画を開始したいときだけ「録画開始」を押してください。</div>
+        <p className="data-path-note">保存先：{settings.outputDirectory || "アプリ既定のビデオフォルダー"}</p>
+        {!isDesktop && <div className="notice">録画機能はWindowsデスクトップ版で利用できます。</div>}
+      </section>}
+
       {tab === "library" && <section className="panel">
         <div className="panel-heading">
           <div><h2>録画ライブラリ</h2><p>このPCに保存されたKick配信映像</p></div>
@@ -719,7 +797,11 @@ export default function App() {
           <label className="setting-control"><input type="checkbox" checked={settings.autoRecordOnStreamStart} onChange={e => setSettings(prev => ({ ...prev, autoRecordOnStreamStart: e.target.checked }))} /><span>{settings.autoRecordOnStreamStart ? "有効" : "無効"}</span></label>
         </div>
         <div className="setting-row">
-          <div><strong>チャットを保存</strong><small>Webhookで受信したコメントをJSONL形式で保存します。受信したコメントは画面にも表示します。</small></div>
+          <div><strong>Kickチャットを自動取得</strong><small>アプリ起動時やチャンネル追加時に、チャンネル管理の登録先へ自動接続します。録画専用一覧は対象外です。</small></div>
+          <label className="setting-control"><input type="checkbox" checked={settings.autoReceiveChat} onChange={event => setSettings(previous => ({ ...previous, autoReceiveChat: event.target.checked }))} /><span>{settings.autoReceiveChat ? "自動取得：有効" : "自動取得：無効"}</span></label>
+        </div>
+        <div className="setting-row">
+          <div><strong>チャットを保存</strong><small>受信したコメントをJSONL形式で保存します。画面にもリアルタイム表示します。</small></div>
           <label className="setting-control"><input type="checkbox" checked={settings.saveChat} onChange={event => setSettings(previous => ({ ...previous, saveChat: event.target.checked }))} /><span>{settings.saveChat ? "有効" : "無効"}</span></label>
         </div>
 
@@ -811,7 +893,7 @@ export default function App() {
             <h3>Kickチャット受信</h3>
             <span className={chatStatus.running ? "api-state connected" : "api-state"}>{chatStatus.running ? "受信中（" + chatStatus.connectedChannels + "チャンネル）" : "停止中"}</span>
           </div>
-          <p className="settings-help">登録したKickチャンネルの公開チャットへアプリから直接接続します。ngrok・Cloudflare Tunnel・Webhook URL登録・追加トークン入力は不要です。Kickの非公式リアルタイム接続を利用するため、Kick側の仕様変更で一時的に受信できなくなる場合があります。</p>
+          <p className="settings-help">登録したKickチャンネルの公開チャットへアプリから直接接続します。自動取得が有効なら、アプリ起動時とチャンネル追加時に自動で接続します。ngrok・Cloudflare Tunnel・Webhook URL登録は不要です。Kickの非公式リアルタイム接続を利用するため、Kick側の仕様変更で受信できなくなる場合があります。</p>
           <div className="chat-receiver-actions">
             <button className="primary-small" onClick={() => void startChatReceiver()} disabled={!isDesktop || isStartingChat || chatStatus.running || channels.length === 0}>
               {isStartingChat ? "接続中..." : "コメント受信を開始"}
@@ -825,7 +907,7 @@ export default function App() {
           <div className="chat-preview">
             <div className="chat-preview-heading"><strong>最近受信したコメント</strong><span>{chatMessages.length}件を表示</span></div>
             {chatMessages.length === 0
-              ? <div className="empty-inline">「コメント受信を開始」を押すと、登録チャンネルのコメントがここに表示されます。</div>
+              ? <div className="empty-inline">自動取得が有効なら、アプリ起動後に登録チャンネルのコメントが自動で表示されます。手動で開始することもできます。</div>
               : <div className="chat-preview-list">
                   {chatMessages.slice(0, 20).map(message => <div className="chat-preview-item" key={message.eventId}>
                     <div className="chat-preview-meta"><strong>{message.senderUsername}</strong><span>#{message.channelSlug}</span><time>{new Date(message.createdAt).toLocaleTimeString("ja-JP")}</time></div>
