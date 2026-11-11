@@ -7,6 +7,7 @@ export type RecordingEvent = {
   status: "starting" | "recording" | "stopped" | "error";
   filePath?: string;
   message?: string;
+  isVod?: boolean;
 };
 
 export type RecordingFile = {
@@ -141,7 +142,7 @@ export class KickRecordingManager {
     };
 
     this.active.set(slug, session);
-    this.onEvent({ slug, status: "starting", filePath: basePrefix, message: "録画プロセスを起動しています。" });
+    this.onEvent({ slug, status: "starting", filePath: basePrefix, message: isVod ? "過去配信のダウンロードを開始しています。" : "録画プロセスを起動しています。", isVod });
     this.launch(slug, session);
 
     return { ok: true, outputDirectory };
@@ -219,6 +220,7 @@ export class KickRecordingManager {
         slug,
         status: "recording",
         filePath: prefix,
+        isVod: session.isVod,
         message: session.attempt === 1
           ? "録画を開始しました。"
           : `再接続に成功しました（${session.attempt - 1}/${session.maxRetries}回目）。`
@@ -239,7 +241,7 @@ export class KickRecordingManager {
     session.child = null;
     if (session.stopRequested || this.active.get(slug) !== session) {
       this.active.delete(slug);
-      this.onEvent({ slug, status: "stopped", filePath: session.filePath, message: "録画を停止しました。" });
+      this.onEvent({ slug, status: "stopped", filePath: session.filePath, message: session.isVod ? "過去配信のダウンロードを停止しました。" : "録画を停止しました。", isVod: session.isVod });
       return;
     }
 
@@ -249,6 +251,7 @@ export class KickRecordingManager {
         slug,
         status: "stopped",
         filePath: session.filePath,
+        isVod: session.isVod,
         message: session.isVod ? "過去配信のダウンロードが完了しました。" : "配信が終了し、録画を完了しました。"
       });
       return;
@@ -277,6 +280,7 @@ export class KickRecordingManager {
         slug,
         status: "starting",
         filePath: session.filePath,
+        isVod: session.isVod,
         message: `録画接続が切れました。${delaySeconds}秒後に再接続します（${retryNumber}/${session.maxRetries}回目）。`
       });
       session.retryTimer = setTimeout(() => {
@@ -287,7 +291,7 @@ export class KickRecordingManager {
     }
 
     this.active.delete(slug);
-    this.onEvent({ slug, status: "error", filePath: session.filePath, message: terminalMessage });
+    this.onEvent({ slug, status: "error", filePath: session.filePath, message: session.isVod ? `過去配信のダウンロードに失敗しました：${terminalMessage}` : terminalMessage, isVod: session.isVod });
   }
 
   stop(inputSlug: unknown): { ok: true } {
@@ -309,7 +313,7 @@ export class KickRecordingManager {
       }
     } else {
       this.active.delete(slug);
-      this.onEvent({ slug, status: "stopped", filePath: session.filePath, message: "再接続待ちを取り消し、録画を停止しました。" });
+      this.onEvent({ slug, status: "stopped", filePath: session.filePath, message: session.isVod ? "過去配信のダウンロードを停止しました。" : "再接続待ちを取り消し、録画を停止しました。", isVod: session.isVod });
     }
     return { ok: true };
   }
