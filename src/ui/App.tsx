@@ -302,19 +302,35 @@ export default function App() {
   );
   const monitorSlugKey = monitorSlugs.join("|");
 
+  const autoChatSlugs = useMemo(() => {
+    const selected = [
+      ...(settings.autoReceiveChat ? channels : []),
+      ...(settings.autoReceiveChatForRecordingOnly ? recordingOnlyChannels : [])
+    ].map(channel => channel.name.toLowerCase());
+    return [...new Set(selected)];
+  }, [channels, recordingOnlyChannels, settings.autoReceiveChat, settings.autoReceiveChatForRecordingOnly]);
+  const autoChatSlugKey = autoChatSlugs.join("|");
+  const recordingOnlyMessages = useMemo(
+    () => chatMessages.filter(message =>
+      recordingOnlyChannels.some(channel => channel.name.toLowerCase() === message.channelSlug.toLowerCase())
+    ),
+    [chatMessages, recordingOnlyChannels]
+  );
+
   useEffect(() => {
     if (!isReady || !isDesktop || !window.kickRecorder) return;
-    const slugs = monitorSlugKey ? monitorSlugKey.split("|") : [];
+    const slugs = autoChatSlugKey ? autoChatSlugKey.split("|") : [];
     let active = true;
 
-    if (!settings.autoReceiveChat || slugs.length === 0) {
+    if (slugs.length === 0) {
       void window.kickRecorder.stopChatReceiver().then(status => {
         if (active) setChatStatus(status);
       }).catch(error => {
         if (active) setChatSetupMessage(error instanceof Error ? error.message : "チャット受信を停止できませんでした。");
       });
-      if (settings.autoReceiveChat && slugs.length === 0) {
-        setChatSetupMessage("チャンネル管理に登録すると、コメントを自動取得します。");
+      const hasAnyChannels = channels.length > 0 || recordingOnlyChannels.length > 0;
+      if (hasAnyChannels) {
+        setChatSetupMessage("チャット自動取得は停止中です。設定画面または録画専用画面で有効にできます。");
       }
       return () => { active = false; };
     }
@@ -332,7 +348,7 @@ export default function App() {
     });
 
     return () => { active = false; };
-  }, [isReady, isDesktop, settings.autoReceiveChat, monitorSlugKey]);
+  }, [isReady, isDesktop, autoChatSlugKey, channels.length, recordingOnlyChannels.length]);
 
   useEffect(() => {
     if ((tab !== "library" && tab !== "dashboard") || !isDesktop || !window.kickRecorder) return;
@@ -538,19 +554,27 @@ export default function App() {
 
   async function startChatReceiver() {
     if (!window.kickRecorder) return;
-    if (channels.length === 0) {
-      setChatSetupMessage("先にダッシュボードで受信したいKickチャンネルを登録してください。");
-      return;
-    }
-    if (!settings.autoReceiveChat) {
-      setSettings(previous => ({ ...previous, autoReceiveChat: true }));
-      setChatSetupMessage("チャット自動取得を有効にしました。登録チャンネルへ自動接続します。");
+    const targets = [
+      ...(settings.autoReceiveChat ? channels : []),
+      ...(settings.autoReceiveChatForRecordingOnly ? recordingOnlyChannels : [])
+    ];
+    if (targets.length === 0) {
+      if (channels.length === 0 && recordingOnlyChannels.length === 0) {
+        setChatSetupMessage("先にチャンネル管理または録画専用へチャンネルを登録してください。");
+        return;
+      }
+      setSettings(previous => ({
+        ...previous,
+        autoReceiveChat: previous.autoReceiveChat || channels.length > 0,
+        autoReceiveChatForRecordingOnly: previous.autoReceiveChatForRecordingOnly || recordingOnlyChannels.length > 0
+      }));
+      setChatSetupMessage("登録済みのチャンネルでコメント自動取得を有効にしました。");
       return;
     }
     setIsStartingChat(true);
-    setChatSetupMessage("登録チャンネルのチャットへ接続し直しています...");
+    setChatSetupMessage("自動取得対象のKickチャンネルへ接続し直しています...");
     try {
-      const status = await window.kickRecorder.startChatReceiver(channels.map(channel => channel.name));
+      const status = await window.kickRecorder.startChatReceiver([...new Set(targets.map(channel => channel.name.toLowerCase()))]);
       setChatStatus(status);
       setChatSetupMessage(status.connectedChannels + "チャンネルのコメントを受信しています。");
     } catch (error) {
@@ -562,11 +586,15 @@ export default function App() {
 
   async function stopChatReceiver() {
     if (!window.kickRecorder) return;
-    setSettings(previous => ({ ...previous, autoReceiveChat: false }));
+    setSettings(previous => ({
+      ...previous,
+      autoReceiveChat: false,
+      autoReceiveChatForRecordingOnly: false
+    }));
     try {
       const status = await window.kickRecorder.stopChatReceiver();
       setChatStatus(status);
-      setChatSetupMessage("チャット自動取得を停止しました。");
+      setChatSetupMessage("すべてのチャット自動取得を停止しました。");
     } catch (error) {
       setChatSetupMessage(error instanceof Error ? error.message : "コメント受信を停止できませんでした。");
     }
@@ -795,18 +823,23 @@ export default function App() {
 
       {tab === "recording" && <section className="panel">
         <div className="panel-heading">
-          <div><h2>録画専用チャンネル</h2><p>チャット取得や配信監視をせず、録画だけ行うチャンネルを登録します</p></div>
+          <div><h2>録画専用チャンネル</h2><p>配信監視・自動録画は行わず、必要なときに録画を開始するチャンネルを登録します</p></div>
           <span className="count-pill">登録数：{recordingOnlyChannels.length}件</span>
+        </div>
+        <div className="setting-row">
+          <div><strong>録画専用チャンネルのコメントを自動取得</strong><small>ONにするとアプリ起動時・チャンネル追加時にコメントへ自動接続します。通常チャンネル側の設定とは別に管理できます。</small></div>
+          <label className="setting-control"><input type="checkbox" checked={settings.autoReceiveChatForRecordingOnly} onChange={event => setSettings(previous => ({ ...previous, autoReceiveChatForRecordingOnly: event.target.checked }))} /><span>{settings.autoReceiveChatForRecordingOnly ? "自動取得：有効" : "自動取得：無効"}</span></label>
         </div>
         <div className="add-channel">
           <input value={newRecordingOnlyChannel} onChange={event => setNewRecordingOnlyChannel(event.target.value)} onKeyDown={event => event.key === "Enter" && addRecordingOnlyChannel()} placeholder="録画したいKickチャンネル名 または URL" aria-label="録画専用Kickチャンネル名" />
           <button onClick={addRecordingOnlyChannel}>＋ 録画専用に追加</button>
         </div>
         <div className="channel-list">
-          {recordingOnlyChannels.length === 0 && <div className="empty-inline">録画専用チャンネルはまだ登録されていません。ここに追加すると、チャット取得・自動監視の対象外で録画だけできます。</div>}
+          {recordingOnlyChannels.length === 0 && <div className="empty-inline">録画専用チャンネルはまだ登録されていません。チャンネルを追加すると、録画専用のコメント自動取得設定に従ってコメントを取得できます。</div>}
           {recordingOnlyChannels.map(channel => <div className="channel-row" key={channel.id}>
             <div className="channel-icon">{channel.name.slice(0,1).toUpperCase()}</div>
             <div className="channel-info"><strong>{channel.name}</strong><small>{channel.url}</small></div>
+            <span className="mode-tag">{settings.autoReceiveChatForRecordingOnly ? "コメント自動取得ON" : "コメント取得OFF"}</span>
             <span className={channel.recording ? "live-status live" : "live-status unknown"}>{channel.recording ? "録画中" : "録画待機"}</span>
             <button className="primary-small recording-action" onClick={() => void toggleRecording(channel.name, channel.recording)} disabled={!isDesktop || Boolean(recordingRequests[channel.name.toLowerCase()])}>
               {recordingRequests[channel.name.toLowerCase()] ? "処理中..." : channel.recording ? "録画停止" : "録画開始"}
@@ -815,7 +848,18 @@ export default function App() {
           </div>)}
         </div>
         {recordingMessage && <div className="api-message" role="status">{recordingMessage}</div>}
-        <div className="notice">この一覧は手動録画専用です。配信状態の自動監視・自動録画・Kickチャットの自動取得には含まれません。録画を開始したいときだけ「録画開始」を押してください。</div>
+        <div className="notice">この一覧は手動録画専用です。配信状態の自動監視・自動録画は行いません。コメント自動取得は上の項目で個別にON／OFFできます。録画を開始したいときだけ「録画開始」を押してください。</div>
+        <div className="chat-preview">
+          <div className="chat-preview-heading"><strong>録画専用チャンネルの最近のコメント</strong><span>{recordingOnlyMessages.length}件</span></div>
+          {recordingOnlyMessages.length === 0
+            ? <div className="empty-inline">{settings.autoReceiveChatForRecordingOnly ? "コメントを待っています。チャンネルの配信中にコメントが投稿されると、ここに表示されます。" : "コメント自動取得は停止中です。"}</div>
+            : <div className="chat-preview-list">
+                {recordingOnlyMessages.slice(0, 20).map(message => <div className="chat-preview-item" key={message.eventId}>
+                  <div className="chat-preview-meta"><strong>{message.senderUsername}</strong><span>#{message.channelSlug}</span><time>{new Date(message.createdAt).toLocaleTimeString("ja-JP")}</time></div>
+                  <div className="chat-preview-content">{message.content}</div>
+                </div>)}
+              </div>}
+        </div>
         <p className="data-path-note">保存先：{settings.outputDirectory || "アプリ既定のビデオフォルダー"}</p>
         {!isDesktop && <div className="notice">録画機能はWindowsデスクトップ版で利用できます。</div>}
       </section>}
@@ -853,7 +897,7 @@ export default function App() {
           <label className="setting-control"><input type="checkbox" checked={settings.autoRecordOnStreamStart} onChange={e => setSettings(prev => ({ ...prev, autoRecordOnStreamStart: e.target.checked }))} /><span>{settings.autoRecordOnStreamStart ? "有効" : "無効"}</span></label>
         </div>
         <div className="setting-row">
-          <div><strong>Kickチャットを自動取得</strong><small>アプリ起動時やチャンネル追加時に、チャンネル管理の登録先へ自動接続します。録画専用一覧は対象外です。</small></div>
+          <div><strong>Kickチャットを自動取得</strong><small>アプリ起動時やチャンネル追加時に、通常のチャンネル管理へ自動接続します。録画専用一覧のON／OFFは録画専用画面で別に設定できます。</small></div>
           <label className="setting-control"><input type="checkbox" checked={settings.autoReceiveChat} onChange={event => setSettings(previous => ({ ...previous, autoReceiveChat: event.target.checked }))} /><span>{settings.autoReceiveChat ? "自動取得：有効" : "自動取得：無効"}</span></label>
         </div>
         <div className="setting-row">
