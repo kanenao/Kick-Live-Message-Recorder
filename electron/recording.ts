@@ -101,8 +101,12 @@ export class KickRecordingManager {
 
   constructor(private readonly onEvent: (event: RecordingEvent) => void) {}
 
+  private sessionKey(slug: string, isVod: boolean): string {
+    return (isVod ? "vod:" : "live:") + slug;
+  }
+
   isRecording(slug: string): boolean {
-    return this.active.has(slug.toLowerCase());
+    return this.active.has(this.sessionKey(slug.toLowerCase(), false));
   }
 
   start(
@@ -114,8 +118,11 @@ export class KickRecordingManager {
     const slug = validateSlug(inputSlug);
     const sourceUrl = inputSourceUrl === undefined ? `https://kick.com/${slug}` : validateVodUrl(inputSourceUrl, slug);
     const isVod = inputSourceUrl !== undefined;
-    if (this.active.has(slug)) {
-      throw new Error(`${slug} はすでに録画中です。`);
+    const sessionId = this.sessionKey(slug, isVod);
+    if (this.active.has(sessionId)) {
+      throw new Error(isVod
+        ? `${slug} の過去配信はすでにダウンロード中です。`
+        : `${slug} はすでにライブ録画中です。`);
     }
 
     const outputDirectory = typeof inputDirectory === "string" && inputDirectory.trim()
@@ -141,15 +148,15 @@ export class KickRecordingManager {
       isVod
     };
 
-    this.active.set(slug, session);
+    this.active.set(sessionId, session);
     this.onEvent({ slug, status: "starting", filePath: basePrefix, message: isVod ? "過去配信のダウンロードを開始しています。" : "録画プロセスを起動しています。", isVod });
-    this.launch(slug, session);
+    this.launch(sessionId, slug, session);
 
     return { ok: true, outputDirectory };
   }
 
-  private launch(slug: string, session: ActiveRecording): void {
-    if (session.stopRequested || this.active.get(slug) !== session) return;
+  private launch(sessionId: string, slug: string, session: ActiveRecording): void {
+    if (session.stopRequested || this.active.get(sessionId) !== session) return;
 
     session.attempt += 1;
     session.stderrTail = "";
@@ -186,7 +193,7 @@ export class KickRecordingManager {
         stdio: ["pipe", "pipe", "pipe"]
       });
     } catch (error) {
-      this.finishAttempt(slug, session, null, null, error instanceof Error ? error : new Error(String(error)));
+      this.finishAttempt(sessionId, slug, session, null, null, error instanceof Error ? error : new Error(String(error)));
       return;
     }
 
@@ -195,7 +202,7 @@ export class KickRecordingManager {
     const settle = (code: number | null, signal: NodeJS.Signals | null, error?: Error): void => {
       if (attemptSettled) return;
       attemptSettled = true;
-      this.finishAttempt(slug, session, code, signal, error);
+      this.finishAttempt(sessionId, slug, session, code, signal, error);
     };
 
     child.stdout.on("data", (chunk: Buffer | string) => {
@@ -232,6 +239,7 @@ export class KickRecordingManager {
   }
 
   private finishAttempt(
+    sessionId: string,
     slug: string,
     session: ActiveRecording,
     code: number | null,
@@ -239,14 +247,14 @@ export class KickRecordingManager {
     spawnError?: Error
   ): void {
     session.child = null;
-    if (session.stopRequested || this.active.get(slug) !== session) {
-      this.active.delete(slug);
+    if (session.stopRequested || this.active.get(sessionId) !== session) {
+      this.active.delete(sessionId);
       this.onEvent({ slug, status: "stopped", filePath: session.filePath, message: session.isVod ? "過去配信のダウンロードを停止しました。" : "録画を停止しました。", isVod: session.isVod });
       return;
     }
 
     if (!spawnError && code === 0) {
-      this.active.delete(slug);
+      this.active.delete(sessionId);
       this.onEvent({
         slug,
         status: "stopped",
@@ -285,19 +293,23 @@ export class KickRecordingManager {
       });
       session.retryTimer = setTimeout(() => {
         session.retryTimer = null;
-        this.launch(slug, session);
+        this.launch(sessionId, slug, session);
       }, session.retryDelayMs);
       return;
     }
 
-    this.active.delete(slug);
+    this.active.delete(sessionId);
     this.onEvent({ slug, status: "error", filePath: session.filePath, message: session.isVod ? `過去配信のダウンロードに失敗しました：${terminalMessage}` : terminalMessage, isVod: session.isVod });
   }
 
-  stop(inputSlug: unknown): { ok: true } {
+  stop(inputSlug: unknown, inputIsVod: unknown = false): { ok: true } {
     const slug = validateSlug(inputSlug);
-    const session = this.active.get(slug);
-    if (!session) throw new Error(`${slug} は録画中ではありません。`);
+    if (typeof inputIsVod !== "boolean") throw new Error("録画種別の指定が不正です。");
+    const sessionId = this.sessionKey(slug, inputIsVod);
+    const session = this.active.get(sessionId);
+    if (!session) throw new Error(inputIsVod
+      ? `${slug} の過去配信はダウンロード中ではありません。`
+      : `${slug} はライブ録画中ではありません。`);
 
     session.stopRequested = true;
     if (session.retryTimer) {
@@ -312,14 +324,14 @@ export class KickRecordingManager {
         session.child.kill();
       }
     } else {
-      this.active.delete(slug);
+      this.active.delete(sessionId);
       this.onEvent({ slug, status: "stopped", filePath: session.filePath, message: session.isVod ? "過去配信のダウンロードを停止しました。" : "再接続待ちを取り消し、録画を停止しました。", isVod: session.isVod });
     }
     return { ok: true };
   }
 
   stopAll(): void {
-    for (const [slug, session] of this.active) {
+    for (const [sessionId, session] of this.active) {
       session.stopRequested = true;
       if (session.retryTimer) {
         clearTimeout(session.retryTimer);
@@ -332,7 +344,7 @@ export class KickRecordingManager {
           session.child.kill();
         }
       } else {
-        this.active.delete(slug);
+        this.active.delete(sessionId);
       }
     }
   }
