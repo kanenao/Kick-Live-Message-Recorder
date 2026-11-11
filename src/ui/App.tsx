@@ -66,18 +66,10 @@ type ChatMessage = {
 
 type ChatReceiverStatus = {
   running: boolean;
-  tunnelUrl: string;
-  webhookUrl: string;
+  connectedChannels: number;
   messageCount: number;
   lastMessageAt: string | null;
   message: string;
-};
-
-type ChatSubscriptionResult = {
-  slug: string;
-  status: "subscribed" | "already-subscribed" | "failed";
-  message: string;
-  subscriptionId?: string;
 };
 
 type RecordingEvent = {
@@ -87,7 +79,7 @@ type RecordingEvent = {
   message?: string;
 };
 
-const APP_VERSION = "0.1.0-beta.14";
+const APP_VERSION = "0.1.0-beta.15";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -169,17 +161,14 @@ export default function App() {
   const [isTestingKickConnection, setIsTestingKickConnection] = useState(false);
   const [chatStatus, setChatStatus] = useState<ChatReceiverStatus>({
     running: false,
-    tunnelUrl: "",
-    webhookUrl: "",
+    connectedChannels: 0,
     messageCount: 0,
     lastMessageAt: null,
     message: "チャット受信サーバーは停止中です。"
   });
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatSetupMessage, setChatSetupMessage] = useState("");
-  const [chatSubscriptionResults, setChatSubscriptionResults] = useState<ChatSubscriptionResult[]>([]);
   const [isStartingChat, setIsStartingChat] = useState(false);
-  const [isSubscribingChat, setIsSubscribingChat] = useState(false);
   const [channelChecks, setChannelChecks] = useState<Record<string, ChannelCheck>>({});
   const [isCheckingChannels, setIsCheckingChannels] = useState(false);
   const [lastChannelCheck, setLastChannelCheck] = useState("");
@@ -461,14 +450,18 @@ export default function App() {
 
   async function startChatReceiver() {
     if (!window.kickRecorder) return;
+    if (channels.length === 0) {
+      setChatSetupMessage("先にダッシュボードで受信したいKickチャンネルを登録してください。");
+      return;
+    }
     setIsStartingChat(true);
-    setChatSetupMessage("公開HTTPSの受信URLを準備しています...");
+    setChatSetupMessage("登録チャンネルのチャットへ直接接続しています...");
     try {
-      const status = await window.kickRecorder.startChatReceiver();
+      const status = await window.kickRecorder.startChatReceiver(channels.map(channel => channel.name));
       setChatStatus(status);
-      setChatSetupMessage("受信サーバーが起動しました。下のWebhook URLをKick Developer設定へ登録してください。");
+      setChatSetupMessage(status.connectedChannels + "チャンネルのコメント受信を開始しました。");
     } catch (error) {
-      setChatSetupMessage(error instanceof Error ? error.message : "チャット受信サーバーを起動できませんでした。");
+      setChatSetupMessage(error instanceof Error ? error.message : "コメント受信を開始できませんでした。");
     } finally {
       setIsStartingChat(false);
     }
@@ -479,49 +472,9 @@ export default function App() {
     try {
       const status = await window.kickRecorder.stopChatReceiver();
       setChatStatus(status);
-      setChatSetupMessage("チャット受信サーバーを停止しました。");
+      setChatSetupMessage("コメント受信を停止しました。");
     } catch (error) {
-      setChatSetupMessage(error instanceof Error ? error.message : "受信サーバーを停止できませんでした。");
-    }
-  }
-
-  async function copyChatWebhookUrl() {
-    if (!window.kickRecorder || !chatStatus.webhookUrl) return;
-    try {
-      await window.kickRecorder.copyText(chatStatus.webhookUrl);
-      setChatSetupMessage("Webhook URLをコピーしました。Kick DeveloperのWebhook URL欄に貼り付けてください。");
-    } catch {
-      setChatSetupMessage("Webhook URLをコピーできませんでした。表示されているURLを手動でコピーしてください。");
-    }
-  }
-
-  async function subscribeChatChannels() {
-    if (!window.kickRecorder) return;
-    if (!kickCredentialsConfigured) {
-      setChatSetupMessage("先にKick APIのClient ID／Secretを保存し、接続テストを行ってください。");
-      return;
-    }
-    if (!chatStatus.running) {
-      setChatSetupMessage("先にチャット受信サーバーを起動してください。");
-      return;
-    }
-    if (channels.length === 0) {
-      setChatSetupMessage("先にダッシュボードでKickチャンネルを登録してください。");
-      return;
-    }
-
-    setIsSubscribingChat(true);
-    setChatSetupMessage("登録チャンネルのチャットイベントを購読しています...");
-    try {
-      const results = await window.kickRecorder.subscribeChatEvents(channels.map(channel => channel.name));
-      setChatSubscriptionResults(results);
-      const successCount = results.filter(result => result.status !== "failed").length;
-      const failureCount = results.length - successCount;
-      setChatSetupMessage(`購読結果：成功・登録済み ${successCount}件、失敗 ${failureCount}件。${failureCount ? "結果の詳細を確認してください。" : "チャット受信の準備ができました。"}`);
-    } catch (error) {
-      setChatSetupMessage(error instanceof Error ? error.message : "チャットイベントの購読に失敗しました。");
-    } finally {
-      setIsSubscribingChat(false);
+      setChatSetupMessage(error instanceof Error ? error.message : "コメント受信を停止できませんでした。");
     }
   }
 
@@ -847,49 +800,30 @@ export default function App() {
             <button className="small-action" onClick={() => void clearKickApiCredentials()} disabled={!isDesktop || !kickCredentialsConfigured}>認証情報を削除</button>
           </div>
           {kickMessage && <div className="api-message" role="status">{kickMessage}</div>}
-          <div className="notice">接続テスト成功はAPI認証の確認です。チャット受信には別途、公開HTTPSのWebhook URL設定とイベント購読が必要です。</div>
+          <div className="notice">この認証はKick公式APIによる配信状態の自動監視に使用します。コメント受信は別方式のため、ここでのClient ID／Secret登録は不要です。</div>
           {!isDesktop && <div className="notice">Kick APIの認証情報登録はWindowsデスクトップ版で利用できます。</div>}
           {isDesktop && !kickEncryptionAvailable && <div className="storage-error">Windowsの暗号化ストレージが利用できないため、認証情報は保存できません。</div>}
         </div>
         <div className="settings-subsection chat-settings">
           <div className="settings-subheading">
-            <h3>Kickチャット受信・イベント購読</h3>
-            <span className={chatStatus.running ? "api-state connected" : "api-state"}>{chatStatus.running ? "受信サーバー稼働中" : "停止中"}</span>
+            <h3>Kickチャット受信</h3>
+            <span className={chatStatus.running ? "api-state connected" : "api-state"}>{chatStatus.running ? "受信中（" + chatStatus.connectedChannels + "チャンネル）" : "停止中"}</span>
           </div>
-          <p className="settings-help">KickのWebhookを使ってコメントをリアルタイムに受信します。公開HTTPS URLの作成にはCloudflare Tunnelを使用します。アプリを再起動するとURLが変わるため、再起動後はKick Developer側のWebhook URLも更新してください。</p>
+          <p className="settings-help">登録したKickチャンネルの公開チャットへアプリから直接接続します。ngrok・Cloudflare Tunnel・Webhook URL登録・追加トークン入力は不要です。Kickの非公式リアルタイム接続を利用するため、Kick側の仕様変更で一時的に受信できなくなる場合があります。</p>
           <div className="chat-receiver-actions">
-            <button className="primary-small" onClick={() => void startChatReceiver()} disabled={!isDesktop || isStartingChat || chatStatus.running}>
-              {isStartingChat ? "起動中..." : "受信サーバーを起動"}
+            <button className="primary-small" onClick={() => void startChatReceiver()} disabled={!isDesktop || isStartingChat || chatStatus.running || channels.length === 0}>
+              {isStartingChat ? "接続中..." : "コメント受信を開始"}
             </button>
             <button className="small-action" onClick={() => void stopChatReceiver()} disabled={!isDesktop || !chatStatus.running}>受信を停止</button>
-          </div>
-          {chatStatus.webhookUrl && <div className="webhook-url-row">
-            <label className="credential-field">Kick Developerに登録するWebhook URL
-              <input className="webhook-url-input" readOnly value={chatStatus.webhookUrl} onFocus={event => event.currentTarget.select()} />
-            </label>
-            <button className="small-action" onClick={() => void copyChatWebhookUrl()}>URLをコピー</button>
-          </div>}
-          {chatStatus.running && <div className="notice">
-            Kick Developerで対象アプリを編集し、「Enable Webhooks」をONにして、上記URLをWebhook URLに設定して保存してください。その後「登録チャンネルを購読」を押してください。
-          </div>}
-          <div className="chat-receiver-actions">
-            <button className="primary-small" onClick={() => void subscribeChatChannels()} disabled={!isDesktop || !chatStatus.running || !kickCredentialsConfigured || channels.length === 0 || isSubscribingChat}>
-              {isSubscribingChat ? "購読中..." : "登録チャンネルを購読"}
-            </button>
             <span className="chat-count">受信数：{chatStatus.messageCount.toLocaleString("ja-JP")}件</span>
             {chatStatus.lastMessageAt && <span className="chat-count">最終受信：{new Date(chatStatus.lastMessageAt).toLocaleTimeString("ja-JP")}</span>}
           </div>
-          <div className="monitor-status-line">{chatStatus.message}</div>
           {chatSetupMessage && <div className="api-message" role="status">{chatSetupMessage}</div>}
-          {chatSubscriptionResults.length > 0 && <div className="chat-subscription-results">
-            {chatSubscriptionResults.map(result => <div className={result.status === "failed" ? "chat-subscription-result failed" : "chat-subscription-result"} key={result.slug}>
-              <strong>{result.slug}</strong><span>{result.message}</span>
-            </div>)}
-          </div>}
+          <div className="monitor-status-line">{chatStatus.message}</div>
           <div className="chat-preview">
             <div className="chat-preview-heading"><strong>最近受信したコメント</strong><span>{chatMessages.length}件を表示</span></div>
             {chatMessages.length === 0
-              ? <div className="empty-inline">まだコメントを受信していません。Webhookを設定し、対象チャンネルでコメントが投稿されるとここに表示されます。</div>
+              ? <div className="empty-inline">「コメント受信を開始」を押すと、登録チャンネルのコメントがここに表示されます。</div>
               : <div className="chat-preview-list">
                   {chatMessages.slice(0, 20).map(message => <div className="chat-preview-item" key={message.eventId}>
                     <div className="chat-preview-meta"><strong>{message.senderUsername}</strong><span>#{message.channelSlug}</span><time>{new Date(message.createdAt).toLocaleTimeString("ja-JP")}</time></div>
