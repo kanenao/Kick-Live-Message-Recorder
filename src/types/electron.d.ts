@@ -21,6 +21,7 @@ type KickRecorderAppState = {
     autoMonitorEnabled: boolean;
     monitorIntervalSeconds: number;
     notifyOnLive: boolean;
+    showRecordingPreview: boolean;
   };
 };
 
