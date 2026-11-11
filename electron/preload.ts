@@ -151,8 +151,8 @@ const api = {
   },
   startRecording: (slug: string, sourceUrl?: string): Promise<{ ok: true; outputDirectory: string }> =>
     ipcRenderer.invoke("recording:start", slug, sourceUrl),
-  stopRecording: (slug: string): Promise<{ ok: true }> =>
-    ipcRenderer.invoke("recording:stop", slug),
+  stopRecording: (slug: string, isVod = false): Promise<{ ok: true }> =>
+    ipcRenderer.invoke("recording:stop", slug, isVod),
   listRecordings: (): Promise<RecordingFile[]> => ipcRenderer.invoke("recording:list"),
   openRecording: (filePath: string): Promise<{ ok: true }> =>
     ipcRenderer.invoke("recording:open", filePath),
