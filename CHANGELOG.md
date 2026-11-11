@@ -1,5 +1,12 @@
 # 更新履歴
 
+## 0.1.0-beta.14
+
+- Kickチャット受信で使用する `cloudflared.exe` がGitHub Releases向けインストーラーから漏れる問題を修正。
+- Releases公開ジョブでも `yt-dlp.exe` と `cloudflared.exe` を取得・検査してからパッケージ化。
+- 起動時にCloudflare Tunnel実行ファイルの配置場所を検査し、見つからない場合は確認した場所を含む日本語エラーを表示。
+
+
 ## 0.1.0-beta.13
 
 - 配信の自動監視間隔を最短30秒から10秒へ短縮。

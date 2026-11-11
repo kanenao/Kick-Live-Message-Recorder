@@ -57,10 +57,15 @@ function findCloudflared(): string {
   const executable = process.platform === "win32" ? "cloudflared.exe" : "cloudflared";
   const candidates = [
     join(process.resourcesPath, "tools", executable),
+    join(process.resourcesPath, executable),
     join(process.cwd(), "vendor", "win-x64", executable),
     join(process.cwd(), "vendor", executable)
   ];
-  return candidates.find(candidate => existsSync(candidate)) ?? executable;
+  const found = candidates.find(candidate => existsSync(candidate));
+  if (found) return found;
+  throw new Error(
+    `${executable} がアプリ内に見つかりません。修正版インストーラーを再インストールしてください。確認した場所：${candidates.join(" / ")}`
+  );
 }
 
 function headerValue(request: IncomingMessage, name: string): string {
@@ -135,7 +140,9 @@ export class KickChatReceiver {
       });
     } catch (error) {
       await this.stopLocalServer();
-      throw new Error(`Cloudflare Tunnelを起動できませんでした：${error instanceof Error ? error.message : String(error)}`);
+      const detail = error instanceof Error ? error.message : String(error);
+      if (detail.includes("アプリ内に見つかりません")) throw error;
+      throw new Error(`Cloudflare Tunnelを起動できませんでした：${detail}`);
     }
 
     this.tunnelProcess = child;
@@ -171,7 +178,7 @@ export class KickChatReceiver {
           this.tunnelProcess = null;
           void this.stopLocalServer();
           reject(new Error(error.message.includes("ENOENT")
-            ? "cloudflared.exe が見つかりません。アプリを最新版に更新してください。"
+            ? "同梱の cloudflared.exe を起動できません。アプリを再インストールしてください。"
             : `Cloudflare Tunnelの起動に失敗しました：${error.message}`));
         }
       });
