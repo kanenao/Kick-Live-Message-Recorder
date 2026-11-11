@@ -186,6 +186,7 @@ export default function App() {
   const [newRecordingOnlyChannel, setNewRecordingOnlyChannel] = useState("");
   const [vodUrl, setVodUrl] = useState("");
   const [vodSlug, setVodSlug] = useState("");
+  const vodSlugRef = useRef("");
   const [vodDownloadStatus, setVodDownloadStatus] = useState("");
   const [vodDownloadActive, setVodDownloadActive] = useState(false);
   const [tab, setTab] = useState<"dashboard" | "recording" | "library" | "settings">("dashboard");
@@ -275,18 +276,18 @@ export default function App() {
       unsubscribeRecording = window.kickRecorder.onRecordingStatus((event: RecordingEvent) => {
         if (!active) return;
         const isRecording = event.status === "starting" || event.status === "recording";
-        if (vodSlug && event.slug === vodSlug) {
+        if (event.isVod && vodSlugRef.current && event.slug === vodSlugRef.current) {
           setVodDownloadStatus(event.message ?? "過去配信を処理しています。");
           if (event.status === "recording") setVodDownloadActive(true);
           if (event.status === "stopped" || event.status === "error") setVodDownloadActive(false);
         }
-        setChannels(previous => previous.map(channel =>
+        if (!event.isVod) setChannels(previous => previous.map(channel =>
           channel.name.toLowerCase() === event.slug ? { ...channel, recording: isRecording } : channel
         ));
-        setRecordingOnlyChannels(previous => previous.map(channel =>
+        if (!event.isVod) setRecordingOnlyChannels(previous => previous.map(channel =>
           channel.name.toLowerCase() === event.slug ? { ...channel, recording: isRecording } : channel
         ));
-        setRecordingRequests(previous => ({ ...previous, [event.slug]: false }));
+        if (!event.isVod) setRecordingRequests(previous => ({ ...previous, [event.slug]: false }));
         if (event.status === "error") {
           setRecordingMessage(`${event.slug}：${event.message ?? "録画に失敗しました。"}`);
         } else if (event.status === "starting") {
@@ -717,7 +718,7 @@ export default function App() {
     const match = vodUrl.trim().match(/^https:\/\/(?:www\.)?kick\.com\/([a-zA-Z0-9_-]{1,40})\/videos\/[a-f0-9-]{20,40}\/?(?:[?#].*)?$/i);
     if (!match) { setVodDownloadStatus("Kickの過去配信URLを入力してください（https://kick.com/チャンネル/videos/動画ID）。"); return; }
     const slug = match[1].toLowerCase();
-    setVodSlug(slug); setVodDownloadActive(false); setVodDownloadStatus("過去配信のダウンロードを準備しています...");
+    vodSlugRef.current = slug; setVodSlug(slug); setVodDownloadActive(false); setVodDownloadStatus("過去配信のダウンロードを準備しています...");
     try {
       const result = await window.kickRecorder.startRecording(slug, vodUrl.trim());
       setVodDownloadActive(true); setVodDownloadStatus(`ダウンロードを開始しました。保存先：${result.outputDirectory}`);
