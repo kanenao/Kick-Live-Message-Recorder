@@ -82,6 +82,7 @@ type RecordingEvent = {
   status: "starting" | "recording" | "stopped" | "error";
   filePath?: string;
   message?: string;
+  isVod?: boolean;
 };
 
 const APP_VERSION = "0.1.0-beta.21";
