@@ -11,6 +11,7 @@ type Channel = {
 
 type AppSettings = {
   autoRecordOnStreamStart: boolean;
+  autoReceiveChat: boolean;
   saveChat: boolean;
   outputDirectory: string;
   autoMonitorEnabled: boolean;
@@ -20,6 +21,7 @@ type AppSettings = {
 
 type PersistedState = {
   channels: Channel[];
+  recordingOnlyChannels: Channel[];
   settings: AppSettings;
 };
 
