@@ -44,6 +44,7 @@ type KickRecorderRecordingEvent = {
   status: "starting" | "recording" | "stopped" | "error";
   filePath?: string;
   message?: string;
+  isVod?: boolean;
 };
 
 type KickRecorderCredentialsStatus = {
