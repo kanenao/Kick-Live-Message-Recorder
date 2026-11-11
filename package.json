@@ -1,6 +1,6 @@
 {
   "name": "kick-live-message-recorder",
-  "version": "0.1.0-beta.17",
+  "version": "0.1.0-beta.18",
   "private": true,
   "description": "Kick配信の映像・音声・チャットを保存するWindowsアプリ",
   "main": "dist-electron/main.js",
@@ -83,6 +83,18 @@
       {
         "from": "vendor/win-x64/yt-dlp.exe",
         "to": "tools/yt-dlp.exe"
+      },
+      {
+        "from": "vendor/win-x64/ffmpeg.exe",
+        "to": "tools/ffmpeg.exe"
+      },
+      {
+        "from": "vendor/win-x64/FFmpeg-LGPL-2.1.txt",
+        "to": "tools/FFmpeg-LGPL-2.1.txt"
+      },
+      {
+        "from": "vendor/win-x64/FFmpeg-NOTICE.txt",
+        "to": "tools/FFmpeg-NOTICE.txt"
       }
     ]
   },
