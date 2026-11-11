@@ -300,7 +300,6 @@ export default function App() {
     () => channels.map(channel => channel.name),
     [channels]
   );
-  const monitorSlugKey = monitorSlugs.join("|");
 
   const autoChatSlugs = useMemo(() => {
     const selected = [
