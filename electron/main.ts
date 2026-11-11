@@ -529,6 +529,16 @@ function registerIpcHandlers(): void {
     return saveKickCredentials(credentials);
   });
 
+  ipcMain.handle("kick:test-connection", async event => {
+    assertTrustedSender(event);
+    // Client CredentialsでApp Access Tokenを取得できるか確認する。
+    await getKickAccessToken();
+    return {
+      ok: true,
+      message: "Kick APIの認証に成功しました。App Access Tokenを取得できました。"
+    };
+  });
+
   ipcMain.handle("kick:clear-credentials", event => {
     assertTrustedSender(event);
     return clearKickCredentials();
