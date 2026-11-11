@@ -541,7 +541,7 @@ function normalizeState(input: unknown): AppState {
       autoMonitorEnabled: settings.autoMonitorEnabled !== false,
       monitorIntervalSeconds: typeof settings.monitorIntervalSeconds === "number" &&
         Number.isFinite(settings.monitorIntervalSeconds)
-        ? Math.max(30, Math.min(3600, Math.round(settings.monitorIntervalSeconds)))
+        ? Math.max(10, Math.min(3600, Math.round(settings.monitorIntervalSeconds)))
         : 60,
       notifyOnLive: settings.notifyOnLive !== false
     }
