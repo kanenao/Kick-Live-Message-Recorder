@@ -32,6 +32,7 @@ type Channel = {
 type AppSettings = {
   autoRecordOnStreamStart: boolean;
   autoReceiveChat: boolean;
+  autoReceiveChatForRecordingOnly: boolean;
   saveChat: boolean;
   outputDirectory: string;
   autoMonitorEnabled: boolean;
@@ -51,6 +52,7 @@ const DEFAULT_STATE: AppState = {
   settings: {
     autoRecordOnStreamStart: true,
     autoReceiveChat: true,
+    autoReceiveChatForRecordingOnly: true,
     saveChat: true,
     outputDirectory: "",
     autoMonitorEnabled: true,
@@ -441,6 +443,7 @@ function normalizeState(input: unknown): AppState {
     settings: {
       autoRecordOnStreamStart: settings.autoRecordOnStreamStart !== false,
       autoReceiveChat: settings.autoReceiveChat !== false,
+      autoReceiveChatForRecordingOnly: settings.autoReceiveChatForRecordingOnly !== false,
       saveChat: settings.saveChat !== false,
       outputDirectory: typeof settings.outputDirectory === "string"
         ? settings.outputDirectory.slice(0, 4096)
