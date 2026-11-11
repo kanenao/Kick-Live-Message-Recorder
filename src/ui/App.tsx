@@ -87,7 +87,7 @@ type RecordingEvent = {
   message?: string;
 };
 
-const APP_VERSION = "0.1.0-beta.12";
+const APP_VERSION = "0.1.0-beta.13";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -132,7 +132,7 @@ function normalizeState(value: unknown): PersistedState {
       outputDirectory: typeof settings.outputDirectory === "string" ? settings.outputDirectory : "",
       autoMonitorEnabled: settings.autoMonitorEnabled !== false,
       monitorIntervalSeconds: typeof settings.monitorIntervalSeconds === "number"
-        ? Math.max(30, Math.min(3600, Math.round(settings.monitorIntervalSeconds)))
+        ? Math.max(10, Math.min(3600, Math.round(settings.monitorIntervalSeconds)))
         : 60,
       notifyOnLive: settings.notifyOnLive !== false
     }
@@ -362,7 +362,7 @@ export default function App() {
     };
 
     void runAutomaticCheck();
-    const interval = Math.max(30, Math.min(3600, settings.monitorIntervalSeconds)) * 1000;
+    const interval = Math.max(10, Math.min(3600, settings.monitorIntervalSeconds)) * 1000;
     const timer = window.setInterval(() => void runAutomaticCheck(), interval);
 
     return () => {
@@ -778,8 +778,11 @@ export default function App() {
             <label className="setting-control"><input type="checkbox" checked={settings.autoMonitorEnabled} onChange={e => setSettings(prev => ({ ...prev, autoMonitorEnabled: e.target.checked }))} /><span>{settings.autoMonitorEnabled ? "有効" : "無効"}</span></label>
           </div>
           <div className="setting-row">
-            <div><strong>監視間隔</strong><small>短くするとAPIへの問い合わせ回数が増えます</small></div>
+            <div><strong>監視間隔</strong><small>最短10秒。短いほどAPIへの問い合わせが増えます。制限時は自動で待機します。</small></div>
             <select className="setting-select" value={settings.monitorIntervalSeconds} onChange={e => setSettings(prev => ({ ...prev, monitorIntervalSeconds: Number(e.target.value) }))}>
+              <option value={10}>10秒（高速）</option>
+              <option value={15}>15秒</option>
+              <option value={20}>20秒</option>
               <option value={30}>30秒</option>
               <option value={60}>1分</option>
               <option value={120}>2分</option>

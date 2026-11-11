@@ -89,6 +89,16 @@ type KickChannelPayload = {
 };
 
 let cachedKickToken: { value: string; expiresAt: number } | null = null;
+let kickChannelRateLimitUntil = 0;
+
+function getKickChannelRateLimitWaitSeconds(response?: Response): number {
+  const value = response?.headers.get("retry-after");
+  if (!value) return 60;
+  const seconds = /^\d+(?:\.\d+)?$/.test(value)
+    ? Number(value)
+    : Math.ceil((Date.parse(value) - Date.now()) / 1000);
+  return Math.max(1, Math.min(3600, Number.isFinite(seconds) ? seconds : 60));
+}
 
 function getKickCredentialsPath(): string {
   return join(app.getPath("userData"), "kick-credentials.json");
@@ -216,6 +226,12 @@ async function checkKickChannels(input: unknown): Promise<KickChannelCheck[]> {
 
   if (slugs.length === 0) return [];
 
+  const remainingCooldown = Math.ceil((kickChannelRateLimitUntil - Date.now()) / 1000);
+  if (remainingCooldown > 0) {
+    throw new Error(`Kick APIのアクセス制限により自動監視を一時停止しています。約${remainingCooldown}秒後に再開します。`);
+  }
+  kickChannelRateLimitUntil = 0;
+
   const accessToken = await getKickAccessToken();
   const resultBySlug = new Map<string, KickChannelCheck>();
 
@@ -234,6 +250,11 @@ async function checkKickChannels(input: unknown): Promise<KickChannelCheck[]> {
       throw new Error("Kick APIに接続できません。ネットワークを確認してください。");
     }
 
+    if (response.status === 429) {
+      const waitSeconds = getKickChannelRateLimitWaitSeconds(response);
+      kickChannelRateLimitUntil = Date.now() + waitSeconds * 1000;
+      throw new Error(`Kick APIのアクセス制限に達しました。Retry-Afterに従い約${waitSeconds}秒間、配信監視を自動待機します。`);
+    }
     if (!response.ok) {
       throw new Error(`Kickチャンネル情報の取得に失敗しました（HTTP ${response.status}）。`);
     }
