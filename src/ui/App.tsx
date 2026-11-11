@@ -55,7 +55,7 @@ type RecordingEvent = {
   message?: string;
 };
 
-const APP_VERSION = "0.1.0-beta.9";
+const APP_VERSION = "0.1.0-beta.10";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
