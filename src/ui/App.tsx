@@ -539,12 +539,17 @@ export default function App() {
       setChatSetupMessage("先にダッシュボードで受信したいKickチャンネルを登録してください。");
       return;
     }
+    if (!settings.autoReceiveChat) {
+      setSettings(previous => ({ ...previous, autoReceiveChat: true }));
+      setChatSetupMessage("チャット自動取得を有効にしました。登録チャンネルへ自動接続します。");
+      return;
+    }
     setIsStartingChat(true);
-    setChatSetupMessage("登録チャンネルのチャットへ直接接続しています...");
+    setChatSetupMessage("登録チャンネルのチャットへ接続し直しています...");
     try {
       const status = await window.kickRecorder.startChatReceiver(channels.map(channel => channel.name));
       setChatStatus(status);
-      setChatSetupMessage(status.connectedChannels + "チャンネルのコメント受信を開始しました。");
+      setChatSetupMessage(status.connectedChannels + "チャンネルのコメントを受信しています。");
     } catch (error) {
       setChatSetupMessage(error instanceof Error ? error.message : "コメント受信を開始できませんでした。");
     } finally {
@@ -554,10 +559,11 @@ export default function App() {
 
   async function stopChatReceiver() {
     if (!window.kickRecorder) return;
+    setSettings(previous => ({ ...previous, autoReceiveChat: false }));
     try {
       const status = await window.kickRecorder.stopChatReceiver();
       setChatStatus(status);
-      setChatSetupMessage("コメント受信を停止しました。");
+      setChatSetupMessage("チャット自動取得を停止しました。");
     } catch (error) {
       setChatSetupMessage(error instanceof Error ? error.message : "コメント受信を停止できませんでした。");
     }
