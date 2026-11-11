@@ -196,15 +196,7 @@ async function requestJsonWithRetry(url: string, signal: AbortSignal): Promise<J
       const status = error instanceof KickHttpError ? error.status : 0;
       const retryable = status === 429 || status >= 500 || status === 0;
       if (!retryable || attempt >= 3 || signal.aborted) throw error;
-      await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(resolve, 1000 * (attempt + 1));
-        const onAbort = (): void => {
-          clearTimeout(timer);
-          reject(new Error("コメント取得を停止しました。"));
-        };
-        signal.addEventListener("abort", onAbort, { once: true });
-        timer.unref?.();
-      });
+      await delay(1000 * (attempt + 1), signal);
     }
   }
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
@@ -556,7 +548,6 @@ export class KickVodChatDownloader {
       const outputPaths = getOutputPaths(outputDirectory, identity);
       const jsonlTemp = join(temporaryDirectory, "result.jsonl");
       const txtTemp = join(temporaryDirectory, "result.txt");
-      const localTime = metadata.startAt.toLocaleString("ja-JP");
       writeFileSync(jsonlTemp, "", "utf8");
       writeFileSync(txtTemp, [
         "Kick VOD コメント履歴",
