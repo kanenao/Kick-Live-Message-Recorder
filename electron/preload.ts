@@ -77,18 +77,10 @@ type ChatMessage = {
 
 type ChatReceiverStatus = {
   running: boolean;
-  tunnelUrl: string;
-  webhookUrl: string;
+  connectedChannels: number;
   messageCount: number;
   lastMessageAt: string | null;
   message: string;
-};
-
-type ChatSubscriptionResult = {
-  slug: string;
-  status: "subscribed" | "already-subscribed" | "failed";
-  message: string;
-  subscriptionId?: string;
 };
 
 type KickChannelCheck = {
@@ -112,11 +104,10 @@ const api = {
   testKickConnection: (): Promise<{ ok: boolean; message: string }> => ipcRenderer.invoke("kick:test-connection"),
   clearKickCredentials: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("kick:clear-credentials"),
   checkKickChannels: (slugs: string[]): Promise<KickChannelCheck[]> => ipcRenderer.invoke("kick:check-channels", slugs),
-  startChatReceiver: (): Promise<ChatReceiverStatus> => ipcRenderer.invoke("chat:start"),
+  startChatReceiver: (slugs: string[]): Promise<ChatReceiverStatus> => ipcRenderer.invoke("chat:start", slugs),
   stopChatReceiver: (): Promise<ChatReceiverStatus> => ipcRenderer.invoke("chat:stop"),
   getChatReceiverStatus: (): Promise<ChatReceiverStatus> => ipcRenderer.invoke("chat:get-status"),
   listChatMessages: (limit: number): Promise<ChatMessage[]> => ipcRenderer.invoke("chat:list", limit),
-  subscribeChatEvents: (slugs: string[]): Promise<ChatSubscriptionResult[]> => ipcRenderer.invoke("chat:subscribe", slugs),
   copyText: (value: string): Promise<{ ok: boolean }> => ipcRenderer.invoke("app:copy-text", value),
   onChatMessage: (callback: (message: ChatMessage) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, message: ChatMessage): void => callback(message);
