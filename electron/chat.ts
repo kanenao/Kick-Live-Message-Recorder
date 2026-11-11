@@ -42,23 +42,10 @@ type RealtimeConnectionResponse = {
 type RealtimeTokenResponse = { data?: { token?: string } };
 
 const execFileAsync = promisify(execFile);
-const REALTIME_HEADERS = [
-  "Accept: application/json",
-  "Content-Type: application/json",
-  "Origin: https://kick.com",
-  "Referer: https://kick.com/"
-];
-
 function asRecord(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as JsonRecord
     : {};
-}
-
-function safeSlug(value: unknown): string {
-  return typeof value === "string" && /^[a-zA-Z0-9_]{1,25}$/.test(value)
-    ? value.toLowerCase()
-    : "unknown";
 }
 
 function readPositiveId(value: unknown): number | null {
