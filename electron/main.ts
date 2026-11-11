@@ -15,6 +15,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileS
 import { join } from "node:path";
 import { autoUpdater } from "electron-updater";
 import { KickChatReceiver } from "./chat";
+import { KickVodChatDownloader } from "./vod-chat";
 import { isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
 
 // Chromiumが提供する標準メニューやコンテキストメニューも日本語で表示する。
@@ -402,6 +403,10 @@ const chatReceiver = new KickChatReceiver(
   status => mainWindow?.webContents.send("chat:status", status)
 );
 
+const vodChatDownloader = new KickVodChatDownloader(event => {
+  mainWindow?.webContents.send("vod-chat:status", event);
+});
+
 function getRecordingOutputDirectory(): string {
   const configured = readState().settings.outputDirectory.trim();
   return configured || join(app.getPath("videos"), "Kick Live Message Recorder");
@@ -621,6 +626,16 @@ function registerIpcHandlers(): void {
     assertTrustedSender(event);
     const boundedLimit = typeof limit === "number" && Number.isFinite(limit) ? limit : 100;
     return chatReceiver.listRecentMessages(boundedLimit);
+  });
+
+  ipcMain.handle("vod-chat:start", (event, url: unknown) => {
+    assertTrustedSender(event);
+    return vodChatDownloader.start(url, getRecordingOutputDirectory());
+  });
+
+  ipcMain.handle("vod-chat:stop", event => {
+    assertTrustedSender(event);
+    return vodChatDownloader.stop();
   });
 
   
@@ -866,6 +881,7 @@ if (!hasSingleInstanceLock) {
 app.on("before-quit", () => {
   recordingManager.stopAll();
   void chatReceiver.stop();
+  vodChatDownloader.stopAll();
 });
 
 app.on("window-all-closed", () => {
