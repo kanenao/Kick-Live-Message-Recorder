@@ -47,6 +47,16 @@ type KickRecorderRecordingEvent = {
   isVod?: boolean;
 };
 
+type KickRecorderVodChatEvent = {
+  status: "starting" | "progress" | "completed" | "stopped" | "error";
+  slug: string;
+  videoId: string;
+  pages: number;
+  messageCount: number;
+  message: string;
+  filePaths?: string[];
+};
+
 type KickRecorderCredentialsStatus = {
   configured: boolean;
   encryptionAvailable: boolean;
@@ -111,6 +121,9 @@ declare global {
       stopChatReceiver: () => Promise<KickRecorderChatStatus>;
       getChatReceiverStatus: () => Promise<KickRecorderChatStatus>;
       listChatMessages: (limit: number) => Promise<KickRecorderChatMessage[]>;
+      startVodChatDownload: (url: string) => Promise<{ ok: true; outputDirectory: string }>;
+      stopVodChatDownload: () => Promise<{ ok: true }>;
+      onVodChatStatus: (callback: (event: KickRecorderVodChatEvent) => void) => () => void;
       copyText: (value: string) => Promise<{ ok: boolean }>;
       onChatMessage: (callback: (message: KickRecorderChatMessage) => void) => () => void;
       onChatStatus: (callback: (status: KickRecorderChatStatus) => void) => () => void;
