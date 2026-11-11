@@ -99,7 +99,12 @@ type KickRecorderChannelCheck = {
   slug: string;
   found: boolean;
   isLive: boolean;
+  displayName: string;
+  profilePicture: string | null;
+  broadcasterUserId: number | null;
   streamTitle: string;
+  categoryName: string;
+  categoryThumbnail: string | null;
   viewerCount: number;
   startedAt: string | null;
 };
@@ -110,7 +115,13 @@ declare global {
       loadState: () => Promise<KickRecorderAppState>;
       saveState: (state: KickRecorderAppState) => Promise<{ ok: boolean }>;
       selectOutputDirectory: () => Promise<string | null>;
-      notifyLive: (slug: string) => Promise<{ ok: boolean }>;
+      notifyLive: (slug: string, details?: {
+        displayName?: string;
+        streamTitle?: string;
+        categoryName?: string;
+        startedAt?: string | null;
+        viewerCount?: number;
+      }) => Promise<{ ok: boolean }>;
       getAppInfo: () => Promise<KickRecorderAppInfo>;
       getKickCredentialsStatus: () => Promise<KickRecorderCredentialsStatus>;
       saveKickCredentials: (credentials: { clientId: string; clientSecret: string }) => Promise<{ ok: boolean; clientId: string }>;
