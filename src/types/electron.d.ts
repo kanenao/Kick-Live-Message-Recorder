@@ -145,6 +145,7 @@ declare global {
       startRecording: (slug: string, sourceUrl?: string) => Promise<{ ok: true; outputDirectory: string }>;
       stopRecording: (slug: string, isVod?: boolean) => Promise<{ ok: true }>;
       listRecordings: () => Promise<KickRecorderRecordingFile[]>;
+      deleteRecording: (filePath: string) => Promise<{ ok: true; name: string }>;
       openRecording: (filePath: string) => Promise<{ ok: true }>;
       revealRecording: (filePath: string) => Promise<{ ok: true }>;
       onRecordingStatus: (callback: (event: KickRecorderRecordingEvent) => void) => () => void;
