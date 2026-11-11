@@ -622,15 +622,37 @@ function registerIpcHandlers(): void {
     return result.canceled ? null : (result.filePaths[0] ?? null);
   });
 
-  ipcMain.handle("app:notify-live", (event, slug: unknown) => {
+  ipcMain.handle("app:notify-live", (event, slug: unknown, details?: unknown) => {
     assertTrustedSender(event);
     if (typeof slug !== "string" || !/^[a-zA-Z0-9_]{1,25}$/.test(slug)) {
       throw new Error("通知対象のチャンネル名が不正です。");
     }
+    const values = details && typeof details === "object" ? details as {
+      displayName?: unknown;
+      streamTitle?: unknown;
+      categoryName?: unknown;
+      startedAt?: unknown;
+      viewerCount?: unknown;
+    } : {};
+    const displayName = typeof values.displayName === "string" ? values.displayName.trim().slice(0, 100) : slug;
+    const streamTitle = typeof values.streamTitle === "string" ? values.streamTitle.trim().slice(0, 180) : "";
+    const categoryName = typeof values.categoryName === "string" ? values.categoryName.trim().slice(0, 80) : "";
+    const startedAt = typeof values.startedAt === "string" && !Number.isNaN(Date.parse(values.startedAt))
+      ? new Date(values.startedAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })
+      : "";
+    const viewerCount = typeof values.viewerCount === "number" && Number.isFinite(values.viewerCount)
+      ? Math.max(0, Math.floor(values.viewerCount))
+      : null;
     if (!Notification.isSupported()) return { ok: false };
+    const body = [
+      streamTitle || "配信タイトル未設定",
+      categoryName,
+      startedAt ? "開始 " + startedAt : "",
+      viewerCount !== null ? viewerCount.toLocaleString("ja-JP") + " 人視聴中" : ""
+    ].filter(Boolean).join(" ・ ");
     new Notification({
-      title: "Kick Recorder - 配信開始",
-      body: `${slug} が配信を開始しました。`
+      title: displayName + " がLIVEを開始しました",
+      body
     }).show();
     return { ok: true };
   });
