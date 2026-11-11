@@ -55,7 +55,7 @@ type RecordingEvent = {
   message?: string;
 };
 
-const APP_VERSION = "0.1.0-beta.10";
+const APP_VERSION = "0.1.0-beta.11";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -134,6 +134,7 @@ export default function App() {
   const [kickCredentialsConfigured, setKickCredentialsConfigured] = useState(false);
   const [kickEncryptionAvailable, setKickEncryptionAvailable] = useState(false);
   const [kickMessage, setKickMessage] = useState("");
+  const [isTestingKickConnection, setIsTestingKickConnection] = useState(false);
   const [channelChecks, setChannelChecks] = useState<Record<string, ChannelCheck>>({});
   const [isCheckingChannels, setIsCheckingChannels] = useState(false);
   const [lastChannelCheck, setLastChannelCheck] = useState("");
@@ -373,6 +374,26 @@ export default function App() {
       setKickMessage("Kick APIの認証情報を暗号化して保存しました。");
     } catch (error) {
       setKickMessage(error instanceof Error ? error.message : "認証情報を保存できませんでした。");
+    }
+  }
+
+  async function testKickApiConnection() {
+    if (!window.kickRecorder) return;
+    if (!kickCredentialsConfigured) {
+      setKickMessage("先にClient IDとClient Secretを保存してください。");
+      return;
+    }
+
+    setIsTestingKickConnection(true);
+    setKickMessage("Kick APIの認証を確認しています...");
+    try {
+      const result = await window.kickRecorder.testKickConnection();
+      setKickMessage(`接続成功：${result.message}`);
+      setMonitorError("");
+    } catch (error) {
+      setKickMessage(error instanceof Error ? `接続失敗：${error.message}` : "接続に失敗しました。Client ID／Secretとネットワークを確認してください。");
+    } finally {
+      setIsTestingKickConnection(false);
     }
   }
 
@@ -682,7 +703,7 @@ export default function App() {
             <h3>Kick API接続</h3>
             <span className={kickCredentialsConfigured ? "api-state connected" : "api-state"}>{kickCredentialsConfigured ? "認証情報登録済み" : "未設定"}</span>
           </div>
-          <p className="settings-help">Kick Developerで作成したアプリのClient IDとClient Secretを入力します。SecretはWindowsの暗号化機能で保護し、画面側やログには保存しません。</p>
+          <p className="settings-help">Kick Developerで作成したアプリのClient IDとClient Secretを入力します。SecretはWindowsの暗号化機能で保護し、画面側やログには保存しません。保存後に「接続テスト」を押すと、Kickの認証サーバーからApp Access Tokenを取得できるか確認します。</p>
           <label className="credential-field">クライアントID
             <input value={kickClientId} onChange={event => setKickClientId(event.target.value)} placeholder="Kick DeveloperのクライアントID" autoComplete="off" disabled={!isDesktop} />
           </label>
@@ -691,9 +712,11 @@ export default function App() {
           </label>
           <div className="credential-actions">
             <button className="primary-small" onClick={() => void saveKickApiCredentials()} disabled={!isDesktop || !kickEncryptionAvailable}>認証情報を保存</button>
+            <button className="small-action" onClick={() => void testKickApiConnection()} disabled={!isDesktop || !kickCredentialsConfigured || isTestingKickConnection}>{isTestingKickConnection ? "接続確認中..." : "接続テスト"}</button>
             <button className="small-action" onClick={() => void clearKickApiCredentials()} disabled={!isDesktop || !kickCredentialsConfigured}>認証情報を削除</button>
           </div>
           {kickMessage && <div className="api-message" role="status">{kickMessage}</div>}
+          <div className="notice">接続テスト成功はAPI認証の確認です。チャット受信には別途、公開HTTPSのWebhook URL設定とイベント購読が必要です。</div>
           {!isDesktop && <div className="notice">Kick APIの認証情報登録はWindowsデスクトップ版で利用できます。</div>}
           {isDesktop && !kickEncryptionAvailable && <div className="storage-error">Windowsの暗号化ストレージが利用できないため、認証情報は保存できません。</div>}
         </div>
