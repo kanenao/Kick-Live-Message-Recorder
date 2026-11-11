@@ -736,7 +736,7 @@ export default function App() {
         <section className="stats">
           <div className="stat-card"><span>登録チャンネル</span><strong>{channels.length.toString().padStart(2,"0")}</strong><small>監視対象</small></div>
           <div className="stat-card"><span>録画中</span><strong>{activeCount.toString().padStart(2,"0")}</strong><small>現在のセッション</small></div>
-          <div className="stat-card"><span>保存済み録画</span><strong>00</strong><small>このPC内</small></div>
+          <div className="stat-card"><span>保存済み録画</span><strong>{recordingFiles.length.toString().padStart(2,"0")}</strong><small>このPC内</small></div>
           <div className="stat-card accent"><span>現在のバージョン</span><strong className="version-value">{appVersion}</strong><small>{isReady ? "インストール済み" : "起動情報を読み込み中"}</small></div>
         </section>
 
@@ -946,7 +946,7 @@ export default function App() {
             <h3>Kickチャット受信</h3>
             <span className={chatStatus.running ? "api-state connected" : "api-state"}>{chatStatus.running ? "受信中（" + chatStatus.connectedChannels + "チャンネル）" : "停止中"}</span>
           </div>
-          <p className="settings-help">登録したKickチャンネルの公開チャットへアプリから直接接続します。自動取得が有効なら、アプリ起動時とチャンネル追加時に自動で接続します。ngrok・Cloudflare Tunnel・Webhook URL登録は不要です。Kickの非公式リアルタイム接続を利用するため、Kick側の仕様変更で受信できなくなる場合があります。</p>
+          <p className="settings-help">登録したKickチャンネルの公開チャットへアプリから直接接続します。同時に最大50チャンネルまで受信でき、自動取得が有効ならアプリ起動時とチャンネル追加時に自動で接続します。ngrok・Cloudflare Tunnel・Webhook URL登録は不要です。Kickの非公式リアルタイム接続を利用するため、Kick側の仕様変更で受信できなくなる場合があります。</p>
           <div className="chat-receiver-actions">
             <button className="primary-small" onClick={() => void startChatReceiver()} disabled={!isDesktop || isStartingChat || chatStatus.running || channels.length === 0}>
               {isStartingChat ? "接続中..." : "コメント受信を開始"}
