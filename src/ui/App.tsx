@@ -890,7 +890,7 @@ export default function App() {
 
   async function deleteRecordingFromLibrary(filePath: string, fileName: string) {
     if (!window.kickRecorder || deletingRecordingPath) return;
-    const confirmed = window.confirm(`「${fileName}」を完全に削除しますか？\\n\\n削除したファイルは元に戻せません。`);
+    const confirmed = window.confirm(`「${fileName}」を完全に削除しますか？\n\n削除したファイルは元に戻せません。`);
     if (!confirmed) return;
 
     setDeletingRecordingPath(filePath);
