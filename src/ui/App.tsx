@@ -12,6 +12,7 @@ type Channel = {
 type AppSettings = {
   autoRecordOnStreamStart: boolean;
   autoReceiveChat: boolean;
+  autoReceiveChatForRecordingOnly: boolean;
   saveChat: boolean;
   outputDirectory: string;
   autoMonitorEnabled: boolean;
@@ -81,12 +82,13 @@ type RecordingEvent = {
   message?: string;
 };
 
-const APP_VERSION = "0.1.0-beta.16";
+const APP_VERSION = "0.1.0-beta.17";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
   autoRecordOnStreamStart: true,
   autoReceiveChat: true,
+  autoReceiveChatForRecordingOnly: true,
   saveChat: true,
   outputDirectory: "",
   autoMonitorEnabled: true,
@@ -141,6 +143,7 @@ function normalizeState(value: unknown): PersistedState {
     settings: {
       autoRecordOnStreamStart: settings.autoRecordOnStreamStart !== false,
       autoReceiveChat: settings.autoReceiveChat !== false,
+      autoReceiveChatForRecordingOnly: settings.autoReceiveChatForRecordingOnly !== false,
       saveChat: settings.saveChat !== false,
       outputDirectory: typeof settings.outputDirectory === "string" ? settings.outputDirectory : "",
       autoMonitorEnabled: settings.autoMonitorEnabled !== false,
