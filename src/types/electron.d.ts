@@ -15,6 +15,7 @@ type KickRecorderAppState = {
   settings: {
     autoRecordOnStreamStart: boolean;
     autoReceiveChat: boolean;
+    autoReceiveChatForRecordingOnly: boolean;
     saveChat: boolean;
     outputDirectory: string;
     autoMonitorEnabled: boolean;
