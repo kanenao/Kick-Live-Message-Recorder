@@ -84,7 +84,7 @@ type RecordingEvent = {
   message?: string;
 };
 
-const APP_VERSION = "0.1.0-beta.19";
+const APP_VERSION = "0.1.0-beta.20";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -223,6 +223,15 @@ export default function App() {
   const [recordingMessage, setRecordingMessage] = useState("");
   const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
   const activeCount = useMemo(() => [...channels, ...recordingOnlyChannels].filter(c => c.recording).length, [channels, recordingOnlyChannels]);
+  const activeRecordingChannels = useMemo(() => {
+    const unique = new Map<string, Channel>();
+    for (const channel of [...channels, ...recordingOnlyChannels]) {
+      if (channel.recording) unique.set(channel.name.toLowerCase(), channel);
+    }
+    return [...unique.values()];
+  }, [channels, recordingOnlyChannels]);
+  const [previewSelection, setPreviewSelection] = useState("");
+  const previewChannel = activeRecordingChannels.find(channel => channel.name === previewSelection) ?? activeRecordingChannels[0] ?? null;
 
   useEffect(() => {
     let active = true;
@@ -782,6 +791,35 @@ export default function App() {
           <div className="stat-card accent"><span>現在のバージョン</span><strong className="version-value">{appVersion}</strong><small>{isReady ? "インストール済み" : "起動情報を読み込み中"}</small></div>
         </section>
 
+        {activeRecordingChannels.length > 0 && <section className="panel live-preview-panel">
+          <div className="panel-heading">
+            <div><h2>録画中の映像プレビュー</h2><p>Kick公式プレーヤーで現在録画している配信を表示します</p></div>
+            <span className="live-status live">● LIVE · {activeRecordingChannels.length}件</span>
+          </div>
+          <div className="live-preview-frame">
+            <iframe
+              key={previewChannel?.name.toLowerCase()}
+              src={previewChannel ? `https://player.kick.com/${encodeURIComponent(previewChannel.name)}?autoplay=true&muted=true` : "about:blank"}
+              title={previewChannel ? `${previewChannel.name} のライブ映像` : "録画中の映像"}
+              allow="autoplay; fullscreen; picture-in-picture"
+              allowFullScreen
+              loading="eager"
+            />
+          </div>
+          <div className="live-preview-footer">
+            <strong>{previewChannel?.name}</strong>
+            <span>音声はミュート状態で開始します。プレーヤー内の音量ボタンから変更できます。</span>
+            {activeRecordingChannels.length > 1 && <label>表示チャンネル
+              <select value={previewChannel?.name ?? ""} onChange={event => {
+                const selected = activeRecordingChannels.find(channel => channel.name === event.target.value);
+                if (selected) setPreviewSelection(selected.name);
+              }}>
+                {activeRecordingChannels.map(channel => <option key={channel.name} value={channel.name}>{channel.name}</option>)}
+              </select>
+            </label>}
+          </div>
+        </section>}
+
         <section className="panel">
           <div className="panel-heading"><div><h2>チャンネル管理</h2><p>録画・監視したいKickチャンネルを登録</p></div><div className="panel-heading-actions"><span className="count-pill">登録数：{channels.length}件</span><button className="small-action refresh-button" onClick={() => void refreshChannelStatuses()} disabled={!isDesktop || isCheckingChannels || channels.length === 0}>{isCheckingChannels ? "確認中..." : "配信状態を更新"}</button></div></div>
           <div className="add-channel">
@@ -837,7 +875,35 @@ export default function App() {
           <div><h2>録画専用チャンネル</h2><p>配信監視・自動録画は行わず、必要なときに録画を開始するチャンネルを登録します</p></div>
           <span className="count-pill">登録数：{recordingOnlyChannels.length}件</span>
         </div>
-        <div className="setting-row">
+        {activeRecordingChannels.length > 0 && <section className="panel live-preview-panel">
+          <div className="panel-heading">
+            <div><h2>録画中の映像プレビュー</h2><p>Kick公式プレーヤーで現在録画している配信を表示します</p></div>
+            <span className="live-status live">● LIVE · {activeRecordingChannels.length}件</span>
+          </div>
+          <div className="live-preview-frame">
+            <iframe
+              key={previewChannel?.name.toLowerCase()}
+              src={previewChannel ? `https://player.kick.com/${encodeURIComponent(previewChannel.name)}?autoplay=true&muted=true` : "about:blank"}
+              title={previewChannel ? `${previewChannel.name} のライブ映像` : "録画中の映像"}
+              allow="autoplay; fullscreen; picture-in-picture"
+              allowFullScreen
+              loading="eager"
+            />
+          </div>
+          <div className="live-preview-footer">
+            <strong>{previewChannel?.name}</strong>
+            <span>音声はミュート状態で開始します。プレーヤー内の音量ボタンから変更できます。</span>
+            {activeRecordingChannels.length > 1 && <label>表示チャンネル
+              <select value={previewChannel?.name ?? ""} onChange={event => {
+                const selected = activeRecordingChannels.find(channel => channel.name === event.target.value);
+                if (selected) setPreviewSelection(selected.name);
+              }}>
+                {activeRecordingChannels.map(channel => <option key={channel.name} value={channel.name}>{channel.name}</option>)}
+              </select>
+            </label>}
+          </div>
+        </section>}
+                <div className="setting-row">
           <div><strong>録画専用チャンネルのコメントを自動取得</strong><small>ONにするとアプリ起動時・チャンネル追加時にコメントへ自動接続します。通常チャンネル側の設定とは別に管理できます。</small></div>
           <label className="setting-control"><input type="checkbox" checked={settings.autoReceiveChatForRecordingOnly} onChange={event => setSettings(previous => ({ ...previous, autoReceiveChatForRecordingOnly: event.target.checked }))} /><span>{settings.autoReceiveChatForRecordingOnly ? "自動取得：有効" : "自動取得：無効"}</span></label>
         </div>
