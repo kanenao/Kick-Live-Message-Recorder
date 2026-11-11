@@ -18,6 +18,7 @@ type AppSettings = {
   autoMonitorEnabled: boolean;
   monitorIntervalSeconds: number;
   notifyOnLive: boolean;
+  showRecordingPreview: boolean;
 };
 
 type AppState = {
