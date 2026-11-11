@@ -34,6 +34,8 @@ type ActiveRecording = {
   retryDelayMs: number;
   attempt: number;
   retryTimer: NodeJS.Timeout | null;
+  sourceUrl: string;
+  isVod: boolean;
 };
 
 function validateSlug(value: unknown): string {
@@ -43,6 +45,17 @@ function validateSlug(value: unknown): string {
   return value.toLowerCase();
 }
 
+function validateVodUrl(value: unknown, expectedSlug: string): string {
+  if (typeof value !== "string" || value.length > 2048) throw new Error("過去配信のURLを入力してください。");
+  let parsed: URL;
+  try { parsed = new URL(value.trim()); } catch { throw new Error("Kickの過去配信URLが正しくありません。"); }
+  if (parsed.protocol !== "https:" || !["kick.com", "www.kick.com"].includes(parsed.hostname.toLowerCase())) {
+    throw new Error("Kick公式サイトの過去配信URL（https://kick.com/チャンネル/videos/動画ID）を入力してください。");
+  }
+  const match = parsed.pathname.match(/^\/([a-zA-Z0-9_-]{1,40})\/videos\/([a-f0-9-]{20,40})\/?$/i);
+  if (!match || match[1].toLowerCase() !== expectedSlug.toLowerCase()) throw new Error("URLのチャンネル名が一致しません。https://kick.com/チャンネル/videos/動画ID の形式で入力してください。");
+  return `https://kick.com/${match[1]}/videos/${match[2]}`;
+}
 function findYtDlp(): string {
   const executable = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
   const candidates = [
@@ -94,9 +107,12 @@ export class KickRecordingManager {
   start(
     inputSlug: unknown,
     inputDirectory: unknown,
-    options: RecordingOptions = {}
+    options: RecordingOptions = {},
+    inputSourceUrl?: unknown
   ): { ok: true; outputDirectory: string } {
     const slug = validateSlug(inputSlug);
+    const sourceUrl = inputSourceUrl === undefined ? `https://kick.com/${slug}` : validateVodUrl(inputSourceUrl, slug);
+    const isVod = inputSourceUrl !== undefined;
     if (this.active.has(slug)) {
       throw new Error(`${slug} はすでに録画中です。`);
     }
@@ -107,7 +123,7 @@ export class KickRecordingManager {
     if (!outputDirectory) throw new Error("録画の保存先が設定されていません。");
 
     mkdirSync(outputDirectory, { recursive: true });
-    const basePrefix = join(outputDirectory, `${slug}_${timestampForFilename(new Date())}`);
+    const basePrefix = join(outputDirectory, `${slug}${isVod ? "_VOD" : ""}_${timestampForFilename(new Date())}`);
     const session: ActiveRecording = {
       child: null,
       stopRequested: false,
@@ -116,10 +132,12 @@ export class KickRecordingManager {
       outputDirectory,
       stderrTail: "",
       retriesUsed: 0,
-      maxRetries: boundedInteger(options.retryCount, 5, 0, 10),
+      maxRetries: isVod ? 0 : boundedInteger(options.retryCount, 5, 0, 10),
       retryDelayMs: boundedInteger(options.retryDelaySeconds, 10, 5, 60) * 1000,
       attempt: 0,
-      retryTimer: null
+      retryTimer: null,
+      sourceUrl,
+      isVod
     };
 
     this.active.set(slug, session);
@@ -157,7 +175,7 @@ export class KickRecordingManager {
       "--output", `${prefix}.%(ext)s`,
       "--print", "after_move:filepath",
       ...(ffmpegPath ? ["--ffmpeg-location", ffmpegPath] : []),
-      `https://kick.com/${slug}`
+      session.sourceUrl
     ];
 
     let child: ChildProcessWithoutNullStreams;
@@ -231,7 +249,7 @@ export class KickRecordingManager {
         slug,
         status: "stopped",
         filePath: session.filePath,
-        message: "配信が終了し、録画を完了しました。"
+        message: session.isVod ? "過去配信のダウンロードが完了しました。" : "配信が終了し、録画を完了しました。"
       });
       return;
     }
