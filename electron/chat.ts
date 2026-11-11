@@ -20,6 +20,13 @@ export type KickChatMessage = {
   replyToMessageId: string | null;
 };
 
+export type KickChatSubscriptionResult = {
+  slug: string;
+  status: "subscribed" | "already-subscribed" | "failed";
+  message: string;
+  subscriptionId?: string;
+};
+
 export type ChatReceiverStatus = {
   running: boolean;
   tunnelUrl: string;

@@ -61,13 +61,6 @@ type StoredKickCredentials = {
   encryptedClientSecret: string;
 };
 
-type KickChatSubscriptionResult = {
-  slug: string;
-  status: "subscribed" | "already-subscribed" | "failed";
-  message: string;
-  subscriptionId?: string;
-};
-
 type KickChannelCheck = {
   slug: string;
   found: boolean;
