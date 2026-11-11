@@ -32,7 +32,12 @@ type ChannelCheck = {
   slug: string;
   found: boolean;
   isLive: boolean;
+  displayName: string;
+  profilePicture: string | null;
+  broadcasterUserId: number | null;
   streamTitle: string;
+  categoryName: string;
+  categoryThumbnail: string | null;
   viewerCount: number;
   startedAt: string | null;
 };
@@ -85,7 +90,7 @@ type RecordingEvent = {
   isVod?: boolean;
 };
 
-const APP_VERSION = "0.1.0-beta.23";
+const APP_VERSION = "0.1.0-beta.24";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -166,6 +171,30 @@ function normalizeState(value: unknown): PersistedState {
   };
 }
 
+function formatLiveStartTime(value: string | null): string {
+  if (!value) return "開始時刻不明";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "開始時刻不明";
+  return date.toLocaleString("ja-JP", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
+}
+
+function formatLiveElapsed(value: string | null, now: number): string {
+  if (!value) return "計測できません";
+  const startedAt = Date.parse(value);
+  if (!Number.isFinite(startedAt)) return "計測できません";
+  const seconds = Math.max(0, Math.floor((now - startedAt) / 1000));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainder = seconds % 60;
+  return [hours, minutes, remainder].map(part => String(part).padStart(2, "0")).join(":");
+}
+
 async function loadState(): Promise<PersistedState> {
   if (window.kickRecorder) {
     return normalizeState(await window.kickRecorder.loadState());
@@ -214,6 +243,7 @@ export default function App() {
   const [chatSetupMessage, setChatSetupMessage] = useState("");
   const [isStartingChat, setIsStartingChat] = useState(false);
   const [channelChecks, setChannelChecks] = useState<Record<string, ChannelCheck>>({});
+  const [liveClock, setLiveClock] = useState(() => Date.now());
   const [isCheckingChannels, setIsCheckingChannels] = useState(false);
   const [lastChannelCheck, setLastChannelCheck] = useState("");
   const [monitorError, setMonitorError] = useState("");
@@ -238,6 +268,14 @@ export default function App() {
     }
     return [...unique.values()];
   }, [channels, recordingOnlyChannels]);
+  const liveChannelCards = useMemo(() => channels.flatMap(channel => {
+    const live = channelChecks[channel.name.toLowerCase()];
+    return live?.found && live.isLive ? [{ channel, live }] : [];
+  }).sort((a, b) => {
+    const aStart = a.live.startedAt ? Date.parse(a.live.startedAt) : 0;
+    const bStart = b.live.startedAt ? Date.parse(b.live.startedAt) : 0;
+    return bStart - aStart;
+  }), [channels, channelChecks]);
   const [previewSelection, setPreviewSelection] = useState("");
   const previewChannel = activeRecordingChannels.find(channel => channel.name === previewSelection) ?? activeRecordingChannels[0] ?? null;
 
@@ -406,6 +444,13 @@ export default function App() {
   }, [tab, isDesktop, libraryRefreshKey, settings.outputDirectory]);
 
   useEffect(() => {
+    if (liveChannelCards.length === 0) return;
+    setLiveClock(Date.now());
+    const timer = window.setInterval(() => setLiveClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [liveChannelCards.length]);
+
+  useEffect(() => {
     if (
       !isReady ||
       !isDesktop ||
@@ -452,7 +497,13 @@ export default function App() {
             previous?.found &&
             !previous.isLive
           ) {
-            void window.kickRecorder.notifyLive(result.slug).catch(() => undefined);
+            void window.kickRecorder.notifyLive(result.slug, {
+              displayName: result.displayName,
+              streamTitle: result.streamTitle,
+              categoryName: result.categoryName,
+              startedAt: result.startedAt,
+              viewerCount: result.viewerCount
+            }).catch(() => undefined);
           }
         }
 
@@ -905,6 +956,45 @@ export default function App() {
           <div className="stat-card"><span>保存済み録画</span><strong>{recordingFiles.length.toString().padStart(2,"0")}</strong><small>このPC内</small></div>
           <div className="stat-card accent"><span>現在のバージョン</span><strong className="version-value">{appVersion}</strong><small>{isReady ? "インストール済み" : "起動情報を読み込み中"}</small></div>
         </section>
+
+        {channels.length > 0 && <section className="panel live-now-panel">
+          <div className="panel-heading">
+            <div><h2>LIVE中の配信者</h2><p>登録チャンネルの現在の配信情報を自動更新します</p></div>
+            <span className="live-status live">LIVE · {liveChannelCards.length}件</span>
+          </div>
+          {!kickCredentialsConfigured
+            ? <div className="empty-inline">配信者のLIVE情報を表示するには、設定画面でKick APIのClient IDとClient Secretを登録してください。</div>
+            : !settings.autoMonitorEnabled
+              ? <div className="empty-inline">自動監視は停止中です。設定画面で自動監視を有効にすると、LIVE情報が更新されます。</div>
+              : liveChannelCards.length === 0
+                ? <div className="empty-inline">{monitorError ? "LIVE情報を取得できませんでした。ネットワークとKick APIの設定を確認してください。" : "現在LIVE中の登録配信者はいません。配信を検知すると、ここにタイトルや開始時刻などが表示されます。"}</div>
+                : <div className="live-stream-grid">
+                    {liveChannelCards.map(({ channel, live }) => <article className="live-stream-card" key={channel.id}>
+                      <div className="live-stream-header">
+                        {live.profilePicture
+                          ? <img className="live-stream-avatar" src={live.profilePicture} alt="" />
+                          : <div className="live-stream-avatar live-stream-avatar-fallback">{channel.name.slice(0, 1).toUpperCase()}</div>}
+                        <div className="live-stream-identity">
+                          <strong>{live.displayName || channel.name}</strong>
+                          <small>@{channel.name}</small>
+                        </div>
+                        <span className="live-status live"><i /> LIVE</span>
+                      </div>
+                      <div className="live-stream-title">{live.streamTitle || "配信タイトル未設定"}</div>
+                      {live.categoryName && <div className="live-stream-category">{live.categoryName}</div>}
+                      <div className="live-stream-meta">
+                        <div><small>配信開始</small><strong>{formatLiveStartTime(live.startedAt)}</strong></div>
+                        <div><small>配信時間</small><strong className="live-elapsed">{formatLiveElapsed(live.startedAt, liveClock)}</strong></div>
+                        <div><small>視聴者数</small><strong>{live.viewerCount.toLocaleString("ja-JP")} 人</strong></div>
+                      </div>
+                      <div className="live-stream-footer"><span>https://kick.com/{channel.name}</span><span>監視中</span></div>
+                    </article>)}
+                  </div>}
+          <div className="live-now-footer">
+            <span>{lastChannelCheck ? "最終確認：" + lastChannelCheck : "配信状態を確認中..."}</span>
+            {monitorError && <span className="monitor-error">{monitorError}</span>}
+          </div>
+        </section>}
 
         {activeRecordingChannels.length > 0 && <section className="panel live-preview-panel">
           <div className="panel-heading">
