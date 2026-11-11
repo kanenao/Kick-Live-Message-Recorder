@@ -132,7 +132,7 @@ declare global {
       installUpdate: () => Promise<{ ok: boolean }>;
       onUpdateStatus: (callback: (status: KickRecorderUpdateStatus) => void) => () => void;
       startRecording: (slug: string, sourceUrl?: string) => Promise<{ ok: true; outputDirectory: string }>;
-      stopRecording: (slug: string) => Promise<{ ok: true }>;
+      stopRecording: (slug: string, isVod?: boolean) => Promise<{ ok: true }>;
       listRecordings: () => Promise<KickRecorderRecordingFile[]>;
       openRecording: (filePath: string) => Promise<{ ok: true }>;
       revealRecording: (filePath: string) => Promise<{ ok: true }>;
