@@ -43,6 +43,16 @@ function findYtDlp(): string {
   return bundled ?? executable;
 }
 
+function findFfmpeg(): string | undefined {
+  const executable = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
+  const candidates = [
+    join(process.resourcesPath, "tools", executable),
+    join(process.cwd(), "vendor", "win-x64", executable),
+    join(process.cwd(), "vendor", executable)
+  ];
+  return candidates.find(candidate => existsSync(candidate));
+}
+
 function timestampForFilename(date: Date): string {
   const pad = (value: number): string => String(value).padStart(2, "0");
   return [
@@ -80,6 +90,7 @@ export class KickRecordingManager {
     const prefix = join(outputDirectory, `${slug}_${timestampForFilename(new Date())}`);
     const outputTemplate = `${prefix}.%(ext)s`;
     const url = `https://kick.com/${slug}`;
+    const ffmpegPath = findFfmpeg();
     const args = [
       "--no-warnings",
       "--no-color",
@@ -95,6 +106,7 @@ export class KickRecordingManager {
       "--format", "best",
       "--output", outputTemplate,
       "--print", "after_move:filepath",
+      ...(ffmpegPath ? ["--ffmpeg-location", ffmpegPath] : []),
       url
     ];
 
@@ -156,12 +168,18 @@ export class KickRecordingManager {
         });
         return;
       }
-      const detail = session.stderrTail.trim().split(/\r?\n/).filter(Boolean).slice(-3).join(" ");
+      const stderr = session.stderrTail.trim();
+      const lowerStderr = stderr.toLowerCase();
+      const detail = stderr.split(/\r?\n/).filter(Boolean).slice(-3).join(" ");
+      const message = lowerStderr.includes("ffmpeg could not be found")
+        || lowerStderr.includes("ffmpeg not found")
+        ? "ffmpeg.exe が見つかりません。アプリを最新版に更新して再インストールしてください。"
+        : detail || `録画が異常終了しました（終了コード：${String(code)}、signal：${String(signal)}）。`;
       this.onEvent({
         slug,
         status: "error",
         filePath: session.filePath,
-        message: detail || `録画が異常終了しました（終了コード：${String(code)}、signal：${String(signal)}）。`
+        message
       });
     });
 
