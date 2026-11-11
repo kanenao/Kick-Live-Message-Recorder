@@ -34,7 +34,7 @@ jobs:
           const html = fs.readFileSync("dist/index.html", "utf8");
           const assets = [...html.matchAll(/(?:src|href)=["']([^"']+)["']/g)]
             .map(match => match[1])
-            .filter(path => /\\.(js|css)(?:$|\\?)/i.test(path));
+            .filter(path => path.includes(".js") || path.includes(".css"));
           console.log("生成されたアセットURL:", assets);
           if (assets.length < 2) {
             throw new Error("JS/CSSアセットURLを dist/index.html から検出できません。");
