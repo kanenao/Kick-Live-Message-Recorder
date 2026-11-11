@@ -429,6 +429,7 @@ export class KickChatReceiver {
       this.publishStatus("Kickへ再接続しています。");
       const generation = this.operationGeneration;
       void this.connect(generation).catch(error => {
+        if (generation !== this.operationGeneration || this.stopping) return;
         const detail = error instanceof Error ? error.message : String(error);
         this.publishStatus("再接続に失敗しました：" + detail + " 次回も自動で再試行します。");
         this.scheduleReconnect();
