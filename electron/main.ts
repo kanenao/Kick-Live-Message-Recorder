@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { autoUpdater } from "electron-updater";
 import { KickChatReceiver } from "./chat";
 import { KickVodChatDownloader } from "./vod-chat";
-import { isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
+import { deleteRecordingFile, isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
 
 // Chromiumが提供する標準メニューやコンテキストメニューも日本語で表示する。
 app.commandLine.appendSwitch("lang", "ja-JP");
@@ -777,6 +777,18 @@ function registerIpcHandlers(): void {
   ipcMain.handle("recording:list", event => {
     assertTrustedSender(event);
     return listRecordingFiles(getRecordingOutputDirectory());
+  });
+
+  ipcMain.handle("recording:delete", (event, filePath: unknown) => {
+    assertTrustedSender(event);
+    if (typeof filePath !== "string" || filePath.length > 4096) {
+      throw new Error("削除する録画ファイルの場所が不正です。");
+    }
+    return deleteRecordingFile(
+      getRecordingOutputDirectory(),
+      filePath,
+      target => recordingManager.isFileActive(target)
+    );
   });
 
   ipcMain.handle("recording:open", async (event, filePath: unknown) => {
