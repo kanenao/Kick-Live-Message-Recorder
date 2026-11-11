@@ -69,16 +69,7 @@ jobs:
           }
           & $target --version
           if ($LASTEXITCODE -ne 0) { throw "yt-dlp.exe を実行できませんでした。" }
-      - name: Cloudflare Tunnelをダウンロードしてアプリへ同梱
-        shell: pwsh
-        run: |
-          $target = "vendor/win-x64/cloudflared.exe"
-          Invoke-WebRequest -Uri "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe" -OutFile $target
-          if ((Get-Item $target).Length -lt 10000000) {
-            throw "cloudflared.exe のダウンロードサイズが不正です。"
-          }
-          & $target --version
-          if ($LASTEXITCODE -ne 0) { throw "cloudflared.exe を実行できませんでした。" }
+
       - name: Windowsインストーラーを作成
         run: npm run dist:win
       - name: インストーラーを保存
@@ -201,20 +192,11 @@ jobs:
           }
           & $target --version
           if ($LASTEXITCODE -ne 0) { throw "yt-dlp.exe を実行できませんでした。" }
-      - name: Cloudflare Tunnelをダウンロードしてアプリへ同梱
-        shell: pwsh
-        run: |
-          $target = "vendor/win-x64/cloudflared.exe"
-          Invoke-WebRequest -Uri "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe" -OutFile $target
-          if ((Get-Item $target).Length -lt 10000000) {
-            throw "cloudflared.exe のダウンロードサイズが不正です。"
-          }
-          & $target --version
-          if ($LASTEXITCODE -ne 0) { throw "cloudflared.exe を実行できませんでした。" }
+
       - name: Releases用の同梱ファイルを再確認
         shell: pwsh
         run: |
-          $required = @("vendor/win-x64/yt-dlp.exe", "vendor/win-x64/cloudflared.exe")
+          $required = @("vendor/win-x64/yt-dlp.exe")
           foreach ($path in $required) {
             if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
               throw "インストーラーへ同梱するファイルがありません: $path"
