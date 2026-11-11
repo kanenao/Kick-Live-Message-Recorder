@@ -656,9 +656,9 @@ function registerIpcHandlers(): void {
     }, sourceUrl);
   });
 
-  ipcMain.handle("recording:stop", (event, slug: unknown) => {
+  ipcMain.handle("recording:stop", (event, slug: unknown, isVod?: unknown) => {
     assertTrustedSender(event);
-    return recordingManager.stop(slug);
+    return recordingManager.stop(slug, isVod ?? false);
   });
 
   ipcMain.handle("recording:list", event => {
