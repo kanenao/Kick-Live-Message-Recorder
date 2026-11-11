@@ -49,6 +49,7 @@
 
 
 .recording-action{white-space:nowrap;min-width:88px}
+.combined-recording-action{min-width:142px}
 .recording-library-list{border-top:1px solid #2b2f38}
 .recording-file-row{display:flex;align-items:center;gap:12px;padding:14px 2px;border-bottom:1px solid #2b2f38}
 .recording-file-icon{width:36px;height:36px;display:grid;place-items:center;border-radius:9px;background:#23362c;color:#77e3a4;font-size:13px}
