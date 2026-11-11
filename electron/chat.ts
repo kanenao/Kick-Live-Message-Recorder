@@ -197,8 +197,9 @@ export class KickChatReceiver {
     if (!Array.isArray(input)) throw new Error("チャット受信するチャンネル一覧が不正です。");
     const slugs = [...new Set(input
       .filter((value): value is string => typeof value === "string" && /^[a-zA-Z0-9_]{1,25}$/.test(value))
-      .map(value => value.toLowerCase()))].slice(0, 50);
+      .map(value => value.toLowerCase()))];
     if (slugs.length === 0) throw new Error("先にダッシュボードでKickチャンネルを登録してください。");
+    if (slugs.length > 50) throw new Error("チャットの同時自動取得は最大50チャンネルです。受信するチャンネルを50件以内にしてください。");
 
     const generation = ++this.operationGeneration;
     this.clearActiveConnection();
