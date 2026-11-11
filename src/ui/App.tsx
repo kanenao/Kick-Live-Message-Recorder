@@ -332,7 +332,7 @@ export default function App() {
   }, [isReady, isDesktop, settings.autoReceiveChat, monitorSlugKey]);
 
   useEffect(() => {
-    if (tab !== "library" || !isDesktop || !window.kickRecorder) return;
+    if ((tab !== "library" && tab !== "dashboard") || !isDesktop || !window.kickRecorder) return;
     let active = true;
     setIsLoadingRecordings(true);
     void window.kickRecorder.listRecordings().then(files => {
@@ -766,13 +766,27 @@ export default function App() {
               <button className="remove" aria-label={`${c.name}を削除`} onClick={() => setChannels(prev => prev.filter(x => x.id !== c.id))}>×</button>
             </div>)}
           </div>
-          <div className="notice">Kickの配信状態監視と、yt-dlpによる映像・音声の手動／自動録画に対応しました。チャットの取得・保存とコメント流し込み動画の生成は未実装です。{lastChannelCheck && ` 最終確認：${lastChannelCheck}`}</div>
+          <div className="notice">この一覧は配信監視・自動録画・チャット取得の対象です。録画だけ行いたいチャンネルは左メニューの「録画専用」に登録してください。{lastChannelCheck && ` 最終確認：${lastChannelCheck}`}</div>
           {recordingMessage && <div className="api-message" role="status">{recordingMessage}</div>}
         </section>
 
         <section className="panel lower-panel">
-          <div className="panel-heading"><div><h2>最近の録画</h2><p>保存された配信がここに表示されます</p></div><button className="text-button" onClick={() => setTab("library")}>すべて見る →</button></div>
-          <div className="empty-state"><div className="empty-icon">▣</div><strong>録画はまだありません</strong><span>録画機能は今後のアップデートで追加します。</span></div>
+          <div className="panel-heading"><div><h2>最近の録画</h2><p>通常チャンネル・録画専用の録画ファイル</p></div><button className="text-button" onClick={() => setTab("library")}>すべて見る →</button></div>
+          {isLoadingRecordings
+            ? <div className="empty-state"><strong>最近の録画を読み込み中...</strong></div>
+            : recordingFiles.length === 0
+              ? <div className="empty-state"><div className="empty-icon">▣</div><strong>録画はまだありません</strong><span>チャンネル一覧から録画を開始すると、ここに表示されます。</span></div>
+              : <div className="recording-library-list">
+                  {recordingFiles.slice(0, 3).map(file => <div className="recording-file-row" key={file.path}>
+                    <div className="recording-file-icon">▶</div>
+                    <div className="recording-file-info">
+                      <strong>{file.name}</strong>
+                      <small>{new Date(file.modifiedAt).toLocaleString("ja-JP")} ・ {file.extension} ・ {(file.size / (1024 * 1024)).toFixed(1)} MB</small>
+                    </div>
+                    <button className="primary-small" onClick={() => void openRecordingFile(file.path)}>再生</button>
+                    <button className="small-action" onClick={() => void revealRecordingFile(file.path)}>保存先を表示</button>
+                  </div>)}
+                </div>}
         </section>
       </>}
 
