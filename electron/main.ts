@@ -632,13 +632,13 @@ function registerIpcHandlers(): void {
     return { ok: true };
   });
 
-  ipcMain.handle("recording:start", (event, slug: unknown) => {
+  ipcMain.handle("recording:start", (event, slug: unknown, sourceUrl?: unknown) => {
     assertTrustedSender(event);
     const settings = readState().settings;
     return recordingManager.start(slug, getRecordingOutputDirectory(), {
       retryCount: settings.recordingRetryCount,
       retryDelaySeconds: settings.recordingRetryDelaySeconds
-    });
+    }, sourceUrl);
   });
 
   ipcMain.handle("recording:stop", (event, slug: unknown) => {
