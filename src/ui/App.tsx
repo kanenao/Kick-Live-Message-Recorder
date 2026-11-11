@@ -85,7 +85,7 @@ type RecordingEvent = {
   isVod?: boolean;
 };
 
-const APP_VERSION = "0.1.0-beta.21";
+const APP_VERSION = "0.1.0-beta.22";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -190,6 +190,8 @@ export default function App() {
   const vodSlugRef = useRef("");
   const [vodDownloadStatus, setVodDownloadStatus] = useState("");
   const [vodDownloadActive, setVodDownloadActive] = useState(false);
+  const [vodChatStatus, setVodChatStatus] = useState("");
+  const [vodChatActive, setVodChatActive] = useState(false);
   const [tab, setTab] = useState<"dashboard" | "recording" | "library" | "settings">("dashboard");
   const [isReady, setIsReady] = useState(false);
   const [storageError, setStorageError] = useState("");
@@ -245,6 +247,7 @@ export default function App() {
     let unsubscribeRecording: (() => void) | undefined;
     let unsubscribeChatMessage: (() => void) | undefined;
     let unsubscribeChatStatus: (() => void) | undefined;
+    let unsubscribeVodChat: (() => void) | undefined;
     void loadState().then(state => {
       if (!active) return;
       setChannels(state.channels);
@@ -274,6 +277,12 @@ export default function App() {
       void window.kickRecorder.listChatMessages(50).then(messages => {
         if (active) setChatMessages(messages);
       }).catch(() => undefined);
+      unsubscribeVodChat = window.kickRecorder.onVodChatStatus(event => {
+        if (!active) return;
+        setVodChatStatus(event.message);
+        setVodChatActive(event.status === "starting" || event.status === "progress");
+        if (event.status === "completed") setLibraryRefreshKey(value => value + 1);
+      });
       unsubscribeRecording = window.kickRecorder.onRecordingStatus((event: RecordingEvent) => {
         if (!active) return;
         const isRecording = event.status === "starting" || event.status === "recording";
@@ -325,6 +334,7 @@ export default function App() {
       unsubscribeRecording?.();
       unsubscribeChatMessage?.();
       unsubscribeChatStatus?.();
+      unsubscribeVodChat?.();
     };
   }, []);
 
@@ -731,6 +741,30 @@ export default function App() {
     try { await window.kickRecorder.stopRecording(vodSlug); setVodDownloadStatus("停止要求を送信しました。"); }
     catch (error) { setVodDownloadStatus(error instanceof Error ? error.message : "停止できませんでした。"); }
   }
+
+  async function downloadPastBroadcastChat() {
+    if (!window.kickRecorder) { setVodChatStatus("Windowsデスクトップ版で利用できます。"); return; }
+    if (!vodUrl.trim()) { setVodChatStatus("先にKickの過去配信URLを入力してください。"); return; }
+    setVodChatActive(true);
+    setVodChatStatus("過去コメントの取得を準備しています...");
+    try {
+      const result = await window.kickRecorder.startVodChatDownload(vodUrl.trim());
+      setVodChatStatus("コメント取得を開始しました。保存先：" + result.outputDirectory);
+    } catch (error) {
+      setVodChatActive(false);
+      setVodChatStatus(error instanceof Error ? error.message : "過去コメントを取得できませんでした。");
+    }
+  }
+
+  async function stopPastBroadcastChat() {
+    if (!window.kickRecorder) return;
+    try {
+      await window.kickRecorder.stopVodChatDownload();
+      setVodChatStatus("コメント取得の停止要求を送信しました...");
+    } catch (error) {
+      setVodChatStatus(error instanceof Error ? error.message : "コメント取得を停止できませんでした。");
+    }
+  }
   async function openRecordingFile(filePath: string) {
     if (!window.kickRecorder) return;
     try {
@@ -932,14 +966,19 @@ export default function App() {
           </div>
         </section>}
                 <section className="panel vod-download-panel">
-          <div className="panel-heading"><div><h2>過去の配信（VOD）を録画</h2><p>KickのVideosページから過去配信のURLをコピーして貼り付けます</p></div></div>
+          <div className="panel-heading"><div><h2>過去の配信（VOD）を録画・コメント取得</h2><p>KickのVideosページから過去配信のURLをコピーして貼り付けます</p></div></div>
           <div className="add-channel">
             <input value={vodUrl} onChange={event => setVodUrl(event.target.value)} placeholder="https://kick.com/channel/videos/動画ID" aria-label="Kick過去配信URL" />
             <button className="primary-small" onClick={() => void downloadPastBroadcast()} disabled={!isDesktop || vodDownloadActive}>過去配信をダウンロード</button>
-            {vodDownloadActive && <button className="remove" onClick={() => void stopPastBroadcastDownload()}>停止</button>}
+            {vodDownloadActive && <button className="remove" onClick={() => void stopPastBroadcastDownload()}>動画停止</button>}
           </div>
           {vodDownloadStatus && <div className="api-message" role="status">{vodDownloadStatus}</div>}
-          <div className="notice">公開状態で取得可能なVODが対象です。配信時間に応じてダウンロードに時間がかかり、保存容量と通信量を消費します。VODのコメント履歴は現在のライブコメント自動取得では取得できません。</div>
+          <div className="add-channel vod-chat-actions">
+            <button className="primary-small" onClick={() => void downloadPastBroadcastChat()} disabled={!isDesktop || vodChatActive}>過去配信のコメントを取得（JSONL・TXT）</button>
+            {vodChatActive && <button className="remove" onClick={() => void stopPastBroadcastChat()}>コメント取得を停止</button>}
+          </div>
+          {vodChatStatus && <div className="api-message" role="status">{vodChatStatus}</div>}
+          <div className="notice">公開状態で取得可能なVODが対象です。コメントは配信開始からの経過時刻・投稿者名・本文を保持し、ChatフォルダーにJSONLとTXTで保存します。Kick側の非公開設定やアクセス制限、API仕様変更により取得できない場合があります。</div>
         </section>
         <div className="setting-row">
           <div><strong>録画専用チャンネルのコメントを自動取得</strong><small>ONにするとアプリ起動時・チャンネル追加時にコメントへ自動接続します。通常チャンネル側の設定とは別に管理できます。</small></div>
