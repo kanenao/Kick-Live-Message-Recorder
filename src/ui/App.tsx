@@ -1063,7 +1063,7 @@ export default function App() {
             <button className="small-action" onClick={() => void refreshChatSubscriptionStatus()} disabled={!isDesktop || !kickCredentialsConfigured || channels.length === 0 || chatSubscriptionLoading || chatBusy}>{chatSubscriptionLoading ? "確認中..." : "購読状態を確認"}</button>
             <button className="small-action" onClick={() => void registerChatSubscriptions()} disabled={!isDesktop || !kickCredentialsConfigured || !chatStatus.serverRunning || !chatStatus.tunnelRunning || channels.length === 0 || chatBusy}>未登録チャンネルを購読</button>
           </div>
-          <div className="notice">設定手順：①「チャット受信を開始」②表示されたURLをKick Developerの対象アプリでWebhooksを有効にしてWebhook URLへ登録 ③「登録チャンネルを購読」を実行。Quick TunnelのURLは起動ごとに変わるため、再起動後はDeveloper側のURLも更新してください。アプリが起動中のみ受信できます。</div>
+          <div className="notice">設定手順：①「チャット受信を開始」②表示されたURLをKick Developerの対象アプリでWebhooksを有効にしてWebhook URLへ登録 ③「購読状態を確認」④「未登録チャンネルを購読」を実行。Quick TunnelのURLは起動ごとに変わるため、再起動後はDeveloper側のURLも更新してください。アプリが起動中のみ受信できます。</div>
           <p className="settings-help">{chatStatus.message}</p>
           {chatMessage && <div className="api-message" role="status">{chatMessage}</div>}
           {!isDesktop && <div className="notice">チャット受信はWindowsデスクトップ版で利用できます。</div>}
