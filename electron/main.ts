@@ -1244,9 +1244,14 @@ function registerIpcHandlers(): void {
     return listStreamArticles(getRecordingOutputDirectory(), slug);
   });
 
-  ipcMain.handle("articles:generate", (event, input: unknown) => {
+  ipcMain.handle("articles:generate", async (event, input: unknown) => {
     assertTrustedSender(event);
-    return generateStreamArticle(input, getRecordingOutputDirectory());
+    const article = generateStreamArticle(input, getRecordingOutputDirectory());
+    const settings = readState().settings;
+    if (settings.aiArticleEnabled && readOpenAiApiKey()) {
+      return liveArticleManager.enhanceArchivedArticle(article);
+    }
+    return article;
   });
 
   ipcMain.handle("comment-video:list-logs", event => {
