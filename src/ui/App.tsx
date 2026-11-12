@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 type OllamaStatus = { connected: boolean; baseUrl: string; models: Array<{ name: string; size: number }>; message?: string };
 type ChatStatus = { serverRunning: boolean; tunnelRunning: boolean; localUrl: string; publicUrl: string; receivedCount: number; lastMessageAt: string | null; message: string };
+type ChatSubscriptionStatus = { slug: string; broadcasterUserId: number | null; subscribed: boolean; subscriptionId: string | null; createdAt: string | null };
 type KickRecorderSavedChatMessage = { messageId: string; slug: string; broadcaster: string; user: string; text: string; timestamp: string; receivedAt: string; badges: string[]; emotes: Array<{ emoteId: string; start: number; end: number }> };
 type KickRecorderArticle = { id: string; slug: string; broadcaster: string; streamTitle: string; startedAt: string | null; generatedAt: string; commentCount: number; isFinal: boolean; title: string; summary: string; paragraphs: string[]; topics: string[]; provider: string; model: string };
 
@@ -61,7 +62,7 @@ type RecordingEvent = {
   message?: string;
 };
 
-const APP_VERSION = "0.1.0-beta.13";
+const APP_VERSION = "0.1.0-beta.14";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -144,6 +145,9 @@ export default function App() {
   const [kickMessage, setKickMessage] = useState("");
   const [chatStatus, setChatStatus] = useState<ChatStatus>({ serverRunning: false, tunnelRunning: false, localUrl: "", publicUrl: "", receivedCount: 0, lastMessageAt: null, message: "停止中" });
   const [chatBusy, setChatBusy] = useState(false);
+  const [chatSubscriptionStatuses, setChatSubscriptionStatuses] = useState<ChatSubscriptionStatus[]>([]);
+  const [chatSubscriptionLoading, setChatSubscriptionLoading] = useState(false);
+  const [chatSubscriptionCheckedAt, setChatSubscriptionCheckedAt] = useState("");
   const [chatMessage, setChatMessage] = useState("");
   const [chatSelectedChannel, setChatSelectedChannel] = useState("");
   const chatSelectedChannelRef = useRef("");
@@ -466,6 +470,34 @@ export default function App() {
     } finally { setChatBusy(false); }
   }
 
+  async function loadChatSubscriptionStatuses(): Promise<ChatSubscriptionStatus[]> {
+    if (!window.kickRecorder) throw new Error("Windowsデスクトップ版で利用できます。");
+    const statuses = await window.kickRecorder.getChatSubscriptionStatus(channels.map(channel => channel.name));
+    setChatSubscriptionStatuses(statuses);
+    setChatSubscriptionCheckedAt(new Date().toLocaleString("ja-JP"));
+    return statuses;
+  }
+
+  async function refreshChatSubscriptionStatus() {
+    if (!window.kickRecorder || channels.length === 0) {
+      setChatMessage("先に監視チャンネルを登録してください。");
+      return;
+    }
+    setChatSubscriptionLoading(true);
+    try {
+      const statuses = await loadChatSubscriptionStatuses();
+      const subscribedCount = statuses.filter(status => status.subscribed).length;
+      const unresolvedCount = statuses.filter(status => !status.broadcasterUserId).length;
+      setChatMessage("Kick APIの購読一覧を確認しました：" + subscribedCount + "/" + statuses.length + "件が登録済みです。" +
+        (unresolvedCount ? " チャンネルを確認できないものが" + unresolvedCount + "件あります。" : "") +
+        " 実際のコメント到達は受信件数で確認してください。");
+    } catch (error) {
+      setChatMessage(error instanceof Error ? error.message : "購読状態を確認できませんでした。");
+    } finally {
+      setChatSubscriptionLoading(false);
+    }
+  }
+
   async function registerChatSubscriptions() {
     if (!window.kickRecorder || channels.length === 0) {
       setChatMessage("先に監視チャンネルを登録してください。");
@@ -476,7 +508,15 @@ export default function App() {
       const results = await window.kickRecorder.subscribeChat(channels.map(channel => channel.name));
       const successCount = results.filter(result => result.ok).length;
       const errors = results.filter(result => !result.ok).map(result => `${result.slug}: ${result.message}`);
-      setChatMessage(`購読登録要求：${successCount}/${results.length}件成功。${errors.length ? " エラー：" + errors.join(" / ") : " 実際のコメント受信は受信件数で確認してください。"}`);
+      let statusNote = "";
+      try {
+        const statuses = await loadChatSubscriptionStatuses();
+        const activeCount = statuses.filter(status => status.subscribed).length;
+        statusNote = " Kick APIの一覧では" + activeCount + "/" + statuses.length + "件が登録済みです。";
+      } catch {
+        statusNote = " 購読状態の再確認はできませんでした。";
+      }
+      setChatMessage(`購読登録：${successCount}/${results.length}件成功。${errors.length ? " エラー：" + errors.join(" / ") : ""}${statusNote} 実際のコメント到達は受信件数で確認してください。`);
     } catch (error) {
       setChatMessage(error instanceof Error ? error.message : "購読登録に失敗しました。");
     } finally { setChatBusy(false); }
@@ -992,6 +1032,26 @@ export default function App() {
             <div><small>保存コメント</small><strong>{chatStatus.receivedCount.toLocaleString("ja-JP")}件</strong></div>
             <div><small>最終受信</small><strong>{chatStatus.lastMessageAt ? new Date(chatStatus.lastMessageAt).toLocaleTimeString("ja-JP") : "未受信"}</strong></div>
           </div>
+          <div className="chat-subscription-panel">
+            <div className="chat-subscription-heading">
+              <strong>チャンネル別の購読状態</strong>
+              <small>{chatSubscriptionCheckedAt ? "最終確認：" + chatSubscriptionCheckedAt : "まだ確認していません"}</small>
+            </div>
+            {channels.length === 0
+              ? <p className="settings-help">先に監視チャンネルを追加してください。</p>
+              : <div className="chat-subscription-list">
+                  {channels.map(channel => {
+                    const status = chatSubscriptionStatuses.find(item => item.slug === channel.name.toLowerCase());
+                    const label = !status ? "未確認" : !status.broadcasterUserId ? "チャンネル未検出" : status.subscribed ? "登録済み" : "未登録";
+                    return <div className="chat-subscription-row" key={channel.id}>
+                      <strong>{channel.name}</strong>
+                      <span className={status?.subscribed ? "api-state connected" : "api-state"}>{label}</span>
+                      {status?.createdAt && <small>登録日時：{new Date(status.createdAt).toLocaleString("ja-JP")}</small>}
+                    </div>;
+                  })}
+                </div>}
+            <p className="settings-help">表示はKick公式APIの購読一覧に基づきます。購読登録済みでも、Webhook URLの設定や実際のコメント到達を保証するものではありません。</p>
+          </div>
           {chatStatus.publicUrl && <label className="credential-field">Kick Developerへ登録するWebhook URL
             <input readOnly value={chatStatus.publicUrl} onFocus={event => event.currentTarget.select()} />
           </label>}
@@ -1000,7 +1060,8 @@ export default function App() {
               ? <button className="primary-small" onClick={() => void startChatCapture()} disabled={!isDesktop || !kickCredentialsConfigured || chatBusy}>{chatBusy ? "起動中..." : "チャット受信を開始"}</button>
               : <button className="small-action" onClick={() => void stopChatCapture()} disabled={chatBusy}>受信を停止</button>}
             <button className="small-action" onClick={() => void copyWebhookUrl()} disabled={!chatStatus.publicUrl}>Webhook URLをコピー</button>
-            <button className="small-action" onClick={() => void registerChatSubscriptions()} disabled={!isDesktop || !kickCredentialsConfigured || !chatStatus.serverRunning || !chatStatus.tunnelRunning || channels.length === 0 || chatBusy}>登録チャンネルを購読</button>
+            <button className="small-action" onClick={() => void refreshChatSubscriptionStatus()} disabled={!isDesktop || !kickCredentialsConfigured || channels.length === 0 || chatSubscriptionLoading || chatBusy}>{chatSubscriptionLoading ? "確認中..." : "購読状態を確認"}</button>
+            <button className="small-action" onClick={() => void registerChatSubscriptions()} disabled={!isDesktop || !kickCredentialsConfigured || !chatStatus.serverRunning || !chatStatus.tunnelRunning || channels.length === 0 || chatBusy}>未登録チャンネルを購読</button>
           </div>
           <div className="notice">設定手順：①「チャット受信を開始」②表示されたURLをKick Developerの対象アプリでWebhooksを有効にしてWebhook URLへ登録 ③「登録チャンネルを購読」を実行。Quick TunnelのURLは起動ごとに変わるため、再起動後はDeveloper側のURLも更新してください。アプリが起動中のみ受信できます。</div>
           <p className="settings-help">{chatStatus.message}</p>
