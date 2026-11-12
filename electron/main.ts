@@ -448,6 +448,7 @@ type SavedKickArticle = {
 let articleTimer: NodeJS.Timeout | null = null;
 let articleCycleRunning = false;
 const liveArticleChannels = new Set<string>();
+const liveArticleMetadata = new Map<string, KickChannelCheck>();
 const lastArticleMessageIds = new Map<string, string>();
 
 function getArticleDirectory(): string {
@@ -478,8 +479,15 @@ async function createKickArticle(slugInput: unknown, metadata?: KickChannelCheck
     throw new Error("記事生成対象のチャンネル名が不正です。");
   }
   const slug = slugInput.toLowerCase();
-  const messages = chatReceiver.listMessages(slug, 5000);
-  if (messages.length === 0) throw new Error(`${slug} の保存済みチャットがありません。`);
+  const allMessages = chatReceiver.listMessages(slug, 5000);
+  const streamStart = metadata?.startedAt ? Date.parse(metadata.startedAt) : Number.NaN;
+  const messages = Number.isFinite(streamStart) && streamStart > Date.UTC(2000, 0, 1)
+    ? allMessages.filter(message => {
+        const timestamp = Date.parse(message.timestamp);
+        return !Number.isFinite(timestamp) || timestamp >= streamStart;
+      })
+    : allMessages;
+  if (messages.length === 0) throw new Error(`${slug} の今回の配信に該当する保存済みチャットがありません。`);
 
   const ollamaStatus = await getOllamaStatus();
   if (!ollamaStatus.connected) {
@@ -534,6 +542,7 @@ async function runLiveArticleCycle(): Promise<void> {
     for (const result of results) {
       if (result.isLive) {
         liveArticleChannels.add(result.slug);
+        liveArticleMetadata.set(result.slug, result);
         const messages = chatReceiver.listMessages(result.slug, 5000);
         const lastMessage = messages[messages.length - 1];
         if (!lastMessage || lastArticleMessageIds.get(result.slug) === lastMessage.messageId) continue;
@@ -547,8 +556,10 @@ async function runLiveArticleCycle(): Promise<void> {
         }
       } else if (result.found && liveArticleChannels.has(result.slug)) {
         liveArticleChannels.delete(result.slug);
+        const finalMetadata = liveArticleMetadata.get(result.slug) ?? result;
+        liveArticleMetadata.delete(result.slug);
         try {
-          await createKickArticle(result.slug, result, true);
+          await createKickArticle(result.slug, finalMetadata, true);
         } catch (error) {
           mainWindow?.webContents.send("articles:status", {
             slug: result.slug,
@@ -577,6 +588,7 @@ function stopLiveArticleTimer(): void {
   if (articleTimer) clearInterval(articleTimer);
   articleTimer = null;
   liveArticleChannels.clear();
+  liveArticleMetadata.clear();
 }
 
 
@@ -1055,10 +1067,6 @@ if (!hasSingleInstanceLock) {
     });
   });
 }
-
-app.on("before-quit", () => {
-  recordingManager.stopAll();
-});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
