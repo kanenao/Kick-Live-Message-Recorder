@@ -56,6 +56,8 @@ type UpdateStatus = {
   currentVersion: string;
   availableVersion?: string;
   percent?: number;
+  releaseNotes?: string;
+  releaseDate?: string;
   message: string;
 };
 
@@ -107,6 +109,42 @@ type StreamArticle = {
 type CommentVideoEvent = { status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string; outputPath?: string; generatedComments?: number; skippedComments?: number };
 
 const APP_VERSION = "0.1.0-beta.30";
+const VERSION_HISTORY = [
+  {
+    version: "0.1.0-beta.30",
+    title: "配信記事・バージョン管理の強化",
+    changes: [
+      "登録配信者ごとの放送内容記事を生成・保存する機能を追加",
+      "コメント数・投稿者数・頻出キーワード・コメント例を記事に掲載",
+      "バージョン更新ページとリリース履歴を追加"
+    ]
+  },
+  {
+    version: "0.1.0-beta.29",
+    title: "24時間バックグラウンド監視",
+    changes: [
+      "通知領域常駐中も登録チャンネルのLIVE監視を継続",
+      "配信開始時の自動録画・コメント自動接続を強化",
+      "Windowsログイン時の自動起動とスリープ抑止を追加"
+    ]
+  },
+  {
+    version: "0.1.0-beta.28",
+    title: "コメント付き動画の同期改善",
+    changes: [
+      "日付をまたいだ配信の複数コメントログをまとめて利用可能に",
+      "ログの並び順と不正行の集計を改善"
+    ]
+  },
+  {
+    version: "0.1.0-beta.27",
+    title: "コメント付き動画生成",
+    changes: [
+      "コメントを右から左へ流して録画動画へ合成する機能を追加",
+      "文字サイズ・表示時間・行数・画質の調整に対応"
+    ]
+  }
+];
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -245,7 +283,7 @@ export default function App() {
   const [vodDownloadActive, setVodDownloadActive] = useState(false);
   const [vodChatStatus, setVodChatStatus] = useState("");
   const [vodChatActive, setVodChatActive] = useState(false);
-  const [tab, setTab] = useState<"dashboard" | "recording" | "library" | "comment-video" | "articles" | "settings">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "recording" | "library" | "comment-video" | "articles" | "updates" | "settings">("dashboard");
   const [isReady, setIsReady] = useState(false);
   const [storageError, setStorageError] = useState("");
   const [appDataDirectory, setAppDataDirectory] = useState("");
@@ -991,13 +1029,15 @@ export default function App() {
       <button className={tab === "recording" ? "nav-item selected" : "nav-item"} onClick={() => setTab("recording")}>● <span>録画専用</span></button>
       <button className={tab === "library" ? "nav-item selected" : "nav-item"} onClick={() => setTab("library")}>▤ <span>録画ライブラリ</span></button>
       <button className={tab === "comment-video" ? "nav-item selected" : "nav-item"} onClick={() => setTab("comment-video")}>✦ <span>コメント付き動画</span></button>\n      <button className={tab === "articles" ? "nav-item selected" : "nav-item"} onClick={() => setTab("articles")}>▤ <span>配信記事</span></button>
+      <div className="nav-label">アプリ</div>
+      <button className={tab === "updates" ? "nav-item selected" : "nav-item"} onClick={() => setTab("updates")}>↻ <span>バージョン更新</span></button>
       <button className={tab === "settings" ? "nav-item selected" : "nav-item"} onClick={() => setTab("settings")}>⚙ <span>設定</span></button>
       <div className="sidebar-bottom"><span className="status-dot" /> β版・開発テスト中<small>現在のバージョン {appVersion}</small></div>
     </aside>
 
     <main className="main">
       <header className="topbar">
-        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "recording" ? "録画専用" : tab === "library" ? "録画ライブラリ" : tab === "comment-video" ? "コメント付き動画を生成" : tab === "articles" ? "配信記事" : "設定"}</h1></div>
+        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "recording" ? "録画専用" : tab === "library" ? "録画ライブラリ" : tab === "comment-video" ? "コメント付き動画を生成" : tab === "articles" ? "配信記事" : tab === "updates" ? "バージョン更新" : "設定"}</h1></div>
         <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="beta-tag">β版</span><div className="avatar">KR</div></div>
       </header>
 
@@ -1332,6 +1372,54 @@ export default function App() {
             </article>)}
           </div>
         </>}
+      </section>}
+
+      {tab === "updates" && <section className="panel version-update-panel">
+        <div className="panel-heading">
+          <div><h2>バージョン更新</h2><p>新しいβ版の確認・ダウンロード・更新履歴をここで管理できます</p></div>
+          <a className="text-button" href="https://github.com/kanenao/Kick-Live-Message-Recorder/releases" target="_blank" rel="noreferrer">GitHub Releases ↗</a>
+        </div>
+        <div className="version-update-grid">
+          <div className="version-current-card">
+            <span className="version-card-label">現在インストール中</span>
+            <strong>v{appVersion}</strong>
+            <small>Kick Live Message Recorder</small>
+            <div className="version-card-foot">Windows 64bit・β版</div>
+          </div>
+          <div className="version-check-card">
+            <div className="version-check-heading">
+              <div><span className="version-card-label">更新状態</span><strong>{updateStatus.availableVersion ? `v${updateStatus.availableVersion}` : "最新バージョン確認"}</strong></div>
+              <span className={`update-state-pill update-state-${updateStatus.status}`}>{updateStatus.status === "checking" ? "確認中" : updateStatus.status === "available" ? "更新あり" : updateStatus.status === "downloading" ? "ダウンロード中" : updateStatus.status === "downloaded" ? "更新準備完了" : updateStatus.status === "not-available" ? "最新です" : updateStatus.status === "error" ? "エラー" : "待機中"}</span>
+            </div>
+            <p className="version-update-message">{updateStatus.message}</p>
+            {(updateStatus.status === "downloading" || updateStatus.status === "downloaded") && <div className="version-progress-wrap">
+              <div className="version-progress-label"><span>ダウンロード進捗</span><strong>{Math.round(updateStatus.percent ?? 0)}%</strong></div>
+              <div className="version-progress"><div style={{ width: `${Math.max(0, Math.min(100, updateStatus.percent ?? 0))}%` }} /></div>
+            </div>}
+            <div className="version-update-actions">
+              <button className="primary-small" onClick={() => void checkForAppUpdates()} disabled={isCheckingUpdates || updateStatus.status === "checking" || updateStatus.status === "downloading"}>{isCheckingUpdates || updateStatus.status === "checking" ? "確認中..." : "更新を確認"}</button>
+              {updateStatus.status === "downloaded" && <button className="small-action" onClick={() => void installAppUpdate()}>再起動して更新</button>}
+            </div>
+            <small className="version-update-hint">起動時と約6時間ごとに自動確認します。Windowsインストーラー版では新しい更新を自動ダウンロードします。適用は再起動時に行われます。</small>
+          </div>
+        </div>
+        {updateStatus.releaseNotes && <div className="release-notes-panel">
+          <div className="settings-subheading"><h3>配信中のリリースノート</h3>{updateStatus.releaseDate && <span className="comment-video-log-count">{new Date(updateStatus.releaseDate).toLocaleDateString("ja-JP")}</span>}</div>
+          <pre>{updateStatus.releaseNotes}</pre>
+        </div>}
+        <div className="version-history-section">
+          <div className="settings-subheading"><h3>バージョン更新履歴</h3><span className="api-state connected">{VERSION_HISTORY.length}件</span></div>
+          <div className="version-history-list">
+            {VERSION_HISTORY.map((release, index) => <article className="version-history-item" key={release.version}>
+              <div className="version-history-marker">{index === 0 ? "NEW" : "β"}</div>
+              <div className="version-history-content">
+                <div className="version-history-heading"><strong>v{release.version}</strong><span>{release.title}</span></div>
+                <ul>{release.changes.map(change => <li key={change}>{change}</li>)}</ul>
+              </div>
+            </article>)}
+          </div>
+        </div>
+        <div className="notice">自動更新はGitHub Releasesに公開されたWindowsインストーラー版が対象です。ブラウザー版プレビューやZIP版では、更新ファイルを手動で取得してください。</div>
       </section>}
 
       {tab === "settings" && <section className="panel">
