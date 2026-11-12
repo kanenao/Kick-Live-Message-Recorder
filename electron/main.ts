@@ -778,14 +778,23 @@ function scheduleBackgroundMonitor(delayMs: number): void {
   }, Math.max(0, delayMs));
 }
 
-function notifyBackgroundLive(result: KickChannelCheck, recordingStarted: boolean): void {
+function notifyBackgroundLive(
+  result: KickChannelCheck,
+  recordingStarted: boolean,
+  commentCaptureEnabled: boolean
+): void {
   if (!Notification.isSupported()) return;
+  const actionMessage = recordingStarted
+    ? (commentCaptureEnabled
+      ? "自動録画・コメント取得を開始しました。"
+      : "自動録画を開始しました（コメント自動取得OFF）。")
+    : (commentCaptureEnabled ? "コメントを自動取得中です。" : "配信を検知しました。");
   const details = [
     result.streamTitle || "配信タイトル未設定",
     result.categoryName,
     result.startedAt ? "開始 " + new Date(result.startedAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }) : "",
     result.viewerCount.toLocaleString("ja-JP") + " 人視聴中",
-    recordingStarted ? "自動録画・コメント取得を開始しました。" : "配信を検知しました。"
+    actionMessage
   ].filter(Boolean).join(" ・ ");
   new Notification({ title: (result.displayName || result.slug) + " がLIVEを開始しました", body: details }).show();
 }
@@ -828,10 +837,12 @@ async function runBackgroundMonitor(): Promise<void> {
 
       const normalChannel = state.channels.find(channel => channel.name.toLowerCase() === result.slug);
       const recordingOnly = state.recordingOnlyChannels.find(channel => channel.name.toLowerCase() === result.slug);
-      const shouldRecord = state.settings.autoRecordOnStreamStart && (
-        normalChannel?.mode === "auto" ||
-        (!normalChannel && Boolean(recordingOnly) && state.settings.autoRecordRecordingOnlyOnStreamStart)
-      );
+      const shouldRecord = normalChannel
+        ? state.settings.autoRecordOnStreamStart && normalChannel.mode === "auto"
+        : Boolean(recordingOnly && state.settings.autoRecordRecordingOnlyOnStreamStart);
+      const commentCaptureEnabled = normalChannel
+        ? state.settings.autoReceiveChat
+        : Boolean(recordingOnly && state.settings.autoReceiveChatForRecordingOnly);
       let recordingStarted = false;
       if (shouldRecord && !recordingManager.isRecording(result.slug)) {
         try {
@@ -846,7 +857,7 @@ async function runBackgroundMonitor(): Promise<void> {
           });
         }
       }
-      if (state.settings.notifyOnLive) notifyBackgroundLive(result, recordingStarted);
+      if (state.settings.notifyOnLive) notifyBackgroundLive(result, recordingStarted, commentCaptureEnabled);
     }
     for (const key of [...backgroundPreviousLiveState.keys()]) {
       if (!slugs.includes(key)) backgroundPreviousLiveState.delete(key);

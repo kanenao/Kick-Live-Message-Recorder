@@ -1314,7 +1314,7 @@ export default function App() {
             <label className="setting-control"><input type="checkbox" checked={settings.autoRecordOnStreamStart} onChange={e => setSettings(prev => ({ ...prev, autoRecordOnStreamStart: e.target.checked }))} /><span>{settings.autoRecordOnStreamStart ? "有効" : "無効"}</span></label>
           </div>
           <div className="setting-row">
-            <div><strong>録画専用チャンネルも配信開始時に自動録画</strong><small>録画専用一覧に登録したチャンネルも、LIVE検知時に録画とコメント取得を開始します。</small></div>
+            <div><strong>録画専用チャンネルの配信開始時に自動録画</strong><small>通常チャンネルの自動録画設定とは独立してON／OFFできます。コメントは録画専用の自動取得設定が有効な場合に保存します。</small></div>
             <label className="setting-control"><input type="checkbox" checked={settings.autoRecordRecordingOnlyOnStreamStart} onChange={e => setSettings(prev => ({ ...prev, autoRecordRecordingOnlyOnStreamStart: e.target.checked }))} /><span>{settings.autoRecordRecordingOnlyOnStreamStart ? "有効" : "無効"}</span></label>
           </div>
           <div className="setting-row">
