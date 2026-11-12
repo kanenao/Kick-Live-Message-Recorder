@@ -87,6 +87,7 @@ export class KickChatReceiver {
   private message = "チャット受信サーバーは停止中です。";
   private publicKeyCache: { pem: string; expiresAt: number } | null = null;
   private readonly seenMessageIds = new Set<string>();
+  private seenMessageIdsPath = "";
 
   constructor(private readonly onEvent: (event: ChatServiceEvent) => void) {}
 
@@ -114,6 +115,10 @@ export class KickChatReceiver {
   async startServer(outputDirectory: string): Promise<ChatServiceStatus> {
     if (this.server?.listening) return this.getStatus();
     this.outputDirectory = outputDirectory;
+    const chatDirectory = join(outputDirectory, "ChatLogs");
+    mkdirSync(chatDirectory, { recursive: true });
+    this.seenMessageIdsPath = join(chatDirectory, ".webhook-message-ids.txt");
+    this.loadRecentMessageIds();
     const server = createServer((req, res) => {
       void this.handleRequest(req, res).catch(error => {
         console.error("Kick webhook request failed:", error);
@@ -247,6 +252,33 @@ export class KickChatReceiver {
     return messages.reverse();
   }
 
+  private loadRecentMessageIds(): void {
+    this.seenMessageIds.clear();
+    if (!this.seenMessageIdsPath || !existsSync(this.seenMessageIdsPath)) return;
+    try {
+      const recent = readFileSync(this.seenMessageIdsPath, "utf8").split(/\r?\n/).filter(Boolean).slice(-10000);
+      for (const id of recent) this.seenMessageIds.add(id);
+    } catch (error) {
+      console.error("Failed to read webhook dedupe index:", error);
+    }
+  }
+
+  private rememberMessageId(messageId: string): void {
+    if (this.seenMessageIds.has(messageId)) return;
+    this.seenMessageIds.add(messageId);
+    const oldest = this.seenMessageIds.size > 10000 ? this.seenMessageIds.values().next().value : undefined;
+    if (oldest) this.seenMessageIds.delete(oldest);
+    try {
+      if (oldest) {
+        writeFileSync(this.seenMessageIdsPath, [...this.seenMessageIds].join("\n") + "\n", "utf8");
+      } else {
+        appendFileSync(this.seenMessageIdsPath, messageId + "\n", { encoding: "utf8", mode: 0o600 });
+      }
+    } catch (error) {
+      console.error("Failed to persist webhook dedupe index:", error);
+    }
+  }
+
   private findCloudflared(userDataDirectory: string): string {
     const candidates = [
       join(process.resourcesPath, "tools", "cloudflared.exe"),
@@ -297,13 +329,8 @@ export class KickChatReceiver {
       respond(res, 200, "重複イベントを確認済みです。");
       return;
     }
-    this.seenMessageIds.add(messageId);
-    if (this.seenMessageIds.size > 10000) {
-      const oldest = this.seenMessageIds.values().next().value;
-      if (oldest) this.seenMessageIds.delete(oldest);
-    }
-
     if (eventType !== "chat.message.sent" || version !== "1") {
+      this.rememberMessageId(messageId);
       respond(res, 200, "対象外イベントを受け付けました。");
       return;
     }
@@ -351,6 +378,7 @@ export class KickChatReceiver {
     mkdirSync(directory, { recursive: true });
     const filePath = join(directory, `${slug}_${dateForFile(timestampText)}.jsonl`);
     appendFileSync(filePath, JSON.stringify(message) + "\n", { encoding: "utf8", mode: 0o600 });
+    this.rememberMessageId(messageId);
     this.receivedCount += 1;
     this.lastMessageAt = message.receivedAt;
     this.message = `${slug} のコメントを保存しました（${this.receivedCount.toLocaleString("ja-JP")}件）。`;
