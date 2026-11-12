@@ -694,7 +694,7 @@ function updateLaunchAtLogin(): void {
 }
 
 function updateSleepBlocker(enabled: boolean): void {
-  if (enabled && sleepBlockerId === null) sleepBlockerId = powerSaveBlocker.start("prevent-app-suspension");
+  if (enabled && sleepBlockerId === null) sleepBlockerId = powerSaveBlocker.start("prevent-display-sleep");
   else if (!enabled && sleepBlockerId !== null) {
     powerSaveBlocker.stop(sleepBlockerId);
     sleepBlockerId = null;

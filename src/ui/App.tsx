@@ -1329,7 +1329,7 @@ export default function App() {
             <label className="setting-control"><input type="checkbox" checked={settings.launchAtLogin} onChange={e => setSettings(prev => ({ ...prev, launchAtLogin: e.target.checked }))} /><span>{settings.launchAtLogin ? "有効" : "無効"}</span></label>
           </div>
           <div className="setting-row">
-            <div><strong>監視中はPCのスリープを抑止</strong><small>監視中にWindowsがスリープへ移行しないよう要求します。ディスプレイは消灯できます。</small></div>
+            <div><strong>監視中はPCのスリープを抑止</strong><small>Windowsのスリープとディスプレイ消灯を抑止します。画面が点灯したままになるため、不要な場合はOFFにしてください。</small></div>
             <label className="setting-control"><input type="checkbox" checked={settings.preventSystemSleep} onChange={e => setSettings(prev => ({ ...prev, preventSystemSleep: e.target.checked }))} /><span>{settings.preventSystemSleep ? "有効" : "無効"}</span></label>
           </div>
           <div className="setting-row">
