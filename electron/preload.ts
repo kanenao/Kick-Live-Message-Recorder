@@ -22,6 +22,9 @@ type AppSettings = {
   preventSystemSleep: boolean;
   notifyOnLive: boolean;
   showRecordingPreview: boolean;
+  aiArticleEnabled: boolean;
+  aiArticleModel: string;
+  aiArticleIntervalSeconds: number;
 };
 
 type AppState = {
@@ -64,6 +67,12 @@ type StreamArticle = {
   id: string; slug: string; displayName: string; headline: string; category: string; startedAt: string;
   durationSeconds: number; commentCount: number; uniqueCommenters: number; keywords: string[];
   paragraphs: string[]; sourceVideo: string; sourceLogs: string[]; createdAt: string;
+  status?: "live" | "completed"; aiGenerated?: boolean; aiSummary?: string; highlights?: string[];
+  lastAiUpdateAt?: string | null; viewerCount?: number; peakViewerCount?: number; aiError?: string;
+};
+type AiArticleStatus = {
+  configured: boolean; encryptionAvailable: boolean;
+  aiArticleEnabled: boolean; aiArticleModel: string; aiArticleIntervalSeconds: number;
 };
 type CommentVideoEvent = {
   status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string;
@@ -205,6 +214,15 @@ const api = {
     ipcRenderer.invoke("recording:open", filePath),
   revealRecording: (filePath: string): Promise<{ ok: true }> =>
     ipcRenderer.invoke("recording:reveal", filePath),
+  getAiArticleStatus: (): Promise<AiArticleStatus> => ipcRenderer.invoke("ai-article:get-status"),
+  saveAiArticleKey: (apiKey: string): Promise<{ ok: true }> => ipcRenderer.invoke("ai-article:save-key", apiKey),
+  clearAiArticleKey: (): Promise<{ ok: true }> => ipcRenderer.invoke("ai-article:clear-key"),
+  testAiArticleConnection: (model: string): Promise<{ ok: true; message: string }> => ipcRenderer.invoke("ai-article:test", model),
+  onStreamArticleUpdate: (callback: (article: StreamArticle) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, article: StreamArticle): void => callback(article);
+    ipcRenderer.on("articles:updated", listener);
+    return () => ipcRenderer.removeListener("articles:updated", listener);
+  },
   listStreamArticles: (slug?: string): Promise<StreamArticle[]> => ipcRenderer.invoke("articles:list", slug),
   generateStreamArticle: (input: { videoPath: string; slug: string; displayName?: string; category?: string; headline?: string; chatPaths?: string[] }): Promise<StreamArticle> =>
     ipcRenderer.invoke("articles:generate", input),
