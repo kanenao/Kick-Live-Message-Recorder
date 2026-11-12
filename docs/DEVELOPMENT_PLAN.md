@@ -50,8 +50,11 @@
 - [ ] 異常終了・ネットワーク切断時の復旧
 
 ### Phase 3: チャット記録
-- [ ] 利用可能な公式API/イベントの認証要件を検証
-- [ ] メッセージ本文・投稿者・受信時刻の保存
+- [x] Kick公式Events APIの chat.message.sent を使う購読要求の実装
+- [x] 公開Webhook受信サーバーとCloudflare Quick Tunnelの起動
+- [x] Kick公開鍵を取得してRSA署名を検証してから保存
+- [x] メッセージ本文・投稿者・受信時刻・バッジ・エモート情報のJSONL保存
+- [ ] Kick Developer側Webhook URL設定後の実配信受信テスト（Webhook到達確認を含む）
 - [ ] 録画タイムラインとの時刻同期
 - [ ] XML/SRT/ASS/JSON出力とエモート処理
 - [ ] CSV/JSONエクスポート
