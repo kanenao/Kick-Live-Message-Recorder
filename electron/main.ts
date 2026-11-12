@@ -21,6 +21,7 @@ import { KickChatReceiver } from "./chat";
 import { KickVodChatDownloader } from "./vod-chat";
 import { KickCommentVideoGenerator, listCommentLogFiles } from "./comment-video";
 import { generateStreamArticle, listStreamArticles } from "./articles";
+import { LiveStreamArticleManager } from "./live-articles";
 import { deleteRecordingFile, isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
 
 // Chromiumが提供する標準メニューやコンテキストメニューも日本語で表示する。
@@ -50,6 +51,9 @@ type AppSettings = {
   recordingRetryDelaySeconds: number;
   notifyOnLive: boolean;
   showRecordingPreview: boolean;
+  aiArticleEnabled: boolean;
+  aiArticleModel: string;
+  aiArticleIntervalSeconds: number;
 };
 
 type AppState = {
@@ -75,7 +79,10 @@ const DEFAULT_STATE: AppState = {
     recordingRetryCount: 5,
     recordingRetryDelaySeconds: 10,
     notifyOnLive: true,
-    showRecordingPreview: true
+    showRecordingPreview: true,
+    aiArticleEnabled: false,
+    aiArticleModel: "gpt-6-luna",
+    aiArticleIntervalSeconds: 120
   }
 };
 
@@ -154,6 +161,43 @@ function getKickChannelRateLimitWaitSeconds(response?: Response): number {
     ? Number(value)
     : Math.ceil((Date.parse(value) - Date.now()) / 1000);
   return Math.max(1, Math.min(3600, Number.isFinite(seconds) ? seconds : 60));
+}
+
+function getOpenAiCredentialsPath(): string {
+  return join(app.getPath("userData"), "openai-article-credentials.json");
+}
+
+function readOpenAiApiKey(): string | null {
+  const filePath = getOpenAiCredentialsPath();
+  if (!existsSync(filePath) || !safeStorage.isEncryptionAvailable()) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(filePath, "utf8")) as { encryptedApiKey?: unknown };
+    if (typeof parsed.encryptedApiKey !== "string") return null;
+    return safeStorage.decryptString(Buffer.from(parsed.encryptedApiKey, "base64")) || null;
+  } catch { return null; }
+}
+
+function saveOpenAiApiKey(input: unknown): { ok: true } {
+  if (!safeStorage.isEncryptionAvailable()) throw new Error("このWindows環境では暗号化ストレージを利用できません。");
+  if (typeof input !== "string" || input.trim().length < 20 || input.trim().length > 1024) {
+    throw new Error("有効なOpenAI APIキーを入力してください。");
+  }
+  const directory = app.getPath("userData");
+  mkdirSync(directory, { recursive: true });
+  const temporaryPath = join(directory, `openai-article-${process.pid}-${Date.now()}.tmp`);
+  writeFileSync(temporaryPath, JSON.stringify({ encryptedApiKey: safeStorage.encryptString(input.trim()).toString("base64") }), { encoding: "utf8", mode: 0o600 });
+  renameSync(temporaryPath, getOpenAiCredentialsPath());
+  return { ok: true };
+}
+
+function clearOpenAiApiKey(): { ok: true } {
+  const filePath = getOpenAiCredentialsPath();
+  if (existsSync(filePath)) unlinkSync(filePath);
+  return { ok: true };
+}
+
+function getOpenAiCredentialStatus(): { configured: boolean; encryptionAvailable: boolean } {
+  return { configured: Boolean(readOpenAiApiKey()), encryptionAvailable: safeStorage.isEncryptionAvailable() };
 }
 
 function getKickCredentialsPath(): string {
@@ -546,8 +590,19 @@ function showMainWindow(): void {
   mainWindow.focus();
 }
 
+const liveArticleManager = new LiveStreamArticleManager(
+  getRecordingOutputDirectory,
+  () => {
+    const settings = readState().settings;
+    return { enabled: settings.aiArticleEnabled, model: settings.aiArticleModel, intervalSeconds: settings.aiArticleIntervalSeconds };
+  },
+  readOpenAiApiKey,
+  article => mainWindow?.webContents.send("articles:updated", article)
+);
+
 const recordingManager = new KickRecordingManager(event => {
   mainWindow?.webContents.send("recording:status", event);
+  if (event.filePath && event.status !== "error") liveArticleManager.attachRecording(event.slug, event.filePath);
 });
 
 const commentVideoGenerator = new KickCommentVideoGenerator(event => {
@@ -557,7 +612,10 @@ const commentVideoGenerator = new KickCommentVideoGenerator(event => {
 const chatReceiver = new KickChatReceiver(
   getRecordingOutputDirectory,
   () => readState().settings.saveChat,
-  message => mainWindow?.webContents.send("chat:message", message),
+  message => {
+    liveArticleManager.onChatMessage(message);
+    mainWindow?.webContents.send("chat:message", message);
+  },
   status => mainWindow?.webContents.send("chat:status", status)
 );
 
@@ -632,7 +690,12 @@ function normalizeState(input: unknown): AppState {
         ? Math.max(5, Math.min(60, Math.round(settings.recordingRetryDelaySeconds)))
         : 10,
       notifyOnLive: settings.notifyOnLive !== false,
-      showRecordingPreview: settings.showRecordingPreview !== false
+      showRecordingPreview: settings.showRecordingPreview !== false,
+      aiArticleEnabled: settings.aiArticleEnabled === true,
+      aiArticleModel: typeof settings.aiArticleModel === "string" && /^[a-zA-Z0-9._-]{1,100}$/.test(settings.aiArticleModel)
+        ? settings.aiArticleModel : "gpt-6-luna",
+      aiArticleIntervalSeconds: typeof settings.aiArticleIntervalSeconds === "number" && Number.isFinite(settings.aiArticleIntervalSeconds)
+        ? Math.max(30, Math.min(600, Math.round(settings.aiArticleIntervalSeconds))) : 120
     }
   };
 }
@@ -723,9 +786,10 @@ function updateSleepBlocker(enabled: boolean): void {
 }
 
 function getBackgroundChatSlugs(state: AppState): string[] {
+  const aiArticleChatEnabled = state.settings.aiArticleEnabled && Boolean(readOpenAiApiKey());
   const selected = [
-    ...(state.settings.autoReceiveChat ? state.channels : []),
-    ...(state.settings.autoReceiveChatForRecordingOnly ? state.recordingOnlyChannels : [])
+    ...(state.settings.autoReceiveChat || aiArticleChatEnabled ? state.channels : []),
+    ...(state.settings.autoReceiveChatForRecordingOnly || aiArticleChatEnabled ? state.recordingOnlyChannels : [])
   ];
   return [...new Set(selected.map(channel => channel.name.toLowerCase()))];
 }
@@ -854,6 +918,13 @@ async function runBackgroundMonitor(): Promise<void> {
       const live = result.found && result.isLive;
       const wasLive = backgroundPreviousLiveState.get(result.slug) === true;
       backgroundPreviousLiveState.set(result.slug, live);
+      const articleMetadata = {
+        slug: result.slug, displayName: result.displayName || result.slug,
+        streamTitle: result.streamTitle, categoryName: result.categoryName,
+        startedAt: result.startedAt, viewerCount: result.viewerCount
+      };
+      if (live) liveArticleManager.startOrUpdate(articleMetadata);
+      else if (wasLive) void liveArticleManager.finishStream(articleMetadata);
       if (!live || wasLive) continue;
 
       const normalChannel = state.channels.find(channel => channel.name.toLowerCase() === result.slug);
@@ -1044,6 +1115,30 @@ function registerIpcHandlers(): void {
     }
     autoUpdater.quitAndInstall();
     return { ok: true };
+  });
+
+  ipcMain.handle("ai-article:get-status", event => {
+    assertTrustedSender(event);
+    return { ...getOpenAiCredentialStatus(), ...readState().settings };
+  });
+
+  ipcMain.handle("ai-article:save-key", (event, apiKey: unknown) => {
+    assertTrustedSender(event);
+    const result = saveOpenAiApiKey(apiKey);
+    configureBackgroundServices();
+    return result;
+  });
+
+  ipcMain.handle("ai-article:clear-key", event => {
+    assertTrustedSender(event);
+    const result = clearOpenAiApiKey();
+    configureBackgroundServices();
+    return result;
+  });
+
+  ipcMain.handle("ai-article:test", async (event, model: unknown) => {
+    assertTrustedSender(event);
+    return liveArticleManager.testConnection(model);
   });
 
   ipcMain.handle("kick:get-credentials-status", event => {
