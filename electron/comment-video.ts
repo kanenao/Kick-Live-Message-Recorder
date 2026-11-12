@@ -74,15 +74,15 @@ type LaneState = {
 
 const COMMENT_FONT_FAMILIES: Record<CommentVideoFontFamily, string> = {
   "ms-pgothic": "ＭＳ Ｐゴシック",
-  "meiryo": "メイリオ",
+  "meiryo": "Meiryo",
   "yu-gothic": "游ゴシック",
   "arial": "Arial"
 };
 
 function normalizeFontFamily(value: unknown): CommentVideoFontFamily {
-  return value === "meiryo" || value === "yu-gothic" || value === "arial"
+  return value === "ms-pgothic" || value === "yu-gothic" || value === "arial"
     ? value
-    : "ms-pgothic";
+    : "meiryo";
 }
 
 type VideoInfo = {
