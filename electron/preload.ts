@@ -61,12 +61,17 @@ type UpdateStatus = {
 
 type KickChannelCheck = {
   slug: string;
+  broadcasterUserId: number | null;
   found: boolean;
   isLive: boolean;
   streamTitle: string;
   viewerCount: number;
   startedAt: string | null;
 };
+
+type ChatServiceStatus = { serverRunning: boolean; tunnelRunning: boolean; localUrl: string; publicUrl: string; receivedCount: number; lastMessageAt: string | null; message: string };
+type SavedChatMessage = { messageId: string; slug: string; broadcaster: string; user: string; text: string; timestamp: string; receivedAt: string; badges: string[]; emotes: Array<{ emoteId: string; start: number; end: number }> };
+type ChatEvent = { type: "status"; status: ChatServiceStatus } | { type: "message"; message: SavedChatMessage };
 
 const api = {
   loadState: (): Promise<AppState> => ipcRenderer.invoke("app:load-state"),
@@ -83,6 +88,16 @@ const api = {
     ipcRenderer.invoke("kick:save-credentials", credentials),
   clearKickCredentials: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("kick:clear-credentials"),
   checkKickChannels: (slugs: string[]): Promise<KickChannelCheck[]> => ipcRenderer.invoke("kick:check-channels", slugs),
+  getChatStatus: (): Promise<ChatServiceStatus> => ipcRenderer.invoke("chat:get-status"),
+  startChat: (): Promise<ChatServiceStatus> => ipcRenderer.invoke("chat:start"),
+  stopChat: (): Promise<ChatServiceStatus> => ipcRenderer.invoke("chat:stop"),
+  subscribeChat: (slugs: string[]): Promise<Array<{ slug: string; ok: boolean; message: string }>> => ipcRenderer.invoke("chat:subscribe", slugs),
+  listChatMessages: (slug: string): Promise<SavedChatMessage[]> => ipcRenderer.invoke("chat:list", slug),
+  onChatEvent: (callback: (event: ChatEvent) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, event: ChatEvent): void => callback(event);
+    ipcRenderer.on("chat:event", listener);
+    return () => ipcRenderer.removeListener("chat:event", listener);
+  },
   getUpdateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke("updater:get-status"),
   checkForUpdates: (): Promise<UpdateStatus> => ipcRenderer.invoke("updater:check"),
   installUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("updater:install"),
