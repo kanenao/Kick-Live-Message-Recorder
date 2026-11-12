@@ -60,9 +60,11 @@ type RecordingEvent = {
   status: "starting" | "recording" | "stopped" | "error";
   filePath?: string;
   message?: string;
+  startedAt?: string;
+  endedAt?: string;
 };
 
-const APP_VERSION = "0.1.0-beta.14";
+const APP_VERSION = "0.1.0-beta.15";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -648,6 +650,33 @@ export default function App() {
     }
   }
 
+  async function exportRecordingComments(filePath: string) {
+    if (!window.kickRecorder) return;
+    setChatExporting(true);
+    setRecordingMessage("録画時刻とKickコメントを照合して、流れるコメント字幕を作成しています...");
+    try {
+      const result = await window.kickRecorder.exportRecordingChatAss(filePath);
+      if (!result.saved) {
+        setRecordingMessage("コメント字幕の書き出しをキャンセルしました。");
+        return;
+      }
+      const duration = typeof result.durationMs === "number"
+        ? Math.max(0, Math.floor(result.durationMs / 1000))
+        : 0;
+      const referenceNote = result.startReference === "filename-and-file-modified-time"
+        ? "（旧録画のためファイル名と更新時刻から推定）"
+        : "（録画プロセスの起動時刻を基準）";
+      setRecordingMessage(
+        result.count.toLocaleString("ja-JP") + "件のコメント字幕を作成しました：" + result.path +
+        " ／ " + result.slug + " ／ 動画時間 " + Math.floor(duration / 60) + "分" + (duration % 60) + "秒 " + referenceNote
+      );
+    } catch (error) {
+      setRecordingMessage(error instanceof Error ? error.message : "コメント字幕を作成できませんでした。");
+    } finally {
+      setChatExporting(false);
+    }
+  }
+
   async function exportChatLog(format: "csv" | "jsonl") {
     if (!window.kickRecorder || !chatSelectedChannel) return;
     setChatExporting(true);
@@ -839,9 +868,11 @@ export default function App() {
                       <small>{new Date(file.modifiedAt).toLocaleString("ja-JP")} ・ {file.extension} ・ {(file.size / (1024 * 1024)).toFixed(1)} MB</small>
                     </div>
                     <button className="primary-small" onClick={() => void openRecordingFile(file.path)}>再生</button>
+                    <button className="small-action" onClick={() => void exportRecordingComments(file.path)} disabled={chatExporting}>コメント字幕(ASS)</button>
                     <button className="small-action" onClick={() => void revealRecordingFile(file.path)}>保存先を表示</button>
                   </div>)}
                 </div>}
+        <div className="notice">コメント字幕(ASS)は録画時刻とKickコメントの投稿時刻を照合して作成します。β14以前の録画はファイル名と更新時刻から開始・終了時刻を推定します。開始時刻は録画プロセス起動基準のため、映像の最初のフレームと数秒ずれる場合があります。</div>
         <div className="data-path-note">保存先：{settings.outputDirectory || "アプリ既定のビデオフォルダー"}</div>
       </section>}
 
