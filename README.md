@@ -51,7 +51,7 @@ Kickの配信を監視・録画し、公式Webhookでチャットを保存する
 2. アプリの設定画面でClient IDとClient Secretを保存します。
 3. 「チャット受信を開始」を押し、表示されたWebhook URLをコピーします。
 4. Kick DeveloperのWebhook URL欄に貼り付けて保存します。
-5. アプリで「登録チャンネルを購読」を押します。
+5. アプリで「購読状態を確認」を押し、未登録チャンネルがある場合は「一覧未検出チャンネルを購読」を押します。
 6. 実際の配信チャットを投稿して、アプリの受信件数が増えることを確認します。
 
 Webhook URLはCloudflare Quick Tunnelから毎回発行されます。アプリ再起動後はURLが変わるため、Kick Developer側のWebhook URLも更新してください。設定手順の詳細は [CHAT-WEBHOOK-SETUP.md](CHAT-WEBHOOK-SETUP.md) を参照してください。
