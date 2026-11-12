@@ -244,3 +244,5 @@
 @keyframes comment-video-preview-scroll{from{left:100%;transform:translateX(0)}to{left:0;transform:translateX(-100%)}}
 .comment-video-preview>small{display:block;margin-top:9px;color:#8492a1;font-size:9px;line-height:1.6}
 @media(max-width:760px){.comment-video-preview{padding:10px}.comment-video-preview-screen{min-height:140px}.comment-video-preview-heading{align-items:flex-start;flex-direction:column;gap:4px}}
+
+.comment-video-preview-summary{margin:0 0 10px;padding:8px 10px;border:1px solid #334252;border-radius:6px;background:#151c26;color:#aebdce;font-size:10px;line-height:1.6}
