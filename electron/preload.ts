@@ -74,6 +74,10 @@ const api = {
   selectOutputDirectory: (): Promise<string | null> => ipcRenderer.invoke("app:select-output-directory"),
   notifyLive: (slug: string): Promise<{ ok: boolean }> => ipcRenderer.invoke("app:notify-live", slug),
   getAppInfo: (): Promise<AppInfo> => ipcRenderer.invoke("app:get-info"),
+  getOllamaStatus: (): Promise<{ connected: boolean; baseUrl: string; models: Array<{ name: string; size: number }>; message?: string }> =>
+    ipcRenderer.invoke("ollama:get-status"),
+  generateOllamaArticle: (input: { title?: string; broadcaster?: string; startedAt?: string; comments: Array<{ user?: string; text: string; timestamp?: string }> }): Promise<{ title: string; summary: string; paragraphs: string[]; topics: string[]; provider: string; model: string }> =>
+    ipcRenderer.invoke("ollama:generate-article", input),
   getKickCredentialsStatus: (): Promise<KickCredentialsStatus> => ipcRenderer.invoke("kick:get-credentials-status"),
   saveKickCredentials: (credentials: { clientId: string; clientSecret: string }): Promise<{ ok: boolean; clientId: string }> =>
     ipcRenderer.invoke("kick:save-credentials", credentials),
