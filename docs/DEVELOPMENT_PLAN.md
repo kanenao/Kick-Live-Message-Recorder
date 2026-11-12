@@ -54,6 +54,8 @@
 - [x] 公開Webhook受信サーバーとCloudflare Quick Tunnelの起動
 - [x] Kick公開鍵を取得してRSA署名を検証してから保存
 - [x] メッセージ本文・投稿者・受信時刻・バッジ・エモート情報のJSONL保存
+- [x] アプリ内チャットビューアー・検索・更新
+- [x] CSV/JSONLエクスポート（CSVはExcel向けUTF-8 BOM付き）
 - [ ] Kick Developer側Webhook URL設定後の実配信受信テスト（Webhook到達確認を含む）
 - [ ] 録画タイムラインとの時刻同期
 - [ ] XML/SRT/ASS/JSON出力とエモート処理
