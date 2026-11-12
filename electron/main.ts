@@ -654,7 +654,11 @@ let isQuitting = false;
 let backgroundMonitorTimer: NodeJS.Timeout | null = null;
 let backgroundMonitorInFlight = false;
 let backgroundMonitorSignature = "";
+let backgroundMonitorWasEnabled = false;
 let backgroundChatSignature = "";
+let backgroundChatRetrySignature = "";
+let backgroundChatRetryTimer: NodeJS.Timeout | null = null;
+let backgroundChatLastError = "";
 let sleepBlockerId: number | null = null;
 const backgroundPreviousLiveState = new Map<string, boolean>();
 let backgroundMonitorStatus: BackgroundMonitorStatus = {
@@ -705,33 +709,64 @@ function getBackgroundChatSlugs(state: AppState): string[] {
   return [...new Set(selected.map(channel => channel.name.toLowerCase()))];
 }
 
+function clearBackgroundChatRetry(): void {
+  if (backgroundChatRetryTimer) clearTimeout(backgroundChatRetryTimer);
+  backgroundChatRetryTimer = null;
+  backgroundChatRetrySignature = "";
+}
+
 function syncBackgroundChatReceiver(state: AppState): void {
   const slugs = getBackgroundChatSlugs(state);
   const signature = slugs.join("|");
   const desired = chatReceiver.getDesiredSlugs().join("|");
   if (!signature) {
+    clearBackgroundChatRetry();
     backgroundChatSignature = "";
+    backgroundChatLastError = "";
     if (desired) void chatReceiver.stop().catch(error => console.error("Chat receiver stop failed:", error));
     return;
   }
   if (slugs.length > 50) {
+    clearBackgroundChatRetry();
     backgroundChatSignature = "";
-    publishBackgroundMonitorStatus({ lastError: "コメント自動取得は最大50チャンネルです。対象を50件以内にしてください。" });
+    backgroundChatLastError = "コメント自動取得は最大50チャンネルです。対象を50件以内にしてください。";
+    if (desired) void chatReceiver.stop().catch(error => console.error("Chat receiver stop failed:", error));
+    publishBackgroundMonitorStatus({ lastError: backgroundChatLastError });
     return;
   }
+  if (backgroundChatRetryTimer && backgroundChatRetrySignature === signature) return;
+  if (backgroundChatRetryTimer && backgroundChatRetrySignature !== signature) clearBackgroundChatRetry();
   if (desired === signature && backgroundChatSignature === signature) return;
   if (desired === signature) {
     backgroundChatSignature = signature;
+    clearBackgroundChatRetry();
+    backgroundChatLastError = "";
+    publishBackgroundMonitorStatus({ lastError: "" });
     return;
   }
+
   backgroundChatSignature = signature;
-  void chatReceiver.start(slugs).catch(error => {
-    if (backgroundChatSignature === signature) backgroundChatSignature = "";
+  void chatReceiver.start(slugs).then(() => {
+    if (backgroundChatSignature !== signature) return;
+    clearBackgroundChatRetry();
+    backgroundChatLastError = "";
+    publishBackgroundMonitorStatus({ lastError: "" });
+  }).catch(error => {
+    if (backgroundChatSignature !== signature || isQuitting) return;
+    backgroundChatSignature = "";
+    backgroundChatLastError = "コメント接続エラー：" + (error instanceof Error ? error.message : String(error));
     console.error("Background chat receiver start failed:", error);
     publishBackgroundMonitorStatus({
-      lastError: "コメント接続エラー：" + (error instanceof Error ? error.message : String(error)),
-      message: "配信監視中。コメント受信は再試行します。"
+      lastError: backgroundChatLastError,
+      message: "配信監視中。コメント受信の接続を15秒後に再試行します。"
     });
+    clearBackgroundChatRetry();
+    backgroundChatRetrySignature = signature;
+    backgroundChatRetryTimer = setTimeout(() => {
+      backgroundChatRetryTimer = null;
+      backgroundChatRetrySignature = "";
+      if (!isQuitting) syncBackgroundChatReceiver(readState());
+    }, 15_000);
   });
 }
 
@@ -764,9 +799,10 @@ async function runBackgroundMonitor(): Promise<void> {
   ])].slice(0, 200);
 
   if (!state.settings.autoMonitorEnabled || slugs.length === 0 || !getKickCredentialsStatus().configured) {
+    backgroundPreviousLiveState.clear();
     publishBackgroundMonitorStatus({
       running: false, enabled: state.settings.autoMonitorEnabled, monitoredChannels: slugs.length,
-      intervalSeconds: state.settings.monitorIntervalSeconds,
+      intervalSeconds: state.settings.monitorIntervalSeconds, lastError: backgroundChatLastError,
       message: !state.settings.autoMonitorEnabled ? "自動監視は設定で停止中です。"
         : slugs.length === 0 ? "監視するチャンネルを登録してください。"
         : "Kick APIのClient ID／Secretを設定してください。"
@@ -818,7 +854,7 @@ async function runBackgroundMonitor(): Promise<void> {
     const lastCheckAt = new Date().toISOString();
     publishBackgroundMonitorStatus({
       running: true, monitoredChannels: slugs.length, intervalSeconds: state.settings.monitorIntervalSeconds,
-      lastCheckAt, lastError: "", results,
+      lastCheckAt, lastError: backgroundChatLastError, results,
       message: `24時間監視中 · ${slugs.length}チャンネル · 約${state.settings.monitorIntervalSeconds}秒間隔`
     });
   } catch (error) {
@@ -827,7 +863,8 @@ async function runBackgroundMonitor(): Promise<void> {
     if (retryAfterMs > 0) nextDelay = Math.max(nextDelay, retryAfterMs + 1000);
     publishBackgroundMonitorStatus({
       running: true, monitoredChannels: slugs.length, intervalSeconds: state.settings.monitorIntervalSeconds,
-      lastError: detail, message: "監視エラー。自動再試行します。"
+      lastError: [detail, backgroundChatLastError].filter(Boolean).join(" / "),
+      message: "監視エラー。自動再試行します。"
     });
   } finally {
     backgroundMonitorInFlight = false;
@@ -860,9 +897,11 @@ function configureBackgroundServices(): void {
     backgroundMonitorTimer = null;
   }
   if (!enabled) {
+    backgroundMonitorWasEnabled = false;
+    backgroundPreviousLiveState.clear();
     publishBackgroundMonitorStatus({
       enabled: state.settings.autoMonitorEnabled, running: false, monitoredChannels: slugs.length,
-      intervalSeconds: state.settings.monitorIntervalSeconds,
+      intervalSeconds: state.settings.monitorIntervalSeconds, lastError: backgroundChatLastError,
       message: !state.settings.autoMonitorEnabled ? "自動監視は設定で停止中です。"
         : slugs.length === 0 ? "監視するチャンネルを登録してください。"
         : "Kick APIのClient ID／Secretを設定してください。"
@@ -870,6 +909,8 @@ function configureBackgroundServices(): void {
     updateSleepBlocker(false);
     return;
   }
+  if (!backgroundMonitorWasEnabled) backgroundPreviousLiveState.clear();
+  backgroundMonitorWasEnabled = true;
   updateSleepBlocker(state.settings.preventSystemSleep);
   publishBackgroundMonitorStatus({
     enabled: true, running: true, monitoredChannels: slugs.length,
@@ -1322,6 +1363,7 @@ app.on("before-quit", () => {
   isQuitting = true;
   if (backgroundMonitorTimer) clearTimeout(backgroundMonitorTimer);
   backgroundMonitorTimer = null;
+  clearBackgroundChatRetry();
   updateSleepBlocker(false);
   tray?.destroy();
   tray = null;
