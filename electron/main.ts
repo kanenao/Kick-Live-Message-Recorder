@@ -11,12 +11,12 @@ import {
   type IpcMainInvokeEvent,
   type MenuItemConstructorOptions
 } from "electron";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { basename, extname, join } from "node:path";
 import { autoUpdater } from "electron-updater";
 import { isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
 import { getOllamaStatus, generateKickBroadcastArticle } from "./ollama";
-import { KickChatReceiver } from "./chat";
+import { KickChatReceiver, type SavedKickChatMessage } from "./chat";
 
 // Chromiumが提供する標準メニューやコンテキストメニューも日本語で表示する。
 app.commandLine.appendSwitch("lang", "ja-JP");
@@ -812,6 +812,150 @@ function assertTrustedSender(event: IpcMainInvokeEvent): void {
   }
 }
 
+
+type RecordingTimeline = {
+  slug: string;
+  startedAt: string;
+  endedAt: string;
+  startReference: string;
+};
+
+function getRecordingTimeline(videoPath: string): RecordingTimeline {
+  let fileStats: ReturnType<typeof statSync>;
+  try {
+    fileStats = statSync(videoPath);
+  } catch {
+    throw new Error("録画ファイルの情報を取得できませんでした。");
+  }
+  if (!fileStats.isFile()) throw new Error("指定されたパスは動画ファイルではありません。");
+
+  const metadataPath = videoPath + ".recording.json";
+  if (existsSync(metadataPath)) {
+    try {
+      const metadata = JSON.parse(readFileSync(metadataPath, "utf8")) as {
+        version?: unknown; slug?: unknown; startedAt?: unknown; endedAt?: unknown; startReference?: unknown;
+      };
+      const startedMs = typeof metadata.startedAt === "string" ? Date.parse(metadata.startedAt) : Number.NaN;
+      const endedMs = typeof metadata.endedAt === "string" ? Date.parse(metadata.endedAt) : Number.NaN;
+      if (
+        metadata.version === 1 &&
+        typeof metadata.slug === "string" &&
+        /^[a-zA-Z0-9_]{1,25}$/.test(metadata.slug) &&
+        Number.isFinite(startedMs) &&
+        Number.isFinite(endedMs) &&
+        endedMs > startedMs
+      ) {
+        return {
+          slug: metadata.slug.toLowerCase(),
+          startedAt: new Date(startedMs).toISOString(),
+          endedAt: new Date(endedMs).toISOString(),
+          startReference: typeof metadata.startReference === "string" ? metadata.startReference : "recording-metadata"
+        };
+      }
+    } catch {
+      // 破損・古いサイドカーファイルはファイル名からの推定へ切り替える。
+    }
+  }
+
+  // β14以前の録画はファイル名の開始時刻とファイル更新時刻を使って補完する。
+  const stem = basename(videoPath).replace(/\.[^.]+$/, "");
+  const match = stem.match(/^([a-zA-Z0-9_]+)_(\d{8})_(\d{6})$/);
+  if (!match) {
+    throw new Error("録画時刻情報がありません。チャンネル名_YYYYMMDD_HHMMSS 形式の録画ファイルが必要です。");
+  }
+  const slug = match[1];
+  const datePart = match[2];
+  const timePart = match[3];
+  const startedAt = new Date(
+    Number(datePart.slice(0, 4)),
+    Number(datePart.slice(4, 6)) - 1,
+    Number(datePart.slice(6, 8)),
+    Number(timePart.slice(0, 2)),
+    Number(timePart.slice(2, 4)),
+    Number(timePart.slice(4, 6))
+  );
+  const endedAt = fileStats.mtime;
+  if (!Number.isFinite(startedAt.getTime()) || endedAt.getTime() <= startedAt.getTime()) {
+    throw new Error("録画の開始・終了時刻を正しく推定できませんでした。");
+  }
+  return {
+    slug: slug.toLowerCase(),
+    startedAt: startedAt.toISOString(),
+    endedAt: endedAt.toISOString(),
+    startReference: "filename-and-file-modified-time"
+  };
+}
+
+function formatAssTime(milliseconds: number): string {
+  const centiseconds = Math.max(0, Math.floor(milliseconds / 10));
+  const totalSeconds = Math.floor(centiseconds / 100);
+  const pad = (value: number): string => String(value).padStart(2, "0");
+  return Math.floor(totalSeconds / 3600) + ":" +
+    pad(Math.floor(totalSeconds / 60) % 60) + ":" +
+    pad(totalSeconds % 60) + "." + pad(centiseconds % 100);
+}
+
+function escapeAssText(value: string): string {
+  return value
+    .replace(/\\/g, "＼")
+    .replace(/{/g, "｛")
+    .replace(/}/g, "｝")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .slice(0, 140);
+}
+
+function createCommentAss(
+  messages: SavedKickChatMessage[],
+  timeline: RecordingTimeline
+): { content: string; count: number } {
+  const startMs = Date.parse(timeline.startedAt);
+  const endMs = Date.parse(timeline.endedAt);
+  const laneCount = 14;
+  const laneHeight = 70;
+  const laneFreeAt = Array.from({ length: laneCount }, () => 0);
+  const dialogue: string[] = [];
+  const ordered = messages
+    .map(message => ({ message, timestampMs: Date.parse(message.timestamp || message.receivedAt) }))
+    .filter(item => Number.isFinite(item.timestampMs) && item.timestampMs >= startMs && item.timestampMs <= endMs)
+    .sort((a, b) => a.timestampMs - b.timestampMs);
+
+  for (const item of ordered) {
+    const text = escapeAssText(item.message.text);
+    if (!text) continue;
+    const offset = item.timestampMs - startMs;
+    const travelDuration = Math.max(7500, Math.min(20000, Math.round((1920 + text.length * 42) / 240 * 1000)));
+    let lane = laneFreeAt.findIndex(availableAt => availableAt <= offset);
+    if (lane < 0) {
+      lane = laneFreeAt.indexOf(Math.min(...laneFreeAt));
+    }
+    laneFreeAt[lane] = offset + travelDuration;
+    const y = 38 + lane * laneHeight;
+    const end = offset + travelDuration;
+    const effect = "{\\move(1960," + y + ",-1200," + y + ",0," + travelDuration + ")\\fad(150,250)}";
+    dialogue.push("Dialogue: 0," + formatAssTime(offset) + "," + formatAssTime(end) + ",Default,,0,0,0,," + effect + text);
+  }
+
+  const header = [
+    "[Script Info]",
+    "Title: Kick Live Message Recorder - Chat Overlay",
+    "ScriptType: v4.00+",
+    "WrapStyle: 2",
+    "ScaledBorderAndShadow: yes",
+    "PlayResX: 1920",
+    "PlayResY: 1080",
+    "",
+    "[V4+ Styles]",
+    "Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding",
+    "Style: Default,Meiryo,42,&H00FFFFFF,&H0000FFFF,&H00101010,&H64000000,1,0,0,0,100,100,0,0,1,3,1,7,20,20,20,1",
+    "",
+    "[Events]",
+    "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
+  ];
+  return { content: header.concat(dialogue).join("\r\n") + "\r\n", count: dialogue.length };
+}
+
 function registerIpcHandlers(): void {
   ipcMain.handle("app:load-state", event => {
     assertTrustedSender(event);
@@ -957,6 +1101,50 @@ function registerIpcHandlers(): void {
   ipcMain.handle("chat:list", (event, slug: unknown) => {
     assertTrustedSender(event);
     return chatReceiver.listMessages(slug, 500, getRecordingOutputDirectory());
+  });
+
+
+  ipcMain.handle("recording:export-chat-ass", async (event, inputPath: unknown) => {
+    assertTrustedSender(event);
+    const directory = getRecordingOutputDirectory();
+    if (
+      typeof inputPath !== "string" ||
+      !isPathInsideDirectory(inputPath, directory) ||
+      !existsSync(inputPath) ||
+      ![".mp4", ".mkv", ".ts", ".webm", ".m4v", ".mov"].includes(extname(inputPath).toLowerCase())
+    ) {
+      throw new Error("対象の録画ファイルが見つからないか、保存先フォルダー外です。");
+    }
+
+    const timeline = getRecordingTimeline(inputPath);
+    const messages = chatReceiver.listMessages(timeline.slug, 5000, directory);
+    if (messages.length === 0) {
+      throw new Error(timeline.slug + " の保存済みコメントがありません。チャット受信ログを確認してください。");
+    }
+    const generated = createCommentAss(messages, timeline);
+    if (generated.count === 0) {
+      throw new Error("この録画時間内のコメントが見つかりません。配信開始時刻とコメント時刻を確認してください。");
+    }
+    if (!mainWindow) throw new Error("アプリ画面が利用できません。");
+    const defaultPath = inputPath.replace(/\.[^.]+$/, "") + ".comments.ass";
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: "コメント字幕（ASS）を書き出す",
+      defaultPath,
+      buttonLabel: "字幕を保存",
+      filters: [{ name: "ASS字幕ファイル", extensions: ["ass"] }]
+    });
+    if (result.canceled || !result.filePath) return { saved: false, count: generated.count };
+    writeFileSync(result.filePath, generated.content, { encoding: "utf8", mode: 0o600 });
+    return {
+      saved: true,
+      path: result.filePath,
+      count: generated.count,
+      slug: timeline.slug,
+      startedAt: timeline.startedAt,
+      endedAt: timeline.endedAt,
+      durationMs: Date.parse(timeline.endedAt) - Date.parse(timeline.startedAt),
+      startReference: timeline.startReference
+    };
   });
 
   ipcMain.handle("chat:export", async (event, input: unknown) => {
