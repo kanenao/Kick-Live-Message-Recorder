@@ -11,7 +11,7 @@ import {
   type IpcMainInvokeEvent,
   type MenuItemConstructorOptions
 } from "electron";
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { autoUpdater } from "electron-updater";
 import { isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
@@ -37,6 +37,7 @@ type AppSettings = {
   autoMonitorEnabled: boolean;
   monitorIntervalSeconds: number;
   notifyOnLive: boolean;
+  autoGenerateArticles: boolean;
 };
 
 type AppState = {
@@ -52,7 +53,8 @@ const DEFAULT_STATE: AppState = {
     outputDirectory: "",
     autoMonitorEnabled: true,
     monitorIntervalSeconds: 60,
-    notifyOnLive: true
+    notifyOnLive: true,
+    autoGenerateArticles: true
   }
 };
 
@@ -426,7 +428,160 @@ const chatReceiver = new KickChatReceiver(event => {
   mainWindow?.webContents.send("chat:event", event);
 });
 
+type SavedKickArticle = {
+  id: string;
+  slug: string;
+  broadcaster: string;
+  streamTitle: string;
+  startedAt: string | null;
+  generatedAt: string;
+  commentCount: number;
+  isFinal: boolean;
+  title: string;
+  summary: string;
+  paragraphs: string[];
+  topics: string[];
+  provider: string;
+  model: string;
+};
+
+let articleTimer: NodeJS.Timeout | null = null;
+let articleCycleRunning = false;
+const liveArticleChannels = new Set<string>();
+const lastArticleMessageIds = new Map<string, string>();
+
+function getArticleDirectory(): string {
+  const directory = join(getRecordingOutputDirectory(), "Articles");
+  mkdirSync(directory, { recursive: true });
+  return directory;
+}
+
+function listSavedArticles(): SavedKickArticle[] {
+  const directory = getArticleDirectory();
+  return readdirSync(directory)
+    .filter(name => name.toLowerCase().endsWith(".json"))
+    .map(name => {
+      try {
+        const article = JSON.parse(readFileSync(join(directory, name), "utf8")) as SavedKickArticle;
+        return article && typeof article.id === "string" && typeof article.slug === "string" ? article : null;
+      } catch {
+        return null;
+      }
+    })
+    .filter((article): article is SavedKickArticle => article !== null)
+    .sort((a, b) => Date.parse(b.generatedAt) - Date.parse(a.generatedAt))
+    .slice(0, 100);
+}
+
+async function createKickArticle(slugInput: unknown, metadata?: KickChannelCheck, isFinal = false): Promise<SavedKickArticle> {
+  if (typeof slugInput !== "string" || !/^[a-zA-Z0-9_]{1,25}$/.test(slugInput)) {
+    throw new Error("記事生成対象のチャンネル名が不正です。");
+  }
+  const slug = slugInput.toLowerCase();
+  const messages = chatReceiver.listMessages(slug, 5000);
+  if (messages.length === 0) throw new Error(`${slug} の保存済みチャットがありません。`);
+
+  const ollamaStatus = await getOllamaStatus();
+  if (!ollamaStatus.connected) {
+    throw new Error(ollamaStatus.message || "Ollamaに接続できません。Ollamaを起動してください。");
+  }
+  if (ollamaStatus.models.length === 0) {
+    throw new Error("Ollamaにモデルがありません。PowerShellで ollama pull qwen2.5:3b を実行してください。");
+  }
+  const preferredModel = ollamaStatus.models.find(model => model.name === "qwen2.5:3b") ?? ollamaStatus.models[0];
+  const generated = await generateKickBroadcastArticle({
+    model: preferredModel.name,
+    title: metadata?.streamTitle || slug,
+    broadcaster: slug,
+    startedAt: metadata?.startedAt || undefined,
+    comments: messages.map(message => ({
+      user: message.user,
+      text: message.text,
+      timestamp: message.timestamp
+    }))
+  });
+
+  const generatedAt = new Date().toISOString();
+  const id = `${slug}-${generatedAt.replace(/[:.]/g, "-")}`;
+  const article: SavedKickArticle = {
+    id,
+    slug,
+    broadcaster: slug,
+    streamTitle: metadata?.streamTitle || slug,
+    startedAt: metadata?.startedAt ?? null,
+    generatedAt,
+    commentCount: messages.length,
+    isFinal,
+    ...generated
+  };
+  writeFileSync(join(getArticleDirectory(), `${id}.json`), JSON.stringify(article, null, 2), {
+    encoding: "utf8",
+    mode: 0o600
+  });
+  const lastMessage = messages[messages.length - 1];
+  if (lastMessage) lastArticleMessageIds.set(slug, lastMessage.messageId);
+  mainWindow?.webContents.send("articles:new", article);
+  return article;
+}
+
+async function runLiveArticleCycle(): Promise<void> {
+  if (articleCycleRunning || !chatReceiver.getStatus().serverRunning) return;
+  articleCycleRunning = true;
+  try {
+    const state = readState();
+    if (!state.settings.autoGenerateArticles || state.channels.length === 0) return;
+    const results = await checkKickChannels(state.channels.map(channel => channel.name));
+    for (const result of results) {
+      if (result.isLive) {
+        liveArticleChannels.add(result.slug);
+        const messages = chatReceiver.listMessages(result.slug, 5000);
+        const lastMessage = messages[messages.length - 1];
+        if (!lastMessage || lastArticleMessageIds.get(result.slug) === lastMessage.messageId) continue;
+        try {
+          await createKickArticle(result.slug, result, false);
+        } catch (error) {
+          mainWindow?.webContents.send("articles:status", {
+            slug: result.slug,
+            message: error instanceof Error ? error.message : String(error)
+          });
+        }
+      } else if (result.found && liveArticleChannels.has(result.slug)) {
+        liveArticleChannels.delete(result.slug);
+        try {
+          await createKickArticle(result.slug, result, true);
+        } catch (error) {
+          mainWindow?.webContents.send("articles:status", {
+            slug: result.slug,
+            message: error instanceof Error ? error.message : String(error)
+          });
+        }
+      }
+    }
+  } catch (error) {
+    mainWindow?.webContents.send("articles:status", {
+      slug: "",
+      message: error instanceof Error ? error.message : "配信記事の自動生成を確認できませんでした。"
+    });
+  } finally {
+    articleCycleRunning = false;
+  }
+}
+
+function startLiveArticleTimer(): void {
+  if (articleTimer) clearInterval(articleTimer);
+  articleTimer = setInterval(() => { void runLiveArticleCycle(); }, 3 * 60 * 1000);
+  articleTimer.unref();
+}
+
+function stopLiveArticleTimer(): void {
+  if (articleTimer) clearInterval(articleTimer);
+  articleTimer = null;
+  liveArticleChannels.clear();
+}
+
+
 app.on("before-quit", () => {
+  stopLiveArticleTimer();
   chatReceiver.stop();
   recordingManager.stopAll();
 });
@@ -480,7 +635,8 @@ function normalizeState(input: unknown): AppState {
         Number.isFinite(settings.monitorIntervalSeconds)
         ? Math.max(30, Math.min(3600, Math.round(settings.monitorIntervalSeconds)))
         : 60,
-      notifyOnLive: settings.notifyOnLive !== false
+      notifyOnLive: settings.notifyOnLive !== false,
+      autoGenerateArticles: settings.autoGenerateArticles !== false
     }
   };
 }
@@ -641,11 +797,14 @@ function registerIpcHandlers(): void {
   ipcMain.handle("chat:start", async event => {
     assertTrustedSender(event);
     await chatReceiver.startServer(getRecordingOutputDirectory());
-    return chatReceiver.startTunnel(app.getPath("userData"));
+    const status = await chatReceiver.startTunnel(app.getPath("userData"));
+    startLiveArticleTimer();
+    return status;
   });
 
   ipcMain.handle("chat:stop", event => {
     assertTrustedSender(event);
+    stopLiveArticleTimer();
     return chatReceiver.stop();
   });
 
@@ -657,6 +816,17 @@ function registerIpcHandlers(): void {
   ipcMain.handle("chat:list", (event, slug: unknown) => {
     assertTrustedSender(event);
     return chatReceiver.listMessages(slug, 500);
+  });
+
+  ipcMain.handle("articles:list", event => {
+    assertTrustedSender(event);
+    return listSavedArticles();
+  });
+
+  ipcMain.handle("articles:generate", async (event, slug: unknown) => {
+    assertTrustedSender(event);
+    const results = await checkKickChannels([slug]);
+    return createKickArticle(slug, results[0], false);
   });
 
   ipcMain.handle("recording:start", (event, slug: unknown) => {
