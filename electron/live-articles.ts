@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { KickChatMessage } from "./chat";
 
@@ -146,7 +146,7 @@ export class LiveStreamArticleManager {
     if (existing) {
       existing.article.viewerCount = Math.max(0, Math.floor(metadata.viewerCount));
       existing.article.peakViewerCount = Math.max(existing.article.peakViewerCount ?? 0, existing.article.viewerCount);
-      if (metadata.streamTitle) existing.article.headline = metadata.streamTitle.slice(0, 160);
+      if (metadata.streamTitle && !existing.article.aiGenerated) existing.article.headline = metadata.streamTitle.slice(0, 160);
       if (metadata.categoryName) existing.article.category = metadata.categoryName.slice(0, 80);
       this.persist(existing);
       return;
@@ -359,13 +359,11 @@ export class LiveStreamArticleManager {
     const temporaryPath = filePath + ".tmp";
     try {
       writeFileSync(temporaryPath, JSON.stringify(article, null, 2), "utf8");
-      // rename over the same target is atomic on supported Windows filesystems when the target is not open.
-      const fs = require("node:fs") as typeof import("node:fs");
-      fs.renameSync(temporaryPath, filePath);
+      // Replace the previous saved checkpoint.
+      renameSync(temporaryPath, filePath);
     } catch (error) {
       try {
-        const fs = require("node:fs") as typeof import("node:fs");
-        if (fs.existsSync(temporaryPath)) fs.unlinkSync(temporaryPath);
+        if (existsSync(temporaryPath)) unlinkSync(temporaryPath);
       } catch { /* best-effort temporary-file cleanup */ }
       console.error("Failed to persist live article:", error);
     }
