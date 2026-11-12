@@ -171,8 +171,8 @@ export class KickRecordingManager {
       const text = String(chunk);
       for (const line of text.split(/\r?\n/)) {
         const trimmed = line.trim();
-        if (trimmed && !trimmed.startsWith("[") && (trimmed.includes("/") || trimmed.includes("\\"))) {
-          session.filePath = trimmed;
+        if (trimmed && !trimmed.startsWith("[") && [".mp4", ".mkv", ".ts", ".webm", ".m4v", ".mov"].includes(extname(trimmed).toLowerCase()) && existsSync(trimmed)) {
+          session.filePath = resolve(trimmed);
         }
       }
     });
