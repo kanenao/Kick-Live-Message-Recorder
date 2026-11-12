@@ -933,7 +933,8 @@ function createCommentAss(
     laneFreeAt[lane] = offset + travelDuration;
     const y = 38 + lane * laneHeight;
     const end = offset + travelDuration;
-    const effect = "{\\move(1960," + y + ",-1200," + y + ",0," + travelDuration + ")\\fad(150,250)}";
+    const finalX = -Math.max(120, text.length * 42);
+    const effect = "{\\move(1960," + y + "," + finalX + "," + y + ",0," + travelDuration + ")\\fad(150,250)}";
     dialogue.push("Dialogue: 0," + formatAssTime(offset) + "," + formatAssTime(end) + ",Default,,0,0,0,," + effect + text);
   }
 
@@ -1117,7 +1118,7 @@ function registerIpcHandlers(): void {
     }
 
     const timeline = getRecordingTimeline(inputPath);
-    const messages = chatReceiver.listMessages(timeline.slug, 5000, directory);
+    const messages = chatReceiver.listMessages(timeline.slug, 50000, directory);
     if (messages.length === 0) {
       throw new Error(timeline.slug + " の保存済みコメントがありません。チャット受信ログを確認してください。");
     }
@@ -1126,7 +1127,7 @@ function registerIpcHandlers(): void {
       throw new Error("この録画時間内のコメントが見つかりません。配信開始時刻とコメント時刻を確認してください。");
     }
     if (!mainWindow) throw new Error("アプリ画面が利用できません。");
-    const defaultPath = inputPath.replace(/\.[^.]+$/, "") + ".comments.ass";
+    const defaultPath = inputPath.replace(/\.[^.]+$/, "") + ".ass";
     const result = await dialog.showSaveDialog(mainWindow, {
       title: "コメント字幕（ASS）を書き出す",
       defaultPath,
