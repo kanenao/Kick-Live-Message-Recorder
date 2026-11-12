@@ -59,12 +59,17 @@ type KickRecorderUpdateStatus = {
 
 type KickRecorderChannelCheck = {
   slug: string;
+  broadcasterUserId: number | null;
   found: boolean;
   isLive: boolean;
   streamTitle: string;
   viewerCount: number;
   startedAt: string | null;
 };
+
+type KickRecorderChatStatus = { serverRunning: boolean; tunnelRunning: boolean; localUrl: string; publicUrl: string; receivedCount: number; lastMessageAt: string | null; message: string };
+type KickRecorderSavedChatMessage = { messageId: string; slug: string; broadcaster: string; user: string; text: string; timestamp: string; receivedAt: string; badges: string[]; emotes: Array<{ emoteId: string; start: number; end: number }> };
+type KickRecorderChatEvent = { type: "status"; status: KickRecorderChatStatus } | { type: "message"; message: KickRecorderSavedChatMessage };
 
 declare global {
   interface Window {
@@ -80,6 +85,12 @@ declare global {
       saveKickCredentials: (credentials: { clientId: string; clientSecret: string }) => Promise<{ ok: boolean; clientId: string }>;
       clearKickCredentials: () => Promise<{ ok: boolean }>;
       checkKickChannels: (slugs: string[]) => Promise<KickRecorderChannelCheck[]>;
+      getChatStatus: () => Promise<KickRecorderChatStatus>;
+      startChat: () => Promise<KickRecorderChatStatus>;
+      stopChat: () => Promise<KickRecorderChatStatus>;
+      subscribeChat: (slugs: string[]) => Promise<Array<{ slug: string; ok: boolean; message: string }>>;
+      listChatMessages: (slug: string) => Promise<KickRecorderSavedChatMessage[]>;
+      onChatEvent: (callback: (event: KickRecorderChatEvent) => void) => () => void;
       getUpdateStatus: () => Promise<KickRecorderUpdateStatus>;
       checkForUpdates: () => Promise<KickRecorderUpdateStatus>;
       installUpdate: () => Promise<{ ok: boolean }>;
