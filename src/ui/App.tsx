@@ -138,7 +138,6 @@ export default function App() {
   const [kickMessage, setKickMessage] = useState("");
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus>({ connected: false, baseUrl: "http://127.0.0.1:11434", models: [], message: "未確認" });
   const [ollamaChecking, setOllamaChecking] = useState(false);
-  const [ollamaModel, setOllamaModel] = useState("qwen2.5:3b");
   const [channelChecks, setChannelChecks] = useState<Record<string, ChannelCheck>>({});
   const [isCheckingChannels, setIsCheckingChannels] = useState(false);
   const [lastChannelCheck, setLastChannelCheck] = useState("");
@@ -368,9 +367,6 @@ export default function App() {
     try {
       const status = await window.kickRecorder.getOllamaStatus();
       setOllamaStatus(status);
-      if (status.connected && status.models.length && !status.models.some(model => model.name === ollamaModel)) {
-        setOllamaModel(status.models[0].name);
-      }
     } catch (error) {
       setOllamaStatus({ connected: false, baseUrl: "http://127.0.0.1:11434", models: [], message: error instanceof Error ? error.message : "接続に失敗しました。" });
     } finally {
@@ -638,14 +634,7 @@ export default function App() {
             <span className={ollamaStatus.connected ? "api-state connected" : "api-state"}>{ollamaStatus.connected ? "Ollama接続済み" : "未接続"}</span>
           </div>
           <p className="settings-help">AI処理をPC内で実行します。OpenAI APIキー・従量課金は不要です。接続先：{ollamaStatus.baseUrl}</p>
-          <div className="setting-row">
-            <div><strong>利用するAIモデル</strong><small>軽量モデルの例：qwen2.5:3b</small></div>
-            <select className="setting-select" value={ollamaModel} onChange={event => setOllamaModel(event.target.value)}>
-              {ollamaStatus.models.length
-                ? ollamaStatus.models.map(model => <option key={model.name} value={model.name}>{model.name}</option>)
-                : <option value="qwen2.5:3b">qwen2.5:3b（未インストール）</option>}
-            </select>
-          </div>
+          <p className="settings-help">標準モデル：qwen2.5:3b ／ 検出したモデル：{ollamaStatus.models.length ? ollamaStatus.models.map(model => model.name).join("、") : "なし"}</p>
           <div className="update-actions">
             <button className="primary-small" onClick={() => void checkOllamaStatus()} disabled={!isDesktop || ollamaChecking}>{ollamaChecking ? "確認中..." : "Ollama接続を確認"}</button>
           </div>
