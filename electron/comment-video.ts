@@ -33,6 +33,7 @@ export type CommentLogFile = {
 };
 
 export type CommentVideoFontFamily = "ms-pgothic" | "meiryo" | "yu-gothic" | "arial";
+export type CommentVideoPosition = "scroll" | "top" | "bottom";
 
 export type CommentVideoOptions = {
   videoPath: string;
@@ -47,6 +48,7 @@ export type CommentVideoOptions = {
   collisionGap?: number;
   opacity?: number;
   quality?: "high" | "standard" | "compact";
+  position?: CommentVideoPosition;
   showUsername?: boolean;
 };
 
@@ -83,6 +85,10 @@ function normalizeFontFamily(value: unknown): CommentVideoFontFamily {
   return value === "ms-pgothic" || value === "yu-gothic" || value === "arial"
     ? value
     : "meiryo";
+}
+
+function normalizeCommentVideoPosition(value: unknown): CommentVideoPosition {
+  return value === "top" || value === "bottom" ? value : "scroll";
 }
 
 type VideoInfo = {
@@ -546,6 +552,7 @@ export class KickCommentVideoGenerator {
       collisionGap: boundedNumber(values.collisionGap, 48, 0, 200),
       opacity: boundedNumber(values.opacity, 92, 20, 100),
       quality: values.quality === "high" || values.quality === "compact" ? values.quality : "standard",
+      position: normalizeCommentVideoPosition(values.position),
       showUsername: values.showUsername === true
     };
 
@@ -716,14 +723,23 @@ export class KickCommentVideoGenerator {
 
       const lineHeight = Math.max(options.fontSize + 12, Math.round(options.fontSize * 1.55));
       const moveDuration = options.displaySeconds * 100 / options.speedPercent;
-      // 参考動画のように上端に寄りすぎない小さな余白を取り、動画の高さを超える行は作らない。
       const topMargin = Math.max(12, Math.round(info.height * 0.012));
-      // 上下の余白と文字の高さを差し引いた範囲へ、表示行を広く均等配置する。
       const usableHeight = Math.max(1, info.height - topMargin * 2 - options.fontSize);
       const visibleRows = Math.max(1, Math.floor(usableHeight / lineHeight) + 1);
       const laneCount = Math.min(options.rowLimit, visibleRows);
       const laneSpacing = laneCount > 1 ? usableHeight / (laneCount - 1) : 0;
       const lanes: Array<LaneState | null> = Array.from({ length: laneCount }, () => null);
+
+      // Saccubusのue/shita/naka配置を参考に、固定表示と横スクロールを選べるようにする。
+      // 上下固定は同じ行の表示時間を管理し、表示中コメントが同じ位置で重ならないようにする。
+      const fixedAreaHeight = Math.max(lineHeight, Math.round(info.height * 0.28));
+      const fixedLaneStep = lineHeight + options.collisionGap;
+      const fixedLaneCount = Math.max(1, Math.min(
+        options.rowLimit,
+        Math.floor((fixedAreaHeight + options.collisionGap) / Math.max(1, fixedLaneStep))
+      ));
+      const fixedLaneEnds: Array<number | null> = Array.from({ length: fixedLaneCount }, () => null);
+
       // 同じコメント群を再生成しても配置が安定する、再現可能な疑似乱数。
       let laneRandomState = 0x12345678;
       const nextLaneStart = (): number => {
@@ -740,29 +756,46 @@ export class KickCommentVideoGenerator {
       for (const comment of comments) {
         if (signal.aborted) throw new Error("生成を停止しました。");
         const width = Math.min(info.width * 4, estimateTextWidth(comment.text, options.fontSize) + 32);
-        const speed = (info.width + width) / moveDuration;
         let laneIndex = -1;
+        const isScrolling = options.position === "scroll";
+        const start = comment.seconds;
 
-        const laneStart = nextLaneStart();
-        for (let offset = 0; offset < lanes.length; offset += 1) {
-          // ニコ生風に縦位置を分散。候補行はランダム順に調べ、衝突条件を満たした行だけを使う。
-          const index = (laneStart + offset) % lanes.length;
-          const previous = lanes[index];
-          if (!previous || comment.seconds >= previous.end) {
-            laneIndex = index;
-            break;
+        if (isScrolling) {
+          const speed = (info.width + width) / moveDuration;
+          const laneStart = nextLaneStart();
+          for (let offset = 0; offset < lanes.length; offset += 1) {
+            // 横スクロールは文字幅・速度差・時間差・指定間隔を調べ、衝突しない行だけを再利用。
+            const index = (laneStart + offset) % lanes.length;
+            const previous = lanes[index];
+            if (!previous || comment.seconds >= previous.end) {
+              laneIndex = index;
+              break;
+            }
+            const overlap = Math.max(0, Math.min(moveDuration, previous.end - comment.seconds));
+            const gapNeeded = options.collisionGap +
+              Math.max(0, speed - previous.speed) * overlap;
+            const currentGap = previous.speed * Math.max(0, comment.seconds - previous.start) - width;
+            if (currentGap >= gapNeeded) {
+              laneIndex = index;
+              break;
+            }
           }
-          const overlap = Math.max(0, Math.min(moveDuration, previous.end - comment.seconds));
-          // 直前のコメントの右端から新しいコメントの左端までの実距離を見て、
-          // 追い越しが発生しても指定したピクセル間隔を保てる行だけを再利用する。
-          const gapNeeded = options.collisionGap +
-            Math.max(0, speed - previous.speed) * overlap;
-          // 新しく入るコメントの左端と、先行コメントの右端との距離を計算する。
-          // 先行コメントの幅ではなく、今回のコメント自身の幅を差し引く。
-          const currentGap = previous.speed * Math.max(0, comment.seconds - previous.start) - width;
-          if (currentGap >= gapNeeded) {
-            laneIndex = index;
-            break;
+
+          if (laneIndex >= 0) {
+            const end = Math.min(info.duration, start + moveDuration);
+            lanes[laneIndex] = { start, end, speed, width };
+          }
+        } else {
+          // 上・下固定は同一行の表示終了時刻を管理。空いている行を優先する。
+          for (let index = 0; index < fixedLaneEnds.length; index += 1) {
+            const previousEnd = fixedLaneEnds[index];
+            if (previousEnd === null || start >= previousEnd) {
+              laneIndex = index;
+              break;
+            }
+          }
+          if (laneIndex >= 0) {
+            fixedLaneEnds[laneIndex] = Math.min(info.duration, start + options.displaySeconds);
           }
         }
 
@@ -771,16 +804,31 @@ export class KickCommentVideoGenerator {
           continue;
         }
 
-        const start = comment.seconds;
-        const end = Math.min(info.duration, start + moveDuration);
-        lanes[laneIndex] = { start, end, speed, width };
-        const y = Math.round(topMargin + laneIndex * laneSpacing);
+        const end = Math.min(info.duration, start + (isScrolling ? moveDuration : options.displaySeconds));
         const color = colorToAss(comment.color);
         const alpha = Math.round((100 - options.opacity) * 2.55).toString(16).padStart(2, "0").toUpperCase();
-        const tags = "{\\move(" + (info.width + 16) + "," + y + "," + Math.round(-width) + "," + y +
-          ",0," + Math.max(1, Math.round(moveDuration * 1000)) + ")" +
-          "\\fn" + COMMENT_FONT_FAMILIES[options.fontFamily] + "\\b1\\1c" + color +
-          "\\alpha&H" + alpha + "&\\bord2.5\\shad1}";
+        let tags: string;
+
+        if (isScrolling) {
+          const y = Math.round(topMargin + laneIndex * laneSpacing);
+          tags = "{\\move(" + (info.width + 16) + "," + y + "," + Math.round(-width) + "," + y +
+            ",0," + Math.max(1, Math.round(moveDuration * 1000)) + ")" +
+            "\\fn" + COMMENT_FONT_FAMILIES[options.fontFamily] + "\\b1\\1c" + color +
+            "\\alpha&H" + alpha + "&\\bord2.5\\shad1}";
+        } else {
+          const y = options.position === "top"
+            ? topMargin + laneIndex * fixedLaneStep
+            : info.height - topMargin - laneIndex * fixedLaneStep;
+          const alignment = options.position === "top" ? "\\an8" : "\\an2";
+          // 固定表示でも長文が左右にはみ出さないよう、横幅に合わせて縮小する。
+          const maxPinnedWidth = info.width * 0.88;
+          const horizontalScale = Math.max(40, Math.min(100, Math.floor(maxPinnedWidth / Math.max(1, width) * 100)));
+          tags = "{" + alignment + "\\pos(" + Math.round(info.width / 2) + "," + y + ")" +
+            "\\fn" + COMMENT_FONT_FAMILIES[options.fontFamily] + "\\b1\\1c" + color +
+            (horizontalScale < 100 ? "\\fscx" + horizontalScale : "") +
+            "\\alpha&H" + alpha + "&\\bord2.5\\shad1}";
+        }
+
         batch.push(
           "Dialogue: 0," + assTimestamp(start) + "," + assTimestamp(end) +
           ",Default,,0,0,0,," + tags + comment.text
