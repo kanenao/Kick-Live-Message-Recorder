@@ -117,19 +117,34 @@ type AiArticleStatus = {
 };
 type CommentVideoEvent = { status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string; outputPath?: string; generatedComments?: number; skippedComments?: number };
 
-const APP_VERSION = "0.1.0-beta.38";
+const APP_VERSION = "0.1.0-beta.39";
 const COMMENT_VIDEO_PREVIEW_ITEMS = [
-  { text: "きたあああああ！", color: "#ffffff", top: "8%", delay: 0 },
-  { text: "うぽつ！！！！！！", color: "#ff4545", top: "18%", delay: 1.1 },
-  { text: "まってた", color: "#ffffff", top: "29%", delay: 2.1 },
-  { text: "888888888", color: "#ffffff", top: "40%", delay: 0.5 },
-  { text: "すき！", color: "#ffe64a", top: "51%", delay: 2.7 },
-  { text: "うぽつ", color: "#36ed48", top: "62%", delay: 1.8 },
-  { text: "これはすごい", color: "#ffffff", top: "73%", delay: 3.4 },
-  { text: "ナイス！", color: "#ffe64a", top: "83%", delay: 0.9 },
-  { text: "おめでとう！", color: "#ffffff", top: "92%", delay: 2.5 }
+  { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
+  { text: "うぽつ！！！！！！", color: "#ff4545", lane: 1, delay: 0.7 },
+  { text: "まってた", color: "#ffffff", lane: 2, delay: 1.3 },
+  { text: "888888888", color: "#ffffff", lane: 3, delay: 0.25 },
+  { text: "すき！", color: "#ffe64a", lane: 4, delay: 1.7 },
+  { text: "うぽつ", color: "#36ed48", lane: 5, delay: 0.85 },
+  { text: "これはすごい", color: "#ffffff", lane: 6, delay: 1.9 },
+  { text: "ナイス！", color: "#ffe64a", lane: 7, delay: 0.45 },
+  { text: "おめでとう！", color: "#ffffff", lane: 8, delay: 1.5 },
+  { text: "最高！", color: "#ffffff", lane: 0, delay: 2.4, repeatLane: true },
+  { text: "わこつ！", color: "#58c8ff", lane: 3, delay: 2.1, repeatLane: true },
+  { text: "草ｗｗｗ", color: "#ff75c3", lane: 5, delay: 2.7, repeatLane: true },
+  { text: "ナイスコメント", color: "#ffffff", lane: 9, delay: 1.1 },
+  { text: "888888", color: "#ffe64a", lane: 10, delay: 2.0 },
+  { text: "いいね！", color: "#ffffff", lane: 11, delay: 0.6 }
 ] as const;
 const VERSION_HISTORY = [
+  {
+    version: "0.1.0-beta.39",
+    title: "コメントプレビューのリアルタイム反映を強化",
+    changes: [
+      "設定変更のたびにプレビューを即時再描画し、流れるコメントのアニメーションも先頭から再生",
+      "フォント・文字サイズ・速度・表示時間・行数・コメント間隔・不透明度・投稿者名表示をプレビューへ反映",
+      "変更中の設定値をプレビューの上部に表示し、今の設定がひと目でわかるように改善"
+    ]
+  },
   {
     version: "0.1.0-beta.38",
     title: "コメント表示プレビューを追加",
@@ -1512,27 +1527,54 @@ export default function App() {
               </div>
               <label className="comment-video-checkbox"><input type="checkbox" checked={commentVideoShowUsername} onChange={event => setCommentVideoShowUsername(event.target.checked)} disabled={commentVideoBusy} /><span>コメントに投稿者名も表示する</span></label>
             </div>
-            <div className="comment-video-preview">
-              <div className="comment-video-preview-heading"><strong>コメント表示プレビュー</strong><span>設定変更に合わせて更新</span></div>
-              <div className="comment-video-preview-screen" aria-label="コメント表示のサンプルプレビュー">
-                {COMMENT_VIDEO_PREVIEW_ITEMS.slice(0, Math.max(1, Math.min(COMMENT_VIDEO_PREVIEW_ITEMS.length, commentVideoRows))).map((item, index) => <span
-                  className="comment-video-preview-comment"
-                  key={index}
-                  style={{
-                    top: item.top,
-                    color: item.color,
-                    opacity: Math.max(0.2, Math.min(1, commentVideoOpacity / 100)),
-                    fontSize: Math.max(8, Math.round(commentVideoFontSize / 3)) + "px",
-                    fontFamily: commentVideoFontFamily === "ms-pgothic" ? '"ＭＳ Ｐゴシック", sans-serif'
-                      : commentVideoFontFamily === "yu-gothic" ? '"游ゴシック", sans-serif'
-                      : commentVideoFontFamily === "arial" ? "Arial, sans-serif" : 'Meiryo, "メイリオ", sans-serif',
-                    animationDuration: (Math.max(2, Math.min(15, commentVideoDuration)) * 100 /
-                      Math.max(50, Math.min(200, commentVideoSpeed))) + "s",
-                    animationDelay: item.delay + "s"
-                  }}
-                >{item.text}</span>)}
+            <div
+              className="comment-video-preview"
+              key={[
+                commentVideoFontFamily, commentVideoFontSize, commentVideoDuration,
+                commentVideoSpeed, commentVideoRows, commentVideoGap, commentVideoOpacity,
+                commentVideoShowUsername
+              ].join(":")}
+            >
+              <div className="comment-video-preview-heading">
+                <strong>コメント表示プレビュー</strong>
+                <span className="comment-video-preview-live"><i />リアルタイム反映</span>
               </div>
-              <small>見た目を確認するためのサンプルです。実際の表示位置・コメント数・重なり判定は選択した配信ログの内容に応じて生成時に調整します。</small>
+              <div className="comment-video-preview-values">
+                <span>{commentVideoFontFamily === "ms-pgothic" ? "ＭＳ Ｐゴシック" : commentVideoFontFamily === "yu-gothic" ? "游ゴシック" : commentVideoFontFamily === "arial" ? "Arial" : "メイリオ"}</span>
+                <span>{Math.max(16, Math.min(80, commentVideoFontSize))}px</span>
+                <span>速度 {Math.max(50, Math.min(200, commentVideoSpeed))}%</span>
+                <span>間隔 {Math.max(0, Math.min(200, commentVideoGap))}px</span>
+                <span>{Math.max(1, Math.min(20, commentVideoRows))}行</span>
+              </div>
+              <div className="comment-video-preview-screen" aria-label="設定をリアルタイム反映するコメント表示プレビュー">
+                {COMMENT_VIDEO_PREVIEW_ITEMS.filter(item => item.lane < Math.max(1, Math.min(12, commentVideoRows))).map((item, index, visibleItems) => {
+                  const laneCount = Math.max(1, Math.min(12, commentVideoRows));
+                  const top = 5 + (item.lane / Math.max(1, laneCount - 1)) * 90;
+                  const fontSize = Math.max(16, Math.min(80, commentVideoFontSize));
+                  const duration = Math.max(2, Math.min(15, commentVideoDuration));
+                  const speed = Math.max(50, Math.min(200, commentVideoSpeed));
+                  const gap = Math.max(0, Math.min(200, commentVideoGap));
+                  const estimatedTextWidth = Math.max(1, Array.from(item.text).length * fontSize * 0.9);
+                  const estimatedPixelsPerSecond = (1280 + estimatedTextWidth) / (duration * 100 / speed);
+                  const gapDelay = gap / Math.max(1, estimatedPixelsPerSecond);
+                  return <span
+                    className="comment-video-preview-comment"
+                    key={index}
+                    style={{
+                      top: top + "%",
+                      color: item.color,
+                      opacity: Math.max(0.2, Math.min(1, commentVideoOpacity / 100)),
+                      fontSize: Math.max(8, Math.round(fontSize / 3)) + "px",
+                      fontFamily: commentVideoFontFamily === "ms-pgothic" ? '"ＭＳ Ｐゴシック", sans-serif'
+                        : commentVideoFontFamily === "yu-gothic" ? '"游ゴシック", sans-serif'
+                        : commentVideoFontFamily === "arial" ? "Arial, sans-serif" : 'Meiryo, "メイリオ", sans-serif',
+                      animationDuration: (duration * 100 / speed) + "s",
+                      animationDelay: (item.delay + (item.repeatLane ? gapDelay : 0)).toFixed(3) + "s"
+                    }}
+                  >{commentVideoShowUsername ? "@viewer : " + item.text : item.text}</span>;
+                })}
+              </div>
+              <small>設定を変更するとプレビューをすぐに描き直し、コメントの流れも先頭から再生します。実際のコメント配置・重なり判定は、選択したログに応じて生成時に調整します。</small>
             </div>
             {commentVideoEvent && <div className={commentVideoEvent.status === "error" ? "comment-video-status error" : "comment-video-status"} role="status">
               <div className="comment-video-status-line"><strong>{commentVideoEvent.message}</strong>{commentVideoBusy && <span>{Math.round(commentVideoEvent.percent)}%</span>}</div>
