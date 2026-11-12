@@ -592,6 +592,7 @@ async function runLiveArticleCycle(): Promise<void> {
 
 function startLiveArticleTimer(): void {
   if (articleTimer) clearInterval(articleTimer);
+  void runLiveArticleCycle();
   articleTimer = setInterval(() => { void runLiveArticleCycle(); }, 3 * 60 * 1000);
   articleTimer.unref();
 }
