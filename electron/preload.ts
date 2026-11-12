@@ -60,6 +60,11 @@ type CommentVideoOptions = {
   videoPath: string; chatPath?: string; chatPaths?: string[]; delaySeconds?: number; fontSize?: number; displaySeconds?: number;
   rowLimit?: number; opacity?: number; quality?: "high" | "standard" | "compact"; showUsername?: boolean;
 };
+type StreamArticle = {
+  id: string; slug: string; displayName: string; headline: string; category: string; startedAt: string;
+  durationSeconds: number; commentCount: number; uniqueCommenters: number; keywords: string[];
+  paragraphs: string[]; sourceVideo: string; sourceLogs: string[]; createdAt: string;
+};
 type CommentVideoEvent = {
   status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string;
   outputPath?: string; generatedComments?: number; skippedComments?: number;
@@ -198,6 +203,9 @@ const api = {
     ipcRenderer.invoke("recording:open", filePath),
   revealRecording: (filePath: string): Promise<{ ok: true }> =>
     ipcRenderer.invoke("recording:reveal", filePath),
+  listStreamArticles: (slug?: string): Promise<StreamArticle[]> => ipcRenderer.invoke("articles:list", slug),
+  generateStreamArticle: (input: { videoPath: string; slug: string; displayName?: string; category?: string; headline?: string; chatPaths?: string[] }): Promise<StreamArticle> =>
+    ipcRenderer.invoke("articles:generate", input),
   listCommentLogFiles: (): Promise<CommentLogFile[]> => ipcRenderer.invoke("comment-video:list-logs"),
   startCommentVideo: (options: CommentVideoOptions): Promise<{ ok: true; outputPath: string }> => ipcRenderer.invoke("comment-video:start", options),
   stopCommentVideo: (): Promise<{ ok: true }> => ipcRenderer.invoke("comment-video:stop"),
