@@ -108,7 +108,7 @@ type StreamArticle = {
 };
 type CommentVideoEvent = { status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string; outputPath?: string; generatedComments?: number; skippedComments?: number };
 
-const APP_VERSION = "0.1.0-beta.30";
+const APP_VERSION = "0.1.0-beta.31";
 const VERSION_HISTORY = [
   {
     version: "0.1.0-beta.30",
