@@ -374,10 +374,10 @@ export class KickCommentVideoGenerator {
       chatPaths,
       delaySeconds: boundedNumber(values.delaySeconds, 0, -300, 300),
       fontFamily: normalizeFontFamily(values.fontFamily),
-      fontSize: boundedNumber(values.fontSize, 42, 16, 80),
+      fontSize: boundedNumber(values.fontSize, 48, 16, 80),
       displaySeconds: boundedNumber(values.displaySeconds, 6, 2, 15),
       speedPercent: boundedNumber(values.speedPercent, 100, 50, 200),
-      rowLimit: Math.round(boundedNumber(values.rowLimit, 8, 1, 20)),
+      rowLimit: Math.round(boundedNumber(values.rowLimit, 12, 1, 20)),
       collisionGap: boundedNumber(values.collisionGap, 48, 0, 200),
       opacity: boundedNumber(values.opacity, 92, 20, 100),
       quality: values.quality === "high" || values.quality === "compact" ? values.quality : "standard",
@@ -549,10 +549,22 @@ export class KickCommentVideoGenerator {
       ].join("\n") + "\n";
       writeFileSync(output.ass, header, "utf8");
 
-      const lanes: Array<LaneState | null> = Array.from({ length: options.rowLimit }, () => null);
       const lineHeight = Math.max(options.fontSize + 12, Math.round(options.fontSize * 1.55));
       const moveDuration = options.displaySeconds * 100 / options.speedPercent;
-      const topMargin = Math.max(20, Math.round(info.height * 0.025));
+      // 参考動画のように上端に寄りすぎない小さな余白を取り、動画の高さを超える行は作らない。
+      const topMargin = Math.max(12, Math.round(info.height * 0.012));
+      const visibleRows = Math.max(1, Math.floor((info.height - topMargin * 2) / lineHeight));
+      const laneCount = Math.min(options.rowLimit, visibleRows);
+      const lanes: Array<LaneState | null> = Array.from({ length: laneCount }, () => null);
+      // 同じコメント群を再生成しても配置が安定する、再現可能な疑似乱数。
+      let laneRandomState = 0x12345678;
+      const nextLaneStart = (): number => {
+        laneRandomState = (laneRandomState + 0x6D2B79F5) >>> 0;
+        let value = laneRandomState;
+        value = Math.imul(value ^ (value >>> 15), value | 1);
+        value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+        return ((value ^ (value >>> 14)) >>> 0) % lanes.length;
+      };
       let generated = 0;
       let skipped = 0;
       let batch: string[] = [];
@@ -563,7 +575,10 @@ export class KickCommentVideoGenerator {
         const speed = (info.width + width) / moveDuration;
         let laneIndex = -1;
 
-        for (let index = 0; index < lanes.length; index += 1) {
+        const laneStart = nextLaneStart();
+        for (let offset = 0; offset < lanes.length; offset += 1) {
+          // ニコ生風に縦位置を分散。候補行はランダム順に調べ、衝突条件を満たした行だけを使う。
+          const index = (laneStart + offset) % lanes.length;
           const previous = lanes[index];
           if (!previous || comment.seconds >= previous.end) {
             laneIndex = index;
@@ -595,7 +610,7 @@ export class KickCommentVideoGenerator {
         const tags = "{\\move(" + (info.width + 16) + "," + y + "," + Math.round(-width) + "," + y +
           ",0," + Math.max(1, Math.round((end - start) * 1000)) + ")" +
           "\\fn" + COMMENT_FONT_FAMILIES[options.fontFamily] + "\\b1\\1c" + color +
-          "\\alpha&H" + alpha + "&\\bord2\\shad1}";
+          "\\alpha&H" + alpha + "&\\bord2.5\\shad1}";
         batch.push(
           "Dialogue: 0," + assTimestamp(start) + "," + assTimestamp(end) +
           ",Default,,0,0,0,," + tags + comment.text
