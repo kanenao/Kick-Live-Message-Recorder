@@ -744,7 +744,7 @@ export default function App() {
           <span className={ollamaStatus.connected ? "api-state connected" : "api-state"}>{ollamaStatus.connected ? "Ollama接続済み" : "Ollama未接続"}</span>
         </div>
         <div className="article-toolbar">
-          <span className="settings-help">ライブ受信中は約3分ごとに新しいコメントを確認して記事スナップショットを保存します。配信終了も検知した場合は最終記事を作成します。</span>
+          <span className="settings-help">保存した視聴者コメントとKickの番組情報を元に生成します。映像・音声の内容を直接解析する機能ではありません。ライブ受信中は約3分ごとに新着コメントから記事スナップショットを保存し、配信終了検出時には最終記事を作成します。</span>
           <div className="update-actions">
             {channels.map(channel => <button key={channel.id} className="small-action" onClick={() => void generateArticleNow(channel.name)} disabled={!isDesktop || !ollamaStatus.connected || Boolean(articleBusySlug)}>
               {articleBusySlug === channel.name ? "生成中..." : `${channel.name} の記事を生成`}
