@@ -90,6 +90,10 @@ export class KickChatReceiver {
 
   constructor(private readonly onEvent: (event: ChatServiceEvent) => void) {}
 
+  getOutputDirectory(): string {
+    return this.outputDirectory;
+  }
+
   getStatus(): ChatServiceStatus {
     return {
       serverRunning: Boolean(this.server?.listening),
@@ -214,10 +218,10 @@ export class KickChatReceiver {
     return this.getStatus();
   }
 
-  listMessages(inputSlug: unknown, limit = 500): SavedKickChatMessage[] {
+  listMessages(inputSlug: unknown, limit = 500, outputDirectory?: string): SavedKickChatMessage[] {
     const slug = safeSlug(inputSlug);
     if (!slug) throw new Error("チャンネル名が不正です。");
-    const directory = join(this.outputDirectory || process.cwd(), "ChatLogs");
+    const directory = join(outputDirectory || this.outputDirectory || process.cwd(), "ChatLogs");
     if (!existsSync(directory)) return [];
     const max = Math.max(1, Math.min(5000, limit));
     const files = readdirSync(directory)
