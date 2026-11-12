@@ -371,7 +371,23 @@ async function subscribeToKickChat(input: unknown): Promise<Array<{ slug: string
   if (slugs.length === 0) throw new Error("先にチャンネルを登録してください。");
 
   const accessToken = await getKickAccessToken();
-  const knownStatuses = await getKickChatSubscriptionStatuses(slugs);
+  let statusCheckFailed = false;
+  let knownStatuses: KickChatSubscriptionStatus[];
+  try {
+    knownStatuses = await getKickChatSubscriptionStatuses(slugs);
+  } catch (error) {
+    // 購読一覧APIが不安定な場合も、チャンネル情報を取り直して登録要求自体は続行する。
+    statusCheckFailed = true;
+    const channelChecks = await checkKickChannels(slugs);
+    knownStatuses = channelChecks.map(channel => ({
+      slug: channel.slug,
+      broadcasterUserId: channel.broadcasterUserId,
+      subscribed: false,
+      subscriptionId: null,
+      createdAt: null
+    }));
+    console.warn("Kick subscription list unavailable; continuing without duplicate check:", error);
+  }
   const results: Array<{ slug: string; ok: boolean; message: string }> = [];
   for (const status of knownStatuses) {
     const { slug, broadcasterUserId } = status;
@@ -413,9 +429,10 @@ async function subscribeToKickChat(input: unknown): Promise<Array<{ slug: string
       results.push({
         slug,
         ok: true,
-        message: eventResult.subscription_id
-          ? "購読要求を受け付けました（ID: " + eventResult.subscription_id + "）。実際のWebhook到着は受信件数で確認してください。"
-          : "購読要求を受け付けました。実際のWebhook到着は受信件数で確認してください。"
+        message: (statusCheckFailed ? "購読一覧を取得できなかったため、重複確認なしで登録要求を送信しました。" : "") +
+          (eventResult.subscription_id
+            ? "購読要求を受け付けました（ID: " + eventResult.subscription_id + "）。実際のWebhook到着は受信件数で確認してください。"
+            : "購読要求を受け付けました。実際のWebhook到着は受信件数で確認してください。")
       });
     } catch (error) {
       results.push({ slug, ok: false, message: error instanceof Error ? error.message : String(error) });
