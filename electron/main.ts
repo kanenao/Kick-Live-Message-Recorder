@@ -697,7 +697,9 @@ function writeState(input: unknown): { ok: boolean } {
 
 function escapeCsvCell(value: unknown): string {
   const text = String(value ?? "").replace(/\r?\n/g, " ");
-  return `"${text.replace(/"/g, `""`)}"`;
+  // Prevent untrusted chat text from being interpreted as an Excel formula.
+  const safeText = /^[\\s]*[=+@-]/.test(text) ? "'" + text : text;
+  return `"${safeText.replace(/"/g, `""`)}"`;
 }
 
 function assertTrustedSender(event: IpcMainInvokeEvent): void {
