@@ -304,7 +304,7 @@ export default function App() {
   }, [tab, isDesktop]);
 
   useEffect(() => {
-    if (tab !== "library" || !isDesktop || !window.kickRecorder) return;
+    if ((tab !== "library" && tab !== "dashboard") || !isDesktop || !window.kickRecorder) return;
     let active = true;
     setIsLoadingRecordings(true);
     void window.kickRecorder.listRecordings().then(files => {
@@ -732,7 +732,7 @@ export default function App() {
         <section className="stats">
           <div className="stat-card"><span>登録チャンネル</span><strong>{channels.length.toString().padStart(2,"0")}</strong><small>監視対象</small></div>
           <div className="stat-card"><span>録画中</span><strong>{activeCount.toString().padStart(2,"0")}</strong><small>現在のセッション</small></div>
-          <div className="stat-card"><span>保存済み録画</span><strong>00</strong><small>このPC内</small></div>
+          <div className="stat-card"><span>保存済み録画</span><strong>{recordingFiles.length.toLocaleString("ja-JP")}</strong><small>このPC内</small></div>
           <div className="stat-card accent"><span>現在のバージョン</span><strong className="version-value">{appVersion}</strong><small>{isReady ? "インストール済み" : "起動情報を読み込み中"}</small></div>
         </section>
 
@@ -768,7 +768,14 @@ export default function App() {
 
         <section className="panel lower-panel">
           <div className="panel-heading"><div><h2>最近の録画</h2><p>保存された配信がここに表示されます</p></div><button className="text-button" onClick={() => setTab("library")}>すべて見る →</button></div>
-          <div className="empty-state"><div className="empty-icon">▣</div><strong>録画はまだありません</strong><span>録画機能は今後のアップデートで追加します。</span></div>
+          {recordingFiles.length === 0
+            ? <div className="empty-state"><div className="empty-icon">▣</div><strong>保存された録画はありません</strong><span>配信の録画を開始すると、ここに最新5件が表示されます。</span></div>
+            : <div className="recording-library-list">{recordingFiles.slice(0, 5).map(file => <div className="recording-file-row" key={file.path}>
+                <div className="recording-file-icon">▶</div>
+                <div className="recording-file-info"><strong>{file.name}</strong><small>{new Date(file.modifiedAt).toLocaleString("ja-JP")} ・ {file.extension} ・ {(file.size / (1024 * 1024)).toFixed(1)} MB</small></div>
+                <button className="primary-small" onClick={() => void openRecordingFile(file.path)}>再生</button>
+                <button className="small-action" onClick={() => void revealRecordingFile(file.path)}>保存先を表示</button>
+              </div>)}</div>}
         </section>
       </>}
 
@@ -993,7 +1000,7 @@ export default function App() {
               ? <button className="primary-small" onClick={() => void startChatCapture()} disabled={!isDesktop || !kickCredentialsConfigured || chatBusy}>{chatBusy ? "起動中..." : "チャット受信を開始"}</button>
               : <button className="small-action" onClick={() => void stopChatCapture()} disabled={chatBusy}>受信を停止</button>}
             <button className="small-action" onClick={() => void copyWebhookUrl()} disabled={!chatStatus.publicUrl}>Webhook URLをコピー</button>
-            <button className="small-action" onClick={() => void registerChatSubscriptions()} disabled={!isDesktop || !kickCredentialsConfigured || channels.length === 0 || chatBusy}>登録チャンネルを購読</button>
+            <button className="small-action" onClick={() => void registerChatSubscriptions()} disabled={!isDesktop || !kickCredentialsConfigured || !chatStatus.serverRunning || !chatStatus.tunnelRunning || channels.length === 0 || chatBusy}>登録チャンネルを購読</button>
           </div>
           <div className="notice">設定手順：①「チャット受信を開始」②表示されたURLをKick Developerの対象アプリでWebhooksを有効にしてWebhook URLへ登録 ③「登録チャンネルを購読」を実行。Quick TunnelのURLは起動ごとに変わるため、再起動後はDeveloper側のURLも更新してください。アプリが起動中のみ受信できます。</div>
           <p className="settings-help">{chatStatus.message}</p>
