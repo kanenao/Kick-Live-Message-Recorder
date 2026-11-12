@@ -117,8 +117,17 @@ type AiArticleStatus = {
 };
 type CommentVideoEvent = { status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string; outputPath?: string; generatedComments?: number; skippedComments?: number };
 
-const APP_VERSION = "0.1.0-beta.35";
+const APP_VERSION = "0.1.0-beta.36";
 const VERSION_HISTORY = [
+  {
+    version: "0.1.0-beta.36",
+    title: "参考動画に合わせたコメント配置",
+    changes: [
+      "コメントの縦位置をランダムに分散し、上部の同じ行に偏らないニコ生風表示へ改善",
+      "動画の高さ・文字サイズから表示可能な行数を自動計算し、下にはみ出す字幕を防止",
+      "参考動画に近いメイリオ太字・黒縁取りを標準にし、文字サイズ48・標準12行へ調整"
+    ]
+  },
   {
     version: "0.1.0-beta.35",
     title: "ニコ生風コメント表示を調整",
@@ -393,11 +402,11 @@ export default function App() {
   const [selectedCommentLogPaths, setSelectedCommentLogPaths] = useState<string[]>([]);
   const [isLoadingCommentLogs, setIsLoadingCommentLogs] = useState(false);
   const [commentVideoDelay, setCommentVideoDelay] = useState(0);
-  const [commentVideoFontFamily, setCommentVideoFontFamily] = useState<"ms-pgothic" | "meiryo" | "yu-gothic" | "arial">("ms-pgothic");
-  const [commentVideoFontSize, setCommentVideoFontSize] = useState(42);
+  const [commentVideoFontFamily, setCommentVideoFontFamily] = useState<"ms-pgothic" | "meiryo" | "yu-gothic" | "arial">("meiryo");
+  const [commentVideoFontSize, setCommentVideoFontSize] = useState(48);
   const [commentVideoDuration, setCommentVideoDuration] = useState(6);
   const [commentVideoSpeed, setCommentVideoSpeed] = useState(100);
-  const [commentVideoRows, setCommentVideoRows] = useState(8);
+  const [commentVideoRows, setCommentVideoRows] = useState(12);
   const [commentVideoGap, setCommentVideoGap] = useState(48);
   const [commentVideoOpacity, setCommentVideoOpacity] = useState(92);
   const [commentVideoQuality, setCommentVideoQuality] = useState<"high" | "standard" | "compact">("standard");
@@ -1437,7 +1446,7 @@ export default function App() {
         {!isDesktop
           ? <div className="empty-state"><div className="empty-icon">✦</div><strong>Windowsデスクトップ版で利用できます</strong><span>ブラウザープレビューでは動画ファイルの読み書きやエンコードを実行できません。</span></div>
           : <>
-            <div className="comment-video-intro">録画した動画と保存済みコメント（JSONL）を選ぶと、ニコニコ生放送風に右から左へコメントを流して動画へ焼き込みます。フォント・サイズ・速度・コメント同士の間隔を調整できます。元動画は変更せず、CommentVideosフォルダーへ別ファイルとして保存します。</div>
+            <div className="comment-video-intro">参考動画のように、太字・黒縁取りのコメントを右から左へ流し、縦位置もランダムに分散して動画へ焼き込みます。文字サイズや速度、コメント同士の間隔は変更できます。元動画は変更せず、CommentVideosフォルダーへ別ファイルとして保存します。</div>
             <div className="comment-video-form-grid">
               <label className="comment-video-field"><span>元動画</span>
                 <select value={selectedCommentVideoPath} onChange={event => setSelectedCommentVideoPath(event.target.value)} disabled={commentVideoBusy || isLoadingRecordings}>
@@ -1463,11 +1472,11 @@ export default function App() {
               <div className="settings-subheading"><h3>コメント表示設定</h3><span className="api-state connected">ASS字幕合成</span></div>
               <div className="comment-video-settings-grid">
                 <label className="comment-video-field"><span>同期ずれ（秒）</span><input type="number" min="-300" max="300" step="0.1" value={commentVideoDelay} onChange={event => setCommentVideoDelay(Number(event.target.value))} disabled={commentVideoBusy} /><small>＋はコメントを遅らせ、－は早めます。</small></label>
-                <label className="comment-video-field"><span>フォント</span><select value={commentVideoFontFamily} onChange={event => setCommentVideoFontFamily(event.target.value as "ms-pgothic" | "meiryo" | "yu-gothic" | "arial")} disabled={commentVideoBusy}><option value="ms-pgothic">ＭＳ Ｐゴシック（ニコ生風・おすすめ）</option><option value="meiryo">メイリオ</option><option value="yu-gothic">游ゴシック</option><option value="arial">Arial</option></select><small>Windowsにインストールされているフォントを使用します。</small></label>
+                <label className="comment-video-field"><span>フォント</span><select value={commentVideoFontFamily} onChange={event => setCommentVideoFontFamily(event.target.value as "ms-pgothic" | "meiryo" | "yu-gothic" | "arial")} disabled={commentVideoBusy}><option value="ms-pgothic">ＭＳ Ｐゴシック</option><option value="meiryo">メイリオ（参考動画に近い・標準）</option><option value="yu-gothic">游ゴシック</option><option value="arial">Arial</option></select><small>Windowsにインストールされているフォントを使用します。</small></label>
                 <label className="comment-video-field"><span>文字サイズ</span><input type="number" min="16" max="80" value={commentVideoFontSize} onChange={event => setCommentVideoFontSize(Number(event.target.value))} disabled={commentVideoBusy} /><small>動画の解像度に合わせて調整します。</small></label>
                 <label className="comment-video-field"><span>画面横断時間（標準速度・秒）</span><input type="number" min="2" max="15" value={commentVideoDuration} onChange={event => setCommentVideoDuration(Number(event.target.value))} disabled={commentVideoBusy} /><small>標準速度100%で画面を横断する秒数です。</small></label>
                 <label className="comment-video-field"><span>流れる速度（%）</span><input type="number" min="50" max="200" step="5" value={commentVideoSpeed} onChange={event => setCommentVideoSpeed(Number(event.target.value))} disabled={commentVideoBusy} /><small>100%が標準。小さくするとゆっくり、大きくすると速く流れます。</small></label>
-                <label className="comment-video-field"><span>最大表示行数</span><input type="number" min="1" max="20" value={commentVideoRows} onChange={event => setCommentVideoRows(Number(event.target.value))} disabled={commentVideoBusy} /><small>行数を増やすと同時に表示できるコメントが増えます。</small></label>
+                <label className="comment-video-field"><span>最大表示行数</span><input type="number" min="1" max="20" value={commentVideoRows} onChange={event => setCommentVideoRows(Number(event.target.value))} disabled={commentVideoBusy} /><small>参考動画に合わせた初期値は12行。動画の高さに合わせて実際の表示可能行数は自動調整します。</small></label>
                 <label className="comment-video-field"><span>コメント同士の最小間隔（px）</span><input type="number" min="0" max="200" step="4" value={commentVideoGap} onChange={event => setCommentVideoGap(Number(event.target.value))} disabled={commentVideoBusy} /><small>数値を大きくすると重なりにくくなります。行が足りない場合は一部コメントを省略します。</small></label>
                 <label className="comment-video-field"><span>文字の不透明度（%）</span><input type="number" min="20" max="100" value={commentVideoOpacity} onChange={event => setCommentVideoOpacity(Number(event.target.value))} disabled={commentVideoBusy} /><small>100で不透明、低いほど透過します。</small></label>
                 <label className="comment-video-field"><span>出力画質</span><select value={commentVideoQuality} onChange={event => setCommentVideoQuality(event.target.value as "high" | "standard" | "compact")} disabled={commentVideoBusy}><option value="high">高画質・大きめ</option><option value="standard">標準（おすすめ）</option><option value="compact">容量優先</option></select><small>利用可能なH.264エンコーダーを優先し、ない場合は互換形式へ切り替えます。</small></label>
