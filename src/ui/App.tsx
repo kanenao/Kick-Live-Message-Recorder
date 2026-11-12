@@ -128,12 +128,21 @@ const COMMENT_VIDEO_PREVIEW_ITEMS = [
   { text: "これはすごい", color: "#ffffff", lane: 6, delay: 1.9 },
   { text: "ナイス！", color: "#ffe64a", lane: 7, delay: 0.45 },
   { text: "おめでとう！", color: "#ffffff", lane: 8, delay: 1.5 },
+  { text: "88888888", color: "#ffffff", lane: 9, delay: 0.9 },
+  { text: "わこつ！", color: "#58c8ff", lane: 10, delay: 1.2 },
+  { text: "草ｗｗｗ", color: "#ff75c3", lane: 11, delay: 0.3 },
+  { text: "最高！", color: "#ffffff", lane: 12, delay: 1.6 },
+  { text: "いいね！", color: "#ffe64a", lane: 13, delay: 0.55 },
+  { text: "神回", color: "#ffffff", lane: 14, delay: 1.4 },
+  { text: "これは熱い", color: "#36ed48", lane: 15, delay: 0.8 },
+  { text: "待ってました", color: "#ffffff", lane: 16, delay: 1.8 },
+  { text: "ナイスコメント", color: "#ff75c3", lane: 17, delay: 0.4 },
+  { text: "おおおお！", color: "#ffffff", lane: 18, delay: 1.1 },
+  { text: "888888", color: "#ffe64a", lane: 19, delay: 0.65 },
   { text: "最高！", color: "#ffffff", lane: 0, delay: 2.4, repeatLane: true },
   { text: "わこつ！", color: "#58c8ff", lane: 3, delay: 2.1, repeatLane: true },
-  { text: "草ｗｗｗ", color: "#ff75c3", lane: 5, delay: 2.7, repeatLane: true },
-  { text: "ナイスコメント", color: "#ffffff", lane: 9, delay: 1.1 },
-  { text: "888888", color: "#ffe64a", lane: 10, delay: 2.0 },
-  { text: "いいね！", color: "#ffffff", lane: 11, delay: 0.6 }
+  { text: "草ｗｗｗ", color: "#ff75c3", lane: 6, delay: 2.7, repeatLane: true },
+  { text: "いいね！", color: "#ffe64a", lane: 9, delay: 2.3, repeatLane: true }
 ] as const;
 const VERSION_HISTORY = [
   {
@@ -1547,8 +1556,8 @@ export default function App() {
                 <span>{Math.max(1, Math.min(20, commentVideoRows))}行</span>
               </div>
               <div className="comment-video-preview-screen" aria-label="設定をリアルタイム反映するコメント表示プレビュー">
-                {COMMENT_VIDEO_PREVIEW_ITEMS.filter(item => item.lane < Math.max(1, Math.min(12, commentVideoRows))).map((item, index, visibleItems) => {
-                  const laneCount = Math.max(1, Math.min(12, commentVideoRows));
+                {COMMENT_VIDEO_PREVIEW_ITEMS.filter(item => item.lane < Math.max(1, Math.min(20, commentVideoRows))).map((item, index) => {
+                  const laneCount = Math.max(1, Math.min(20, commentVideoRows));
                   const top = 5 + (item.lane / Math.max(1, laneCount - 1)) * 90;
                   const fontSize = Math.max(16, Math.min(80, commentVideoFontSize));
                   const duration = Math.max(2, Math.min(15, commentVideoDuration));
