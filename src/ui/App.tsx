@@ -1553,13 +1553,16 @@ export default function App() {
                 <span>{Math.max(16, Math.min(80, commentVideoFontSize))}px</span>
                 <span>速度 {Math.max(50, Math.min(200, commentVideoSpeed))}%</span>
                 <span>間隔 {Math.max(0, Math.min(200, commentVideoGap))}px</span>
-                <span>{Math.max(1, Math.min(20, commentVideoRows))}行</span>
+                <span>表示 {Math.max(1, Math.min(20, commentVideoRows, Math.floor((1080 - 26 - Math.max(16, Math.min(80, commentVideoFontSize))) / Math.max(1, Math.max(commentVideoFontSize + 12, commentVideoFontSize * 1.55))) + 1))}行 / 上限 {Math.max(1, Math.min(20, commentVideoRows))}行</span>
               </div>
               <div className="comment-video-preview-screen" aria-label="設定をリアルタイム反映するコメント表示プレビュー">
-                {COMMENT_VIDEO_PREVIEW_ITEMS.filter(item => item.lane < Math.max(1, Math.min(20, commentVideoRows))).map((item, index) => {
-                  const laneCount = Math.max(1, Math.min(20, commentVideoRows));
-                  const top = 5 + (item.lane / Math.max(1, laneCount - 1)) * 90;
+                {COMMENT_VIDEO_PREVIEW_ITEMS.filter(item => item.lane < Math.max(1, Math.min(20, commentVideoRows, Math.floor((1080 - 26 - Math.max(16, Math.min(80, commentVideoFontSize))) / Math.max(1, Math.max(commentVideoFontSize + 12, commentVideoFontSize * 1.55))) + 1))).map((item, index) => {
                   const fontSize = Math.max(16, Math.min(80, commentVideoFontSize));
+                  // 16:9の1080p動画を縮小表示した場合に合わせ、画面外にはみ出さない行数を計算する。
+                  const lineHeight = Math.max(fontSize + 12, fontSize * 1.55);
+                  const previewVisibleRows = Math.max(1, Math.floor((1080 - 26 - fontSize) / lineHeight) + 1);
+                  const laneCount = Math.max(1, Math.min(20, commentVideoRows, previewVisibleRows));
+                  const top = 5 + (item.lane / Math.max(1, laneCount - 1)) * 90;
                   const duration = Math.max(2, Math.min(15, commentVideoDuration));
                   const speed = Math.max(50, Math.min(200, commentVideoSpeed));
                   const gap = Math.max(0, Math.min(200, commentVideoGap));
@@ -1583,7 +1586,7 @@ export default function App() {
                   >{commentVideoShowUsername ? "@viewer : " + item.text : item.text}</span>;
                 })}
               </div>
-              <small>設定を変更するとプレビューをすぐに描き直し、コメントの流れも先頭から再生します。実際のコメント配置・重なり判定は、選択したログに応じて生成時に調整します。</small>
+              <small>設定を変更するとプレビューをすぐに描き直し、コメントの流れも先頭から再生します。表示行数は1080p相当で計算した目安です。実際の表示行数・コメント配置・重なり判定は、選択した動画とログに応じて生成時に調整します。</small>
             </div>
             {commentVideoEvent && <div className={commentVideoEvent.status === "error" ? "comment-video-status error" : "comment-video-status"} role="status">
               <div className="comment-video-status-line"><strong>{commentVideoEvent.message}</strong>{commentVideoBusy && <span>{Math.round(commentVideoEvent.percent)}%</span>}</div>
