@@ -126,7 +126,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string }>;
 };
 
-const APP_VERSION = "0.1.0-beta.40";
+const APP_VERSION = "0.1.0-beta.41";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ff4545", lane: 1, delay: 0.7 },
@@ -154,6 +154,15 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffe64a", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.1.0-beta.41",
+    title: "Saccubusを参考にコメントの表示位置を拡張",
+    changes: [
+      "中央スクロールに加えて、Saccubusのue/shita風の上部固定・下部固定を選択可能に",
+      "固定コメントは表示時間中の行占有を管理し、同じ行での重なりを防止。幅が長い固定コメントは画面内へ縮小",
+      "プレビューも選択した表示位置に合わせて切り替え。Kickログにはニコ生の位置コマンドがないため、選択モードを全コメントへ適用"
+    ]
+  },
   {
     version: "0.1.0-beta.40",
     title: "実際のコメントログを使った生成前プレビュー",
