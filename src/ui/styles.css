@@ -161,3 +161,12 @@
 .comment-video-actions button:disabled{opacity:.45;cursor:not-allowed}
 @media(max-width:1000px){.comment-video-settings-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){.comment-video-form-grid,.comment-video-settings-grid{grid-template-columns:1fr}}
+
+.stream-articles-panel{max-width:1120px}
+.article-list{margin-top:28px}
+.article-card{border:1px solid #303640;border-radius:10px;background:#14171d;padding:20px;margin:13px 0}
+.article-card h3{font-size:17px;line-height:1.55;color:#edf2f6;margin:10px 0 13px}
+.article-card p{font-size:12px;line-height:1.9;color:#c1c8d2;margin:10px 0}
+.article-meta{font-size:10px;color:#8e9aa8}
+.article-stats{border-top:1px solid #2b3039;margin-top:15px;padding-top:12px;color:#8bd5a9;font-size:10px}
+@media(max-width:760px){.article-card{padding:14px}.article-card h3{font-size:15px}}
