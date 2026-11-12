@@ -118,7 +118,7 @@ type AiArticleStatus = {
 type CommentVideoEvent = { status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string; outputPath?: string; generatedComments?: number; skippedComments?: number };
 
 const APP_VERSION = "0.1.0-beta.39";
-const COMMENT_VIDEO_PREVIEW_ITEMS = [
+const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ff4545", lane: 1, delay: 0.7 },
   { text: "まってた", color: "#ffffff", lane: 2, delay: 1.3 },
@@ -143,7 +143,7 @@ const COMMENT_VIDEO_PREVIEW_ITEMS = [
   { text: "わこつ！", color: "#58c8ff", lane: 3, delay: 2.1, repeatLane: true },
   { text: "草ｗｗｗ", color: "#ff75c3", lane: 6, delay: 2.7, repeatLane: true },
   { text: "いいね！", color: "#ffe64a", lane: 9, delay: 2.3, repeatLane: true }
-] as const;
+];
 const VERSION_HISTORY = [
   {
     version: "0.1.0-beta.39",
