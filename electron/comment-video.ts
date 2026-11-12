@@ -755,7 +755,7 @@ export class KickCommentVideoGenerator {
 
       for (const comment of comments) {
         if (signal.aborted) throw new Error("生成を停止しました。");
-        const width = Math.min(info.width * 4, estimateTextWidth(comment.text, options.fontSize) + 32);
+        const width = estimateTextWidth(comment.text, options.fontSize) + 32;
         let laneIndex = -1;
         const isScrolling = options.position === "scroll";
         const start = comment.seconds;
@@ -822,7 +822,7 @@ export class KickCommentVideoGenerator {
           const alignment = options.position === "top" ? "\\an8" : "\\an2";
           // 固定表示でも長文が左右にはみ出さないよう、横幅に合わせて縮小する。
           const maxPinnedWidth = info.width * 0.88;
-          const horizontalScale = Math.max(40, Math.min(100, Math.floor(maxPinnedWidth / Math.max(1, width) * 100)));
+          const horizontalScale = Math.max(5, Math.min(100, Math.floor(maxPinnedWidth / Math.max(1, width) * 100)));
           tags = "{" + alignment + "\\pos(" + Math.round(info.width / 2) + "," + y + ")" +
             "\\fn" + COMMENT_FONT_FAMILIES[options.fontFamily] + "\\b1\\1c" + color +
             (horizontalScale < 100 ? "\\fscx" + horizontalScale : "") +
