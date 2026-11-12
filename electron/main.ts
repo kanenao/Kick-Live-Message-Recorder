@@ -20,6 +20,7 @@ import { autoUpdater } from "electron-updater";
 import { KickChatReceiver } from "./chat";
 import { KickVodChatDownloader } from "./vod-chat";
 import { KickCommentVideoGenerator, listCommentLogFiles } from "./comment-video";
+import { generateStreamArticle, listStreamArticles } from "./articles";
 import { deleteRecordingFile, isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
 
 // Chromiumが提供する標準メニューやコンテキストメニューも日本語で表示する。
@@ -1121,6 +1122,16 @@ function registerIpcHandlers(): void {
   ipcMain.handle("recording:list", event => {
     assertTrustedSender(event);
     return listRecordingFiles(getRecordingOutputDirectory());
+  });
+
+  ipcMain.handle("articles:list", (event, slug?: unknown) => {
+    assertTrustedSender(event);
+    return listStreamArticles(getRecordingOutputDirectory(), slug);
+  });
+
+  ipcMain.handle("articles:generate", (event, input: unknown) => {
+    assertTrustedSender(event);
+    return generateStreamArticle(input, getRecordingOutputDirectory());
   });
 
   ipcMain.handle("comment-video:list-logs", event => {
