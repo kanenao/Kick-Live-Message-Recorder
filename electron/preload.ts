@@ -71,6 +71,16 @@ type StreamArticle = {
   status?: "live" | "completed"; aiGenerated?: boolean; aiSummary?: string; highlights?: string[];
   lastAiUpdateAt?: string | null; viewerCount?: number; peakViewerCount?: number; aiError?: string;
 };
+
+type CommentVideoPreviewResult = {
+  width: number;
+  height: number;
+  durationSeconds: number;
+  totalComments: number;
+  malformedLines: number;
+  outsideVideoCount: number;
+  comments: Array<{ seconds: number; content: string; username: string; color: string }>;
+};
 type AiArticleStatus = {
   configured: boolean; encryptionAvailable: boolean;
   aiArticleEnabled: boolean; aiArticleModel: string; aiArticleIntervalSeconds: number;
@@ -228,6 +238,8 @@ const api = {
   generateStreamArticle: (input: { videoPath: string; slug: string; displayName?: string; category?: string; headline?: string; chatPaths?: string[] }): Promise<StreamArticle> =>
     ipcRenderer.invoke("articles:generate", input),
   listCommentLogFiles: (): Promise<CommentLogFile[]> => ipcRenderer.invoke("comment-video:list-logs"),
+  previewCommentVideo: (input: { videoPath: string; chatPaths: string[]; delaySeconds?: number }): Promise<CommentVideoPreviewResult> =>
+    ipcRenderer.invoke("comment-video:preview", input),
   startCommentVideo: (options: CommentVideoOptions): Promise<{ ok: true; outputPath: string }> => ipcRenderer.invoke("comment-video:start", options),
   stopCommentVideo: (): Promise<{ ok: true }> => ipcRenderer.invoke("comment-video:stop"),
   onCommentVideoStatus: (callback: (event: CommentVideoEvent) => void): (() => void) => {
