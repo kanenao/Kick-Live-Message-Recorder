@@ -131,6 +131,8 @@ const api = {
     ipcRenderer.invoke("recording:open", filePath),
   revealRecording: (filePath: string): Promise<{ ok: true }> =>
     ipcRenderer.invoke("recording:reveal", filePath),
+  exportRecordingChatAss: (filePath: string): Promise<{ saved: boolean; path?: string; count: number; slug?: string; startedAt?: string; endedAt?: string; durationMs?: number; startReference?: string }> =>
+    ipcRenderer.invoke("recording:export-chat-ass", filePath),
   onRecordingStatus: (callback: (event: RecordingEvent) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, event: RecordingEvent): void => callback(event);
     ipcRenderer.on("recording:status", listener);
