@@ -16,6 +16,7 @@ type AppSettings = {
   autoMonitorEnabled: boolean;
   monitorIntervalSeconds: number;
   notifyOnLive: boolean;
+  autoGenerateArticles: boolean;
 };
 
 type AppState = {
@@ -93,6 +94,18 @@ const api = {
   stopChat: (): Promise<ChatServiceStatus> => ipcRenderer.invoke("chat:stop"),
   subscribeChat: (slugs: string[]): Promise<Array<{ slug: string; ok: boolean; message: string }>> => ipcRenderer.invoke("chat:subscribe", slugs),
   listChatMessages: (slug: string): Promise<SavedChatMessage[]> => ipcRenderer.invoke("chat:list", slug),
+  listArticles: (): Promise<Array<{ id: string; slug: string; broadcaster: string; streamTitle: string; startedAt: string | null; generatedAt: string; commentCount: number; isFinal: boolean; title: string; summary: string; paragraphs: string[]; topics: string[]; provider: string; model: string }>> => ipcRenderer.invoke("articles:list"),
+  generateArticle: (slug: string): Promise<{ id: string; slug: string; title: string; summary: string; paragraphs: string[]; topics: string[]; generatedAt: string; commentCount: number; isFinal: boolean; provider: string; model: string }> => ipcRenderer.invoke("articles:generate", slug),
+  onArticleNew: (callback: (article: any) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, article: any): void => callback(article);
+    ipcRenderer.on("articles:new", listener);
+    return () => ipcRenderer.removeListener("articles:new", listener);
+  },
+  onArticleStatus: (callback: (status: { slug: string; message: string }) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: { slug: string; message: string }): void => callback(status);
+    ipcRenderer.on("articles:status", listener);
+    return () => ipcRenderer.removeListener("articles:status", listener);
+  },
   onChatEvent: (callback: (event: ChatEvent) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, event: ChatEvent): void => callback(event);
     ipcRenderer.on("chat:event", listener);
