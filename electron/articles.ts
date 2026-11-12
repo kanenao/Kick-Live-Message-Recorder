@@ -61,7 +61,7 @@ function tokenize(text: string): string[] {
 }
 
 function makeParagraphs(displayName: string, category: string, commentCount: number, uniqueCommenters: number, keywords: string[], samples: string[]): string[] {
-  const topic = keywords.length ? `コメントでは「${keywords.slice(0, 4).join」「}」などの話題に関する反応が目立ちました。` : "コメントの内容から特定の話題を十分に抽出できなかったため、配信内容の詳細な分析は控えています。";
+  const topic = keywords.length ? `コメントでは「${keywords.slice(0, 4).join("・")}」などの話題に関する反応が目立ちました。` : "コメントの内容から特定の話題を十分に抽出できなかったため、配信内容の詳細な分析は控えています。";
   const activity = commentCount > 0
     ? `配信中には${commentCount.toLocaleString("ja-JP")}件のコメントが記録され、${uniqueCommenters.toLocaleString("ja-JP")}人の投稿者が参加しました。視聴者の反応を手掛かりに、配信内で話題となった場面を振り返ります。`
     : "対応するコメントログが見つからなかったため、コメント数や視聴者の反応は集計できていません。";
