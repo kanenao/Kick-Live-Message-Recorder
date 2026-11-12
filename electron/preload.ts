@@ -62,7 +62,7 @@ type CommentLogFile = {
 type CommentVideoOptions = {
   videoPath: string; chatPath?: string; chatPaths?: string[]; delaySeconds?: number; fontFamily?: "ms-pgothic" | "meiryo" | "yu-gothic" | "arial"; fontSize?: number;
   displaySeconds?: number; speedPercent?: number; rowLimit?: number; collisionGap?: number; opacity?: number;
-  quality?: "high" | "standard" | "compact"; showUsername?: boolean;
+  quality?: "high" | "standard" | "compact"; position?: "scroll" | "top" | "bottom"; showUsername?: boolean;
 };
 type StreamArticle = {
   id: string; slug: string; displayName: string; headline: string; category: string; startedAt: string;
