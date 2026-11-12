@@ -310,6 +310,171 @@ async function* readLinesFromFiles(filePaths: string[], signal: AbortSignal): As
   }
 }
 
+
+export type CommentVideoPreviewResult = {
+  width: number;
+  height: number;
+  durationSeconds: number;
+  totalComments: number;
+  malformedLines: number;
+  outsideVideoCount: number;
+  comments: Array<{ seconds: number; content: string; username: string; color: string }>;
+};
+
+/**
+ * 選択された録画・コメントログを読み取り、実データを使った生成前プレビューを返す。
+ * 動画やログファイルの作成・変更は行わない。
+ */
+export async function previewCommentVideo(
+  input: unknown,
+  outputDirectory: string,
+  isFileActive: (filePath: string) => boolean = () => false
+): Promise<CommentVideoPreviewResult> {
+  if (!input || typeof input !== "object") throw new Error("動画とコメントファイルを選択してください。");
+  const values = input as Partial<CommentVideoOptions>;
+  if (typeof values.videoPath !== "string" || values.videoPath.length > 4096) {
+    throw new Error("動画ファイルの指定が不正です。");
+  }
+  const requestedChatPaths: unknown[] = Array.isArray(values.chatPaths)
+    ? values.chatPaths
+    : typeof values.chatPath === "string" ? [values.chatPath] : [];
+  if (requestedChatPaths.length === 0 || requestedChatPaths.length > 31 ||
+    requestedChatPaths.some(path => typeof path !== "string" || path.length === 0 || path.length > 4096)) {
+    throw new Error("コメントファイルは1～31件の範囲で選択してください。");
+  }
+
+  const root = resolve(outputDirectory);
+  const videoPath = resolve(values.videoPath);
+  const chatPaths = [...new Set(requestedChatPaths.map(path => resolve(path as string)))];
+  if (!isPathInsideDirectory(videoPath, root) || !VIDEO_EXTENSIONS.has(extname(videoPath).toLowerCase())) {
+    throw new Error("動画は録画ライブラリ内の対応形式を選択してください。");
+  }
+  const chatRoot = join(root, "Chat");
+  if (chatPaths.some(path => !isPathInsideDirectory(path, chatRoot) || extname(path).toLowerCase() !== ".jsonl")) {
+    throw new Error("コメントファイルはアプリのChatフォルダー内にあるJSONLを選択してください。");
+  }
+  const chatDirectories = new Set(chatPaths.map(path => resolve(dirname(path))));
+  const firstChatPath = chatPaths[0];
+  const channelDirectory = firstChatPath ? dirname(firstChatPath) : "";
+  if (chatDirectories.size !== 1 || !channelDirectory ||
+    resolve(dirname(channelDirectory)) !== resolve(chatRoot) ||
+    !/^[a-zA-Z0-9_-]{1,40}$/.test(basename(channelDirectory))) {
+    throw new Error("複数選択する場合は、同じチャンネルフォルダー内のコメントログを選択してください。");
+  }
+  const chatKinds = new Set(chatPaths.map(path => /^VOD_/i.test(basename(path)) ? "VOD" : "LIVE"));
+  if (chatKinds.size !== 1 || (chatKinds.has("VOD") && chatPaths.length > 1)) {
+    throw new Error("LIVEログとVODログは混在できません。VODログは1ファイルずつ選択してください。");
+  }
+
+  validateRegularFile(videoPath, "動画ファイル");
+  for (const chatPath of chatPaths) validateRegularFile(chatPath, "コメントファイル");
+  if (isFileActive(videoPath)) {
+    throw new Error("録画中・ダウンロード中の動画はプレビューできません。録画を停止して完了後に再度実行してください。");
+  }
+
+  const ffprobePath = findTool(process.platform === "win32" ? "ffprobe.exe" : "ffprobe");
+  const info = await probeVideo(ffprobePath, videoPath);
+  const videoStats = statSync(videoPath);
+  const filenameTimestamp = basename(videoPath, extname(videoPath)).match(/_(\d{8})_(\d{6})(?:_retry\d+)?$/);
+  const filenameStartMs = filenameTimestamp
+    ? (() => {
+        const stamp = filenameTimestamp[1] + filenameTimestamp[2];
+        const year = Number(stamp.slice(0, 4));
+        const month = Number(stamp.slice(4, 6)) - 1;
+        const day = Number(stamp.slice(6, 8));
+        const hour = Number(stamp.slice(8, 10));
+        const minute = Number(stamp.slice(10, 12));
+        const second = Number(stamp.slice(12, 14));
+        const parsed = new Date(year, month, day, hour, minute, second);
+        return parsed.getFullYear() === year && parsed.getMonth() === month &&
+          parsed.getDate() === day && parsed.getHours() === hour &&
+          parsed.getMinutes() === minute && parsed.getSeconds() === second
+          ? parsed.getTime()
+          : Number.NaN;
+      })()
+    : Number.NaN;
+  const estimatedVideoStartMs = Number.isFinite(filenameStartMs)
+    ? filenameStartMs
+    : videoStats.mtimeMs - info.duration * 1000;
+  const delaySeconds = boundedNumber(values.delaySeconds, 0, -300, 300);
+  const previewCandidates: Array<{ seconds: number; content: string; username: string; color: string }> = [];
+  let malformedLines = 0;
+  let outsideVideoCount = 0;
+  let readCount = 0;
+  const controller = new AbortController();
+
+  for await (const line of readLinesFromFiles(chatPaths, controller.signal)) {
+    if (!line.trim()) continue;
+    readCount += 1;
+    if (readCount > MAX_CHAT_RECORDS) {
+      throw new Error("コメントが25万件を超えています。対象ログを日付別に分けてください。");
+    }
+
+    let raw: Record<string, unknown>;
+    try {
+      const parsed = JSON.parse(line) as unknown;
+      raw = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? parsed as Record<string, unknown>
+        : {};
+    } catch {
+      malformedLines += 1;
+      continue;
+    }
+
+    const content = readString(raw.content) ?? readString(raw.message) ?? "";
+    if (!content) continue;
+    let seconds: number;
+    if (typeof raw.timeInSeconds === "number" && Number.isFinite(raw.timeInSeconds)) {
+      seconds = raw.timeInSeconds;
+    } else {
+      const createdAt = readString(raw.createdAt) ?? readString(raw.created_at);
+      const createdMs = createdAt ? Date.parse(createdAt) : Number.NaN;
+      if (!Number.isFinite(createdMs)) continue;
+      seconds = (createdMs - estimatedVideoStartMs) / 1000;
+    }
+
+    seconds += delaySeconds;
+    if (!Number.isFinite(seconds) || seconds < 0 || seconds > info.duration) {
+      outsideVideoCount += 1;
+      continue;
+    }
+
+    const username = readString(raw.senderUsername) ?? readString(raw.username) ?? "";
+    const cleanContent = content
+      .replace(/\[emote:\d+:([^\]]+)\]/g, "$1")
+      .replace(/[\r\n\t]+/g, " ")
+      .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "")
+      .trim()
+      .slice(0, 500);
+    if (!cleanContent) continue;
+    previewCandidates.push({
+      seconds,
+      content: cleanContent,
+      username: username.slice(0, 80),
+      color: readString(raw.usernameColor) ?? readString(raw.color) ?? "#ffffff"
+    });
+  }
+
+  previewCandidates.sort((a, b) => a.seconds - b.seconds);
+  const sampleSize = Math.min(24, previewCandidates.length);
+  const comments = Array.from({ length: sampleSize }, (_, index) => {
+    const sourceIndex = sampleSize <= 1
+      ? 0
+      : Math.round(index * (previewCandidates.length - 1) / (sampleSize - 1));
+    return previewCandidates[sourceIndex];
+  });
+
+  return {
+    width: info.width,
+    height: info.height,
+    durationSeconds: info.duration,
+    totalComments: previewCandidates.length,
+    malformedLines,
+    outsideVideoCount,
+    comments
+  };
+}
+
 export class KickCommentVideoGenerator {
   private child: ChildProcessWithoutNullStreams | null = null;
   private controller: AbortController | null = null;
