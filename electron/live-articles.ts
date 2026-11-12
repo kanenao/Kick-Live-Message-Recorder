@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import { isPathInsideDirectory } from "./recording";
-import { join } from "node:path";
 import type { KickChatMessage } from "./chat";
 
 export type LiveArticle = {
