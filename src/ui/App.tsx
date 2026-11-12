@@ -24,6 +24,9 @@ type AppSettings = {
   recordingRetryDelaySeconds: number;
   notifyOnLive: boolean;
   showRecordingPreview: boolean;
+  aiArticleEnabled: boolean;
+  aiArticleModel: string;
+  aiArticleIntervalSeconds: number;
 };
 
 type PersistedState = {
@@ -105,11 +108,26 @@ type StreamArticle = {
   id: string; slug: string; displayName: string; headline: string; category: string; startedAt: string;
   durationSeconds: number; commentCount: number; uniqueCommenters: number; keywords: string[];
   paragraphs: string[]; sourceVideo: string; sourceLogs: string[]; createdAt: string;
+  status?: "live" | "completed"; aiGenerated?: boolean; aiSummary?: string; highlights?: string[];
+  lastAiUpdateAt?: string | null; viewerCount?: number; peakViewerCount?: number; aiError?: string;
+};
+type AiArticleStatus = {
+  configured: boolean; encryptionAvailable: boolean;
+  aiArticleEnabled: boolean; aiArticleModel: string; aiArticleIntervalSeconds: number;
 };
 type CommentVideoEvent = { status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string; outputPath?: string; generatedComments?: number; skippedComments?: number };
 
-const APP_VERSION = "0.1.0-beta.31";
+const APP_VERSION = "0.1.0-beta.32";
 const VERSION_HISTORY = [
+  {
+    version: "0.1.0-beta.32",
+    title: "LIVE中のリアルタイムAI配信記事",
+    changes: [
+      "配信開始時に記事を自動作成し、コメントの流れからAIが記事を段階的に更新",
+      "配信終了時に記事を最終化し、視聴者数・コメント数・話題・ハイライトを保存",
+      "OpenAI APIキーをWindows暗号化ストレージへ安全に保存する設定を追加"
+    ]
+  },
   {
     version: "0.1.0-beta.31",
     title: "バージョン更新画面を追加",
@@ -169,7 +187,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   recordingRetryCount: 5,
   recordingRetryDelaySeconds: 10,
   notifyOnLive: true,
-  showRecordingPreview: true
+  showRecordingPreview: true,
+  aiArticleEnabled: false,
+  aiArticleModel: "gpt-6-luna",
+  aiArticleIntervalSeconds: 120
 };
 
 function normalizeState(value: unknown): PersistedState {
@@ -236,7 +257,12 @@ function normalizeState(value: unknown): PersistedState {
         ? Math.max(5, Math.min(60, Math.round(settings.recordingRetryDelaySeconds)))
         : 10,
       notifyOnLive: settings.notifyOnLive !== false,
-      showRecordingPreview: settings.showRecordingPreview !== false
+      showRecordingPreview: settings.showRecordingPreview !== false,
+      aiArticleEnabled: settings.aiArticleEnabled === true,
+      aiArticleModel: typeof settings.aiArticleModel === "string" && /^[a-zA-Z0-9._-]{1,100}$/.test(settings.aiArticleModel)
+        ? settings.aiArticleModel : "gpt-6-luna",
+      aiArticleIntervalSeconds: typeof settings.aiArticleIntervalSeconds === "number"
+        ? Math.max(30, Math.min(600, Math.round(settings.aiArticleIntervalSeconds))) : 120
     }
   };
 }
@@ -355,6 +381,13 @@ export default function App() {
   const [articleHeadline, setArticleHeadline] = useState("");
   const [articleBusy, setArticleBusy] = useState(false);
   const [articleMessage, setArticleMessage] = useState("");
+  const [aiArticleApiKey, setAiArticleApiKey] = useState("");
+  const [aiArticleStatus, setAiArticleStatus] = useState<AiArticleStatus>({
+    configured: false, encryptionAvailable: false, aiArticleEnabled: false,
+    aiArticleModel: "gpt-6-luna", aiArticleIntervalSeconds: 120
+  });
+  const [aiArticleBusy, setAiArticleBusy] = useState(false);
+  const [aiArticleMessage, setAiArticleMessage] = useState("");
 
   const activeCount = useMemo(() => [...channels, ...recordingOnlyChannels].filter(c => c.recording).length, [channels, recordingOnlyChannels]);
   const activeRecordingChannels = useMemo(() => {
@@ -544,6 +577,22 @@ export default function App() {
       .catch(error => setArticleMessage(error instanceof Error ? error.message : "記事データを読み込めませんでした。"));
     return () => { active = false; };
   }, [tab, isDesktop, libraryRefreshKey, settings.outputDirectory]);
+
+  useEffect(() => {
+    if (!isDesktop || !window.kickRecorder) return;
+    let active = true;
+    void window.kickRecorder.getAiArticleStatus().then(status => {
+      if (active) setAiArticleStatus(status);
+    }).catch(error => {
+      if (active) setAiArticleMessage(error instanceof Error ? error.message : "AI記事の設定を取得できませんでした。");
+    });
+    const unsubscribe = window.kickRecorder.onStreamArticleUpdate(article => {
+      if (!active) return;
+      setStreamArticles(current => [article, ...current.filter(item => item.id !== article.id)]
+        .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt)));
+    });
+    return () => { active = false; unsubscribe(); };
+  }, [isDesktop]);
 
   useEffect(() => {
     if (tab !== "comment-video" || !isDesktop || !window.kickRecorder) return;
@@ -994,6 +1043,46 @@ export default function App() {
     }
   }
 
+  async function saveAiArticleApiKey() {
+    if (!window.kickRecorder || !aiArticleApiKey.trim()) return;
+    setAiArticleBusy(true);
+    setAiArticleMessage("");
+    try {
+      await window.kickRecorder.saveAiArticleKey(aiArticleApiKey.trim());
+      setAiArticleApiKey("");
+      const status = await window.kickRecorder.getAiArticleStatus();
+      setAiArticleStatus(status);
+      setAiArticleMessage("OpenAI APIキーをWindowsの暗号化ストレージへ保存しました。");
+    } catch (error) {
+      setAiArticleMessage(error instanceof Error ? error.message : "APIキーを保存できませんでした。");
+    } finally { setAiArticleBusy(false); }
+  }
+
+  async function testAiArticleConnection() {
+    if (!window.kickRecorder) return;
+    setAiArticleBusy(true);
+    setAiArticleMessage("");
+    try {
+      const result = await window.kickRecorder.testAiArticleConnection(settings.aiArticleModel);
+      setAiArticleMessage(result.message);
+    } catch (error) {
+      setAiArticleMessage(error instanceof Error ? error.message : "OpenAI APIへ接続できませんでした。");
+    } finally { setAiArticleBusy(false); }
+  }
+
+  async function clearAiArticleApiKey() {
+    if (!window.kickRecorder) return;
+    setAiArticleBusy(true);
+    setAiArticleMessage("");
+    try {
+      await window.kickRecorder.clearAiArticleKey();
+      setAiArticleStatus(previous => ({ ...previous, configured: false }));
+      setAiArticleMessage("保存済みAPIキーを削除しました。AI記事の自動更新には新しいキーが必要です。");
+    } catch (error) {
+      setAiArticleMessage(error instanceof Error ? error.message : "APIキーを削除できませんでした。");
+    } finally { setAiArticleBusy(false); }
+  }
+
   async function createStreamArticle() {
     if (!window.kickRecorder || !articleVideoPath || !articleSlug) return;
     setArticleBusy(true);
@@ -1354,7 +1443,23 @@ export default function App() {
           <button className="small-action" onClick={() => setLibraryRefreshKey(value => value + 1)} disabled={!isDesktop || articleBusy}>一覧を更新</button>
         </div>
         {!isDesktop ? <div className="empty-state"><strong>Windowsデスクトップ版で利用できます</strong><span>録画ファイルとコメントログを読み込む必要があります。</span></div> : <>
-          <div className="comment-video-intro">配信記事はローカルの録画ファイル名とコメントログから作成します。現在の自動要約はコメント頻出語の集計方式です。映像内容をAIが認識したものではありません。</div>
+          <div className="comment-video-intro">録画後の記事生成に加え、LIVE中の配信も記事化できます。AIはKickの配信タイトル・カテゴリ・視聴者数・公開チャットコメントを分析し、コメントの話題や反応を記事へ反映します。映像・音声そのものを視聴する機能ではありません。</div>
+          <div className="settings-subsection ai-article-settings">
+            <div className="settings-subheading"><h3>LIVE中のリアルタイムAI記事</h3><span className={aiArticleStatus.configured ? "api-state connected" : "api-state"}>{aiArticleStatus.configured ? "APIキー設定済み" : "APIキー未設定"}</span></div>
+            <label className="comment-video-checkbox"><input type="checkbox" checked={settings.aiArticleEnabled} onChange={event => setSettings(previous => ({ ...previous, aiArticleEnabled: event.target.checked }))} disabled={!aiArticleStatus.configured} /><span>登録配信者のLIVEを自動でAI記事化する</span></label>
+            <div className="comment-video-form-grid ai-article-form-grid">
+              <label className="comment-video-field"><span>OpenAI APIキー</span><input type="password" value={aiArticleApiKey} onChange={event => setAiArticleApiKey(event.target.value)} placeholder={aiArticleStatus.configured ? "保存済み（変更するときだけ入力）" : "sk-..."} autoComplete="new-password" disabled={aiArticleBusy || !aiArticleStatus.encryptionAvailable} /><small>キー自体は画面や設定ファイルへ保存せず、Windowsの暗号化ストレージへ保存します。</small></label>
+              <label className="comment-video-field"><span>AIモデル</span><select value={settings.aiArticleModel} onChange={event => setSettings(previous => ({ ...previous, aiArticleModel: event.target.value }))} disabled={aiArticleBusy}><option value="gpt-6-luna">GPT-6 Luna（低コスト・推奨）</option><option value="gpt-6.1-terra">GPT-6.1 Terra</option><option value="gpt-6.1-sol">GPT-6.1 Sol</option></select></label>
+              <label className="comment-video-field"><span>AI記事の更新間隔</span><select value={settings.aiArticleIntervalSeconds} onChange={event => setSettings(previous => ({ ...previous, aiArticleIntervalSeconds: Number(event.target.value) }))}><option value={30}>30秒</option><option value={60}>1分</option><option value={120}>2分（推奨）</option><option value={300}>5分</option><option value={600}>10分</option></select></label>
+            </div>
+            <div className="comment-video-actions">
+              <button className="primary-small" onClick={() => void saveAiArticleApiKey()} disabled={aiArticleBusy || !aiArticleApiKey.trim() || !aiArticleStatus.encryptionAvailable}>APIキーを保存</button>
+              <button className="small-action" onClick={() => void testAiArticleConnection()} disabled={aiArticleBusy || !aiArticleStatus.configured}>接続テスト</button>
+              <button className="small-action" onClick={() => void clearAiArticleApiKey()} disabled={aiArticleBusy || !aiArticleStatus.configured}>APIキーを削除</button>
+            </div>
+            {aiArticleMessage && <div className="api-message" role="status">{aiArticleMessage}</div>}
+            <div className="notice">AI記事を有効にすると、通常のコメント自動取得設定がOFFでも、登録した通常・録画専用チャンネルのコメントを記事作成用に受信します。12件程度の新着コメントをまとめて更新し、配信終了時に最終記事を作成します。API利用料はOpenAIアカウントへ発生します。料金上限をOpenAI側で設定してから利用してください。</div>
+          </div>
           <div className="comment-video-form-grid">
             <label className="comment-video-field"><span>登録配信者</span><select value={articleSlug} onChange={event => setArticleSlug(event.target.value)}>
               <option value="">配信者を選択</option>
@@ -1371,12 +1476,15 @@ export default function App() {
           <div className="article-list">
             <div className="settings-subheading"><h3>記事一覧</h3><span className="api-state connected">{streamArticles.length}件</span></div>
             {streamArticles.length === 0 ? <div className="empty-state"><strong>まだ記事がありません</strong><span>登録配信者の録画を選んで記事を生成してください。</span></div> : streamArticles.map(article => <article className="article-card" key={article.id}>
-              <div className="article-meta">{article.displayName} ・ {new Date(article.startedAt).toLocaleString("ja-JP")}</div>
+              <div className="article-meta">{article.displayName} ・ {new Date(article.startedAt).toLocaleString("ja-JP")} <span className={article.status === "live" ? "article-status-live" : "article-status-done"}>{article.status === "live" ? "LIVE・更新中" : article.status === "completed" ? "配信終了" : "アーカイブ"}</span>{article.aiGenerated && <span className="article-ai-label">AI記事</span>}</div>
               <h3>{article.headline}</h3>
               {article.category && <span className="live-stream-category">{article.category}</span>}
+              {article.aiSummary && <p className="article-summary">{article.aiSummary}</p>}
               {article.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
-              <div className="article-stats">コメント {article.commentCount.toLocaleString("ja-JP")}件 ・ 投稿者 {article.uniqueCommenters.toLocaleString("ja-JP")}人 ・ 分析キーワード {article.keywords.join("、") || "なし"}</div>
-              <div className="comment-video-actions"><button className="small-action" onClick={() => void window.kickRecorder?.openRecording(article.sourceVideo)}>元動画を開く</button><button className="small-action" onClick={() => void window.kickRecorder?.revealRecording(article.sourceVideo)}>録画の保存先</button></div>
+              {Boolean(article.highlights?.length) && <div className="article-highlights"><strong>注目ポイント</strong><ul>{article.highlights?.map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
+              {article.aiError && <div className="storage-error article-error">AI更新エラー：{article.aiError}</div>}
+              <div className="article-stats">コメント {article.commentCount.toLocaleString("ja-JP")}件 ・ 投稿者 {article.uniqueCommenters.toLocaleString("ja-JP")}人 ・ 視聴者数 {article.viewerCount?.toLocaleString("ja-JP") ?? "—"}人（最大 {article.peakViewerCount?.toLocaleString("ja-JP") ?? "—"}人） ・ 分析キーワード {article.keywords.join("、") || "なし"}{article.lastAiUpdateAt ? ` ・ AI更新 ${new Date(article.lastAiUpdateAt).toLocaleTimeString("ja-JP")}` : ""}</div>
+              {article.sourceVideo && <div className="comment-video-actions"><button className="small-action" onClick={() => void window.kickRecorder?.openRecording(article.sourceVideo)}>元動画を開く</button><button className="small-action" onClick={() => void window.kickRecorder?.revealRecording(article.sourceVideo)}>録画の保存先</button></div>}
             </article>)}
           </div>
         </>}
