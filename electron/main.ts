@@ -917,7 +917,11 @@ function createCommentAss(
   const laneFreeAt = Array.from({ length: laneCount }, () => 0);
   const dialogue: string[] = [];
   const ordered = messages
-    .map(message => ({ message, timestampMs: Date.parse(message.timestamp || message.receivedAt) }))
+    .map(message => {
+      const primaryTimestamp = Date.parse(message.timestamp);
+      const timestampMs = Number.isFinite(primaryTimestamp) ? primaryTimestamp : Date.parse(message.receivedAt);
+      return { message, timestampMs };
+    })
     .filter(item => Number.isFinite(item.timestampMs) && item.timestampMs >= startMs && item.timestampMs <= endMs)
     .sort((a, b) => a.timestampMs - b.timestampMs);
 
