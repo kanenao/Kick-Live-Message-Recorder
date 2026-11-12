@@ -93,7 +93,7 @@ type RecordingEvent = {
 type CommentLogFile = { path: string; name: string; channelSlug: string; kind: "LIVE" | "VOD"; size: number; modifiedAt: string };
 type CommentVideoEvent = { status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string; outputPath?: string; generatedComments?: number; skippedComments?: number };
 
-const APP_VERSION = "0.1.0-beta.27";
+const APP_VERSION = "0.1.0-beta.28";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -268,7 +268,7 @@ export default function App() {
   const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
   const [commentLogFiles, setCommentLogFiles] = useState<CommentLogFile[]>([]);
   const [selectedCommentVideoPath, setSelectedCommentVideoPath] = useState("");
-  const [selectedCommentLogPath, setSelectedCommentLogPath] = useState("");
+  const [selectedCommentLogPaths, setSelectedCommentLogPaths] = useState<string[]>([]);
   const [isLoadingCommentLogs, setIsLoadingCommentLogs] = useState(false);
   const [commentVideoDelay, setCommentVideoDelay] = useState(0);
   const [commentVideoFontSize, setCommentVideoFontSize] = useState(42);
@@ -501,9 +501,12 @@ export default function App() {
   }, [recordingFiles, selectedCommentVideoPath]);
 
   useEffect(() => {
-    if (!selectedCommentLogPath && commentLogFiles.length > 0) setSelectedCommentLogPath(commentLogFiles[0].path);
-    else if (selectedCommentLogPath && !commentLogFiles.some(file => file.path === selectedCommentLogPath)) setSelectedCommentLogPath(commentLogFiles[0]?.path ?? "");
-  }, [commentLogFiles, selectedCommentLogPath]);
+    setSelectedCommentLogPaths(current => {
+      const availablePaths = new Set(commentLogFiles.map(file => file.path));
+      const retained = current.filter(path => availablePaths.has(path));
+      return retained.length > 0 ? retained : commentLogFiles.length > 0 ? [commentLogFiles[0].path] : [];
+    });
+  }, [commentLogFiles]);
 
   useEffect(() => {
     if (liveChannelCards.length === 0) return;
@@ -989,7 +992,7 @@ export default function App() {
 
   async function startCommentVideoGeneration() {
     if (!window.kickRecorder) return;
-    if (!selectedCommentVideoPath || !selectedCommentLogPath) {
+    if (!selectedCommentVideoPath || selectedCommentLogPaths.length === 0) {
       setCommentVideoEvent({ status: "error", percent: 0, message: "元動画とコメントファイルの両方を選択してください。" });
       return;
     }
@@ -998,7 +1001,7 @@ export default function App() {
     setCommentVideoEvent({ status: "starting", percent: 0, message: "コメント付き動画の生成を準備しています。" });
     try {
       const result = await window.kickRecorder.startCommentVideo({
-        videoPath: selectedCommentVideoPath, chatPath: selectedCommentLogPath, delaySeconds: commentVideoDelay,
+        videoPath: selectedCommentVideoPath, chatPaths: selectedCommentLogPaths, delaySeconds: commentVideoDelay,
         fontSize: commentVideoFontSize, displaySeconds: commentVideoDuration, rowLimit: commentVideoRows,
         opacity: commentVideoOpacity, quality: commentVideoQuality, showUsername: commentVideoShowUsername
       });
@@ -1319,17 +1322,18 @@ export default function App() {
                 </select>
                 {recordingFiles.length === 0 && <small>録画ライブラリに動画がありません。先に配信を録画してください。</small>}
               </label>
-              <label className="comment-video-field"><span>コメントファイル</span>
-                <select value={selectedCommentLogPath} onChange={event => setSelectedCommentLogPath(event.target.value)} disabled={commentVideoBusy || isLoadingCommentLogs}>
-                  <option value="">コメントJSONLを選択してください</option>
-                  {commentLogFiles.map(file => <option key={file.path} value={file.path}>{file.channelSlug} ・ {file.kind} ・ {file.name} ・ {(file.size / (1024 * 1024)).toFixed(2)} MB</option>)}
-                </select>
-                {isLoadingCommentLogs
-                  ? <small>コメントファイルを読み込み中...</small>
-                  : commentLogFiles.length === 0
-                    ? <small>ChatフォルダーにJSONLがありません。コメント保存を有効にして配信コメントを取得してください。</small>
-                    : <small>LIVEログは動画の更新時刻と再生時間から開始位置を推定します。VODログは配信開始からの経過秒数を使用します。</small>}
-              </label>
+              <div className="comment-video-field comment-video-log-field"><span>コメントファイル（複数選択可）</span>
+                <div className="comment-video-log-count">選択中：{selectedCommentLogPaths.length}／最大31ファイル</div>
+                <div className="comment-video-log-list" role="group" aria-label="コメントファイルの複数選択">
+                  {commentLogFiles.map(file => <label className="comment-video-log-option" key={file.path}>
+                    <input type="checkbox" checked={selectedCommentLogPaths.includes(file.path)} onChange={event => setSelectedCommentLogPaths(previous => event.target.checked ? [...previous, file.path] : previous.filter(path => path !== file.path))} disabled={commentVideoBusy || isLoadingCommentLogs || (!selectedCommentLogPaths.includes(file.path) && selectedCommentLogPaths.length >= 31)} />
+                    <span><strong>{file.channelSlug} ・ {file.kind}</strong><small>{file.name} ・ {(file.size / (1024 * 1024)).toFixed(2)} MB</small></span>
+                  </label>)}
+                  {isLoadingCommentLogs && <small>コメントファイルを読み込み中...</small>}
+                  {!isLoadingCommentLogs && commentLogFiles.length === 0 && <small>ChatフォルダーにJSONLがありません。コメント保存を有効にして配信コメントを取得してください。</small>}
+                </div>
+                <small>LIVE配信が日付をまたいだ場合は、同じチャンネルの複数日分ログを選択してください。異なるチャンネルやLIVE／VODの混在はできません。VODログは1ファイルずつ生成します。</small>
+              </div>
             </div>
             <div className="settings-subsection">
               <div className="settings-subheading"><h3>コメント表示設定</h3><span className="api-state connected">ASS字幕合成</span></div>
@@ -1349,7 +1353,7 @@ export default function App() {
               {commentVideoEvent.status === "completed" && <small>合成コメント：{(commentVideoEvent.generatedComments ?? 0).toLocaleString("ja-JP")}件 ・ 省略：{(commentVideoEvent.skippedComments ?? 0).toLocaleString("ja-JP")}件</small>}
             </div>}
             <div className="comment-video-actions">
-              <button className="primary-small" onClick={() => void startCommentVideoGeneration()} disabled={commentVideoBusy || !selectedCommentVideoPath || !selectedCommentLogPath || isLoadingRecordings || isLoadingCommentLogs}>コメント付き動画を生成</button>
+              <button className="primary-small" onClick={() => void startCommentVideoGeneration()} disabled={commentVideoBusy || !selectedCommentVideoPath || selectedCommentLogPaths.length === 0 || isLoadingRecordings || isLoadingCommentLogs}>コメント付き動画を生成</button>
               {commentVideoBusy && <button className="remove" onClick={() => void stopCommentVideoGeneration()}>生成を停止</button>}
               {!commentVideoBusy && commentVideoEvent?.status === "completed" && commentVideoOutputPath && <button className="small-action" onClick={() => void revealRecordingFile(commentVideoOutputPath)}>生成ファイルの保存先を表示</button>}
             </div>

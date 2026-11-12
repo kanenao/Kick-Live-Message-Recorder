@@ -140,6 +140,14 @@
 .comment-video-field input,.comment-video-field select{width:100%;min-width:0;background:#11141a;border:1px solid #343945;border-radius:7px;padding:10px 11px;color:#edf0f5;outline:none;font:inherit}
 .comment-video-field input:focus,.comment-video-field select:focus{border-color:#55c98d}
 .comment-video-field small{font-size:9px;line-height:1.5;color:#778391}
+.comment-video-log-count{font-size:10px;color:#8d99a8}
+.comment-video-log-list{display:flex;flex-direction:column;gap:0;max-height:250px;overflow:auto;background:#11141a;border:1px solid #343945;border-radius:7px;padding:5px}
+.comment-video-log-option{display:flex;align-items:center;gap:9px;padding:8px;border-bottom:1px solid #252b34;color:#c4ccd6;cursor:pointer}
+.comment-video-log-option:last-child{border-bottom:0}
+.comment-video-log-option input{width:16px;min-width:16px;height:16px;margin:0;padding:0;border:0;background:transparent;accent-color:#55d895}
+.comment-video-log-option>span{display:flex;flex-direction:column;gap:3px;min-width:0;font-weight:600}
+.comment-video-log-option strong{font-size:10px;color:#dce2e9}
+.comment-video-log-option small{font-size:9px;color:#778391;overflow-wrap:anywhere}
 .comment-video-checkbox{display:flex;align-items:center;gap:9px;margin-top:16px;color:#c4ccd6;font-size:11px}
 .comment-video-checkbox input{width:16px;height:16px;accent-color:#51d895}
 .comment-video-status{margin-top:18px;padding:13px;border:1px solid #34483b;border-radius:8px;background:#17231d;color:#a8e5bf}

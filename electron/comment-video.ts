@@ -13,7 +13,7 @@ import {
   statSync,
   writeFileSync
 } from "node:fs";
-import { basename, extname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { createInterface } from "node:readline";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
@@ -34,7 +34,8 @@ export type CommentLogFile = {
 
 export type CommentVideoOptions = {
   videoPath: string;
-  chatPath: string;
+  chatPath?: string;
+  chatPaths?: string[];
   delaySeconds?: number;
   fontSize?: number;
   displaySeconds?: number;
@@ -272,6 +273,24 @@ export function listCommentLogFiles(outputDirectory: string): CommentLogFile[] {
   return files.sort((a, b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt)).slice(0, 1000);
 }
 
+async function* readLinesFromFiles(filePaths: string[], signal: AbortSignal): AsyncGenerator<string> {
+  for (const filePath of filePaths) {
+    if (signal.aborted) throw new Error("生成を停止しました。");
+    const reader = createInterface({
+      input: createReadStream(filePath, { encoding: "utf8" }),
+      crlfDelay: Infinity
+    });
+    try {
+      for await (const line of reader) {
+        if (signal.aborted) throw new Error("生成を停止しました。");
+        yield line;
+      }
+    } finally {
+      reader.close();
+    }
+  }
+}
+
 export class KickCommentVideoGenerator {
   private child: ChildProcessWithoutNullStreams | null = null;
   private controller: AbortController | null = null;
@@ -291,31 +310,49 @@ export class KickCommentVideoGenerator {
     if (!input || typeof input !== "object") throw new Error("動画とコメントファイルを選択してください。");
 
     const values = input as Partial<CommentVideoOptions>;
-    if (typeof values.videoPath !== "string" || values.videoPath.length > 4096 ||
-      typeof values.chatPath !== "string" || values.chatPath.length > 4096) {
-      throw new Error("動画またはコメントファイルの指定が不正です。");
+    if (typeof values.videoPath !== "string" || values.videoPath.length > 4096) {
+      throw new Error("動画ファイルの指定が不正です。");
+    }
+    const requestedChatPaths: unknown[] = Array.isArray(values.chatPaths)
+      ? values.chatPaths
+      : typeof values.chatPath === "string" ? [values.chatPath] : [];
+    if (requestedChatPaths.length === 0 || requestedChatPaths.length > 31 ||
+      requestedChatPaths.some(path => typeof path !== "string" || path.length === 0 || path.length > 4096)) {
+      throw new Error("コメントファイルは1～31件の範囲で選択してください。");
     }
 
     const root = resolve(outputDirectory);
     const videoPath = resolve(values.videoPath);
-    const chatPath = resolve(values.chatPath);
+    const chatPaths = [...new Set(requestedChatPaths.map(path => resolve(path as string)))];
     if (!isPathInsideDirectory(videoPath, root) || !VIDEO_EXTENSIONS.has(extname(videoPath).toLowerCase())) {
       throw new Error("動画は録画ライブラリ内の対応形式を選択してください。");
     }
     const chatRoot = join(root, "Chat");
-    if (!isPathInsideDirectory(chatPath, chatRoot) || extname(chatPath).toLowerCase() !== ".jsonl") {
+    if (chatPaths.some(path => !isPathInsideDirectory(path, chatRoot) || extname(path).toLowerCase() !== ".jsonl")) {
       throw new Error("コメントファイルはアプリのChatフォルダー内にあるJSONLを選択してください。");
     }
+    const chatDirectories = new Set(chatPaths.map(path => resolve(dirname(path))));
+    const firstChatPath = chatPaths[0];
+    const channelDirectory = firstChatPath ? dirname(firstChatPath) : "";
+    if (chatDirectories.size !== 1 || !channelDirectory ||
+      resolve(dirname(channelDirectory)) !== resolve(chatRoot) ||
+      !/^[a-zA-Z0-9_-]{1,40}$/.test(basename(channelDirectory))) {
+      throw new Error("複数選択する場合は、同じチャンネルフォルダー内のコメントログを選択してください。");
+    }
+    const chatKinds = new Set(chatPaths.map(path => /^VOD_/i.test(basename(path)) ? "VOD" : "LIVE"));
+    if (chatKinds.size !== 1 || (chatKinds.has("VOD") && chatPaths.length > 1)) {
+      throw new Error("LIVEログとVODログは混在できません。VODログは1ファイルずつ生成してください。");
+    }
     validateRegularFile(videoPath, "動画ファイル");
-    validateRegularFile(chatPath, "コメントファイル");
+    for (const chatPath of chatPaths) validateRegularFile(chatPath, "コメントファイル");
     if (isFileActive(videoPath)) {
       throw new Error("録画中・ダウンロード中の動画は生成元にできません。録画を停止して完了後に再度実行してください。");
     }
 
     const output = allocateOutputPaths(root, videoPath);
-    const options: Required<Omit<CommentVideoOptions, "videoPath" | "chatPath">> & Pick<CommentVideoOptions, "videoPath" | "chatPath"> = {
+    const options: Required<Omit<CommentVideoOptions, "videoPath" | "chatPath" | "chatPaths">> & { videoPath: string; chatPaths: string[] } = {
       videoPath,
-      chatPath,
+      chatPaths,
       delaySeconds: boundedNumber(values.delaySeconds, 0, -300, 300),
       fontSize: boundedNumber(values.fontSize, 42, 16, 80),
       displaySeconds: boundedNumber(values.displaySeconds, 6, 2, 15),
@@ -371,7 +408,7 @@ export class KickCommentVideoGenerator {
   }
 
   private async run(
-    options: Required<Omit<CommentVideoOptions, "videoPath" | "chatPath">> & Pick<CommentVideoOptions, "videoPath" | "chatPath">,
+    options: Required<Omit<CommentVideoOptions, "videoPath" | "chatPath" | "chatPaths">> & { videoPath: string; chatPaths: string[] },
     output: { video: string; ass: string },
     signal: AbortSignal
   ): Promise<void> {
@@ -408,15 +445,11 @@ export class KickCommentVideoGenerator {
       const estimatedVideoStartMs = Number.isFinite(filenameStartMs)
         ? filenameStartMs
         : videoStats.mtimeMs - info.duration * 1000;
-      const interfaceReader = createInterface({
-        input: createReadStream(options.chatPath, { encoding: "utf8" }),
-        crlfDelay: Infinity
-      });
       const comments: ParsedComment[] = [];
       let readCount = 0;
       let malformedCount = 0;
 
-      for await (const line of interfaceReader) {
+      for await (const line of readLinesFromFiles(options.chatPaths, signal)) {
         if (signal.aborted) throw new Error("生成を停止しました。");
         if (!line.trim()) continue;
         readCount += 1;
@@ -549,6 +582,7 @@ export class KickCommentVideoGenerator {
       }
 
       if (batch.length > 0) appendFileSync(output.ass, batch.join("\n") + "\n", "utf8");
+      const totalSkipped = skipped + malformedCount;
       if (generated === 0) throw new Error("表示できるコメントがありません。行数設定を増やすか、コメントの同期ずれを調整してください。");
 
       this.onEvent({
@@ -556,7 +590,7 @@ export class KickCommentVideoGenerator {
         percent: 18,
         outputPath: output.video,
         generatedComments: generated,
-        skippedComments: skipped + malformedCount,
+        skippedComments: totalSkipped,
         message: "コメント" + generated.toLocaleString("ja-JP") + "件を字幕化しました。動画へ合成しています。"
       });
 
@@ -615,7 +649,7 @@ export class KickCommentVideoGenerator {
               percent: rounded,
               outputPath: output.video,
               generatedComments: generated,
-              skippedComments: skipped + malformedCount,
+              skippedComments: totalSkipped,
               message: "コメント付き動画をエンコード中：" + rounded + "%"
             });
           }
@@ -653,9 +687,9 @@ export class KickCommentVideoGenerator {
         percent: 100,
         outputPath: output.video,
         generatedComments: generated,
-        skippedComments: skipped + malformedCount,
+        skippedComments: totalSkipped,
         message: "コメント付き動画を生成しました。コメント表示：" + generated.toLocaleString("ja-JP") +
-          "件、重なり等で省略：" + skipped.toLocaleString("ja-JP") +
+          "件、不正行・行不足等で省略：" + totalSkipped.toLocaleString("ja-JP") +
           "件。保存先：CommentVideos"
       });
     } catch (error) {

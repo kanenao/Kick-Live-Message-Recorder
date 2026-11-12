@@ -155,7 +155,7 @@ declare global {
       openRecording: (filePath: string) => Promise<{ ok: true }>;
       revealRecording: (filePath: string) => Promise<{ ok: true }>;
       listCommentLogFiles: () => Promise<KickRecorderCommentLogFile[]>;
-      startCommentVideo: (options: { videoPath: string; chatPath: string; delaySeconds?: number; fontSize?: number; displaySeconds?: number; rowLimit?: number; opacity?: number; quality?: "high" | "standard" | "compact"; showUsername?: boolean }) => Promise<{ ok: true; outputPath: string }>;
+      startCommentVideo: (options: { videoPath: string; chatPath?: string; chatPaths?: string[]; delaySeconds?: number; fontSize?: number; displaySeconds?: number; rowLimit?: number; opacity?: number; quality?: "high" | "standard" | "compact"; showUsername?: boolean }) => Promise<{ ok: true; outputPath: string }>;
       stopCommentVideo: () => Promise<{ ok: true }>;
       onCommentVideoStatus: (callback: (event: KickRecorderCommentVideoEvent) => void) => () => void;
       onRecordingStatus: (callback: (event: KickRecorderRecordingEvent) => void) => () => void;
