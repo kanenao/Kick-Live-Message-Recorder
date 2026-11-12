@@ -45,13 +45,6 @@ function extractStartDate(fileName: string, fallback: Date): Date {
   return Number.isNaN(date.getTime()) ? fallback : date;
 }
 
-function formatDuration(seconds: number): string {
-  const total = Math.max(0, Math.floor(seconds));
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  return hours > 0 ? `${hours}時間${minutes}分` : `${minutes}分`;
-}
-
 function tokenize(text: string): string[] {
   const normalized = text.normalize("NFKC").toLowerCase()
     .replace(/https?:\/\/\S+/g, " ")
