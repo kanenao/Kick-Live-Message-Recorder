@@ -117,8 +117,30 @@ type AiArticleStatus = {
 };
 type CommentVideoEvent = { status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string; outputPath?: string; generatedComments?: number; skippedComments?: number };
 
-const APP_VERSION = "0.1.0-beta.37";
+const APP_VERSION = "0.1.0-beta.38";
+const COMMENT_VIDEO_PREVIEW_ITEMS = [
+  { text: "きたあああああ！", color: "#ffffff", top: "8%", delay: 0 },
+  { text: "うぽつ！！！！！！", color: "#ff4545", top: "18%", delay: 1.1 },
+  { text: "まってた", color: "#ffffff", top: "29%", delay: 2.1 },
+  { text: "888888888", color: "#ffffff", top: "40%", delay: 0.5 },
+  { text: "すき！", color: "#ffe64a", top: "51%", delay: 2.7 },
+  { text: "うぽつ", color: "#36ed48", top: "62%", delay: 1.8 },
+  { text: "これはすごい", color: "#ffffff", top: "73%", delay: 3.4 },
+  { text: "ナイス！", color: "#ffe64a", top: "83%", delay: 0.9 },
+  { text: "おめでとう！", color: "#ffffff", top: "92%", delay: 2.5 }
+] as const;
 const VERSION_HISTORY = [
+  {
+    version: "0.1.0-beta.38",
+    title: "コメント表示プレビューを追加",
+    changes: [
+      "生成前にコメントの流れ方・フォント・色・文字サイズを画面上で確認可能に",
+      "フォント・文字サイズ・速度・表示時間・不透明度・表示行数の設定変更をプレビューへ即時反映",
+      "実際の動画合成で使う参考スタイルをアニメーション表示し、設定調整を簡単に"
+    ]
+  },
+  {
+    version: "0.1.0-beta.37",
   {
     version: "0.1.0-beta.37",
     title: "コメントの縦配置・重なり判定を改善",
@@ -1491,6 +1513,28 @@ export default function App() {
                 <label className="comment-video-field"><span>出力画質</span><select value={commentVideoQuality} onChange={event => setCommentVideoQuality(event.target.value as "high" | "standard" | "compact")} disabled={commentVideoBusy}><option value="high">高画質・大きめ</option><option value="standard">標準（おすすめ）</option><option value="compact">容量優先</option></select><small>利用可能なH.264エンコーダーを優先し、ない場合は互換形式へ切り替えます。</small></label>
               </div>
               <label className="comment-video-checkbox"><input type="checkbox" checked={commentVideoShowUsername} onChange={event => setCommentVideoShowUsername(event.target.checked)} disabled={commentVideoBusy} /><span>コメントに投稿者名も表示する</span></label>
+            </div>
+            <div className="comment-video-preview">
+              <div className="comment-video-preview-heading"><strong>コメント表示プレビュー</strong><span>設定変更に合わせて更新</span></div>
+              <div className="comment-video-preview-screen" aria-label="コメント表示のサンプルプレビュー">
+                {COMMENT_VIDEO_PREVIEW_ITEMS.slice(0, Math.max(1, Math.min(COMMENT_VIDEO_PREVIEW_ITEMS.length, commentVideoRows))).map((item, index) => <span
+                  className="comment-video-preview-comment"
+                  key={index}
+                  style={{
+                    top: item.top,
+                    color: item.color,
+                    opacity: Math.max(0.2, Math.min(1, commentVideoOpacity / 100)),
+                    fontSize: Math.max(8, Math.round(commentVideoFontSize / 3)) + "px",
+                    fontFamily: commentVideoFontFamily === "ms-pgothic" ? '"ＭＳ Ｐゴシック", sans-serif'
+                      : commentVideoFontFamily === "yu-gothic" ? '"游ゴシック", sans-serif'
+                      : commentVideoFontFamily === "arial" ? "Arial, sans-serif" : 'Meiryo, "メイリオ", sans-serif',
+                    animationDuration: (Math.max(2, Math.min(15, commentVideoDuration)) * 100 /
+                      Math.max(50, Math.min(200, commentVideoSpeed))) + "s",
+                    animationDelay: item.delay + "s"
+                  }}
+                >{item.text}</span>)}
+              </div>
+              <small>見た目を確認するためのサンプルです。実際の表示位置・コメント数・重なり判定は選択した配信ログの内容に応じて生成時に調整します。</small>
             </div>
             {commentVideoEvent && <div className={commentVideoEvent.status === "error" ? "comment-video-status error" : "comment-video-status"} role="status">
               <div className="comment-video-status-line"><strong>{commentVideoEvent.message}</strong>{commentVideoBusy && <span>{Math.round(commentVideoEvent.percent)}%</span>}</div>
