@@ -7,6 +7,7 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   rmSync,
   statSync,
@@ -150,14 +151,13 @@ function escapeAssText(value: string): string {
     .slice(0, 500);
 }
 
-function colorToAss(value: string, opacity: number): string {
+function colorToAss(value: string): string {
   const match = value.match(/^#?([0-9a-f]{6})$/i);
   const rgb = match?.[1] ?? "FFFFFF";
   const red = rgb.slice(0, 2);
   const green = rgb.slice(2, 4);
   const blue = rgb.slice(4, 6);
-  const alpha = Math.round((100 - opacity) * 2.55).toString(16).padStart(2, "0").toUpperCase();
-  return "&H" + alpha + blue.toUpperCase() + green.toUpperCase() + red.toUpperCase() + "&";
+  return "&H" + blue.toUpperCase() + green.toUpperCase() + red.toUpperCase() + "&";
 }
 
 function escapeFilterPath(path: string): string {
@@ -510,8 +510,8 @@ export class KickCommentVideoGenerator {
         const end = Math.min(info.duration, start + options.displaySeconds);
         lanes[laneIndex] = { start, end, speed };
         const y = topMargin + laneIndex * lineHeight;
-        const color = colorToAss(comment.color, options.opacity);
-        const alpha = color.slice(2, 4);
+        const color = colorToAss(comment.color);
+        const alpha = Math.round((100 - options.opacity) * 2.55).toString(16).padStart(2, "0").toUpperCase();
         const tags = "{\\move(" + (info.width + 16) + "," + y + "," + Math.round(-width) + "," + y +
           ",0," + Math.max(1, Math.round((end - start) * 1000)) + ")" +
           "\\1c" + color + "\\alpha&H" + alpha + "&\\bord2\\shad1}";
@@ -643,7 +643,6 @@ export class KickCommentVideoGenerator {
     } finally {
       this.child = null;
       rmSync(temporaryDirectory, { recursive: true, force: true });
-      void outputDirectory;
     }
   }
 }
