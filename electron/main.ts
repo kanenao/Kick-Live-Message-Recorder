@@ -452,7 +452,7 @@ const liveArticleMetadata = new Map<string, KickChannelCheck>();
 const lastArticleMessageIds = new Map<string, string>();
 
 function getArticleDirectory(): string {
-  const directory = join(getRecordingOutputDirectory(), "Articles");
+  const directory = join(chatReceiver.getOutputDirectory() || getRecordingOutputDirectory(), "Articles");
   mkdirSync(directory, { recursive: true });
   return directory;
 }
@@ -479,7 +479,7 @@ async function createKickArticle(slugInput: unknown, metadata?: KickChannelCheck
     throw new Error("記事生成対象のチャンネル名が不正です。");
   }
   const slug = slugInput.toLowerCase();
-  const allMessages = chatReceiver.listMessages(slug, 5000);
+  const allMessages = chatReceiver.listMessages(slug, 5000, chatReceiver.getOutputDirectory() || getRecordingOutputDirectory());
   const streamStart = metadata?.startedAt ? Date.parse(metadata.startedAt) : Number.NaN;
   const messages = Number.isFinite(streamStart) && streamStart > Date.UTC(2000, 0, 1)
     ? allMessages.filter(message => {
@@ -543,7 +543,7 @@ async function runLiveArticleCycle(): Promise<void> {
       if (result.isLive) {
         liveArticleChannels.add(result.slug);
         liveArticleMetadata.set(result.slug, result);
-        const messages = chatReceiver.listMessages(result.slug, 5000);
+        const messages = chatReceiver.listMessages(result.slug, 5000, chatReceiver.getOutputDirectory() || getRecordingOutputDirectory());
         const lastMessage = messages[messages.length - 1];
         if (!lastMessage || lastArticleMessageIds.get(result.slug) === lastMessage.messageId) continue;
         try {
@@ -827,7 +827,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("chat:list", (event, slug: unknown) => {
     assertTrustedSender(event);
-    return chatReceiver.listMessages(slug, 500);
+    return chatReceiver.listMessages(slug, 500, getRecordingOutputDirectory());
   });
 
   ipcMain.handle("articles:list", event => {
