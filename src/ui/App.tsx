@@ -1446,7 +1446,7 @@ export default function App() {
           <button className="small-action" onClick={() => setLibraryRefreshKey(value => value + 1)} disabled={!isDesktop || articleBusy}>一覧を更新</button>
         </div>
         {!isDesktop ? <div className="empty-state"><strong>Windowsデスクトップ版で利用できます</strong><span>録画ファイルとコメントログを読み込む必要があります。</span></div> : <>
-          <div className="comment-video-intro">録画後の記事生成に加え、LIVE中の配信も記事化できます。AIはKickの配信タイトル・カテゴリ・視聴者数・公開チャットコメントを分析し、コメントの話題や反応を記事へ反映します。映像・音声そのものを視聴する機能ではありません。</div>
+          <div className="comment-video-intro">録画済み配信は保存済みコメントログをAIで分析して記事を強化できます。AI記事をONにすると、LIVE中の配信も自動で記事化し、コメントの流れに合わせて随時更新します。AIは配信タイトル・カテゴリ・視聴者数・公開チャットコメントを分析します。映像・音声そのものを視聴する機能ではありません。</div>
           <div className="settings-subsection ai-article-settings">
             <div className="settings-subheading"><h3>LIVE中のリアルタイムAI記事</h3><span className={aiArticleStatus.configured ? "api-state connected" : "api-state"}>{aiArticleStatus.configured ? "APIキー設定済み" : "APIキー未設定"}</span></div>
             <label className="comment-video-checkbox"><input type="checkbox" checked={settings.aiArticleEnabled} onChange={event => setSettings(previous => ({ ...previous, aiArticleEnabled: event.target.checked }))} disabled={!aiArticleStatus.configured} /><span>登録配信者のLIVEを自動でAI記事化する</span></label>
