@@ -1042,7 +1042,7 @@ export default function App() {
               : <div className="chat-subscription-list">
                   {channels.map(channel => {
                     const status = chatSubscriptionStatuses.find(item => item.slug === channel.name.toLowerCase());
-                    const label = !status ? "未確認" : !status.broadcasterUserId ? "チャンネル未検出" : status.subscribed ? "登録済み" : "未登録";
+                    const label = !status ? "未確認" : !status.broadcasterUserId ? "チャンネル未検出" : status.subscribed ? "登録済み" : "一覧未検出";
                     return <div className="chat-subscription-row" key={channel.id}>
                       <strong>{channel.name}</strong>
                       <span className={status?.subscribed ? "api-state connected" : "api-state"}>{label}</span>
@@ -1061,7 +1061,7 @@ export default function App() {
               : <button className="small-action" onClick={() => void stopChatCapture()} disabled={chatBusy}>受信を停止</button>}
             <button className="small-action" onClick={() => void copyWebhookUrl()} disabled={!chatStatus.publicUrl}>Webhook URLをコピー</button>
             <button className="small-action" onClick={() => void refreshChatSubscriptionStatus()} disabled={!isDesktop || !kickCredentialsConfigured || channels.length === 0 || chatSubscriptionLoading || chatBusy}>{chatSubscriptionLoading ? "確認中..." : "購読状態を確認"}</button>
-            <button className="small-action" onClick={() => void registerChatSubscriptions()} disabled={!isDesktop || !kickCredentialsConfigured || !chatStatus.serverRunning || !chatStatus.tunnelRunning || channels.length === 0 || chatBusy}>未登録チャンネルを購読</button>
+            <button className="small-action" onClick={() => void registerChatSubscriptions()} disabled={!isDesktop || !kickCredentialsConfigured || !chatStatus.serverRunning || !chatStatus.tunnelRunning || channels.length === 0 || chatBusy}>一覧未検出チャンネルを購読</button>
           </div>
           <div className="notice">設定手順：①「チャット受信を開始」②表示されたURLをKick Developerの対象アプリでWebhooksを有効にしてWebhook URLへ登録 ③「購読状態を確認」④「未登録チャンネルを購読」を実行。Quick TunnelのURLは起動ごとに変わるため、再起動後はDeveloper側のURLも更新してください。アプリが起動中のみ受信できます。</div>
           <p className="settings-help">{chatStatus.message}</p>
