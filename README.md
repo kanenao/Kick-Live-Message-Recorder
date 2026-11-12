@@ -3,7 +3,7 @@
 Kickの配信を監視・録画し、公式Webhookでチャットを保存するWindowsデスクトップアプリです。ローカルOllamaを使った日本語の配信記事生成にも対応します。
 
 <aside>
-<strong>開発版：0.1.0-beta.12</strong><br />
+<strong>開発版：0.1.0-beta.13</strong><br />
 チャットWebhook受信・JSONL保存、Ollamaによるライブ記事の自動生成を実装中です。Kick Developer側のWebhook URL設定と実配信での受信確認は、利用環境での初回設定が必要です。
 </aside>
 
@@ -21,6 +21,8 @@ Kickの配信を監視・録画し、公式Webhookでチャットを保存する
 - Cloudflare Quick TunnelでローカルのWebhook受信サーバーを公開
 - Webhook署名をKick公開鍵で検証し、コメントをJSONL保存
 - コメント投稿者・本文・時刻・バッジ・エモート位置を記録
+- アプリ内チャットビューアーでリアルタイム表示・履歴検索
+- チャットログのCSV（Excel向けUTF-8 BOM）/ JSONL書き出し
 - Ollamaによる日本語の配信記事生成（クラウドAI APIキー不要）
 - 新着コメントから約3分ごとのライブ記事スナップショット
 - 配信終了を検知した際の最終記事生成
