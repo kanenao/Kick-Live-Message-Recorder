@@ -17,6 +17,9 @@ type AppSettings = {
   outputDirectory: string;
   autoMonitorEnabled: boolean;
   monitorIntervalSeconds: number;
+  autoRecordRecordingOnlyOnStreamStart: boolean;
+  launchAtLogin: boolean;
+  preventSystemSleep: boolean;
   recordingRetryCount: number;
   recordingRetryDelaySeconds: number;
   notifyOnLive: boolean;
@@ -41,6 +44,11 @@ type ChannelCheck = {
   categoryThumbnail: string | null;
   viewerCount: number;
   startedAt: string | null;
+};
+
+type BackgroundMonitorStatus = {
+  enabled: boolean; running: boolean; monitoredChannels: number; intervalSeconds: number;
+  lastCheckAt: string | null; lastError: string; message: string; results: ChannelCheck[];
 };
 
 type UpdateStatus = {
@@ -93,7 +101,7 @@ type RecordingEvent = {
 type CommentLogFile = { path: string; name: string; channelSlug: string; kind: "LIVE" | "VOD"; size: number; modifiedAt: string };
 type CommentVideoEvent = { status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string; outputPath?: string; generatedComments?: number; skippedComments?: number };
 
-const APP_VERSION = "0.1.0-beta.28";
+const APP_VERSION = "0.1.0-beta.29";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -103,7 +111,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   saveChat: true,
   outputDirectory: "",
   autoMonitorEnabled: true,
-  monitorIntervalSeconds: 60,
+  monitorIntervalSeconds: 10,
+  autoRecordRecordingOnlyOnStreamStart: true,
+  launchAtLogin: true,
+  preventSystemSleep: true,
   recordingRetryCount: 5,
   recordingRetryDelaySeconds: 10,
   notifyOnLive: true,
@@ -163,7 +174,10 @@ function normalizeState(value: unknown): PersistedState {
       autoMonitorEnabled: settings.autoMonitorEnabled !== false,
       monitorIntervalSeconds: typeof settings.monitorIntervalSeconds === "number"
         ? Math.max(10, Math.min(3600, Math.round(settings.monitorIntervalSeconds)))
-        : 60,
+        : 10,
+      autoRecordRecordingOnlyOnStreamStart: settings.autoRecordRecordingOnlyOnStreamStart !== false,
+      launchAtLogin: settings.launchAtLogin !== false,
+      preventSystemSleep: settings.preventSystemSleep !== false,
       recordingRetryCount: typeof settings.recordingRetryCount === "number"
         ? Math.max(0, Math.min(10, Math.round(settings.recordingRetryCount)))
         : 5,
@@ -252,6 +266,10 @@ export default function App() {
   const [isCheckingChannels, setIsCheckingChannels] = useState(false);
   const [lastChannelCheck, setLastChannelCheck] = useState("");
   const [monitorError, setMonitorError] = useState("");
+  const [backgroundMonitorStatus, setBackgroundMonitorStatus] = useState<BackgroundMonitorStatus>({
+    enabled: true, running: false, monitoredChannels: 0, intervalSeconds: 10,
+    lastCheckAt: null, lastError: "", message: "監視状態を読み込み中...", results: []
+  });
   const previousChecksRef = useRef<Record<string, ChannelCheck>>({});
   const [appVersion, setAppVersion] = useState(APP_VERSION);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({
@@ -316,6 +334,7 @@ export default function App() {
     let unsubscribeChatStatus: (() => void) | undefined;
     let unsubscribeVodChat: (() => void) | undefined;
     let unsubscribeCommentVideo: (() => void) | undefined;
+    let unsubscribeBackgroundMonitor: (() => void) | undefined;
     void loadState().then(state => {
       if (!active) return;
       setChannels(state.channels);
@@ -358,6 +377,20 @@ export default function App() {
         if (event.outputPath) setCommentVideoOutputPath(event.outputPath);
         if (event.status === "completed") setLibraryRefreshKey(value => value + 1);
       });
+      const applyMonitorStatus = (status: BackgroundMonitorStatus) => {
+        setBackgroundMonitorStatus(status);
+        if (status.lastCheckAt) setLastChannelCheck(new Date(status.lastCheckAt).toLocaleString("ja-JP"));
+        setMonitorError(status.lastError);
+        if (status.results.length > 0) {
+          const next = Object.fromEntries(status.results.map(result => [result.slug.toLowerCase(), result]));
+          previousChecksRef.current = next;
+          setChannelChecks(next);
+        }
+      };
+      unsubscribeBackgroundMonitor = window.kickRecorder.onBackgroundMonitorStatus(applyMonitorStatus);
+      void window.kickRecorder.getBackgroundMonitorStatus().then(status => {
+        if (active) applyMonitorStatus(status);
+      }).catch(() => undefined);
       unsubscribeRecording = window.kickRecorder.onRecordingStatus((event: RecordingEvent) => {
         if (!active) return;
         const isRecording = event.status === "starting" || event.status === "recording";
@@ -411,6 +444,7 @@ export default function App() {
       unsubscribeChatStatus?.();
       unsubscribeVodChat?.();
       unsubscribeCommentVideo?.();
+      unsubscribeBackgroundMonitor?.();
     };
   }, []);
 
@@ -419,53 +453,12 @@ export default function App() {
     [channels, recordingOnlyChannels]
   );
 
-  const autoChatSlugs = useMemo(() => {
-    const selected = [
-      ...(settings.autoReceiveChat ? channels : []),
-      ...(settings.autoReceiveChatForRecordingOnly ? recordingOnlyChannels : [])
-    ].map(channel => channel.name.toLowerCase());
-    return [...new Set(selected)];
-  }, [channels, recordingOnlyChannels, settings.autoReceiveChat, settings.autoReceiveChatForRecordingOnly]);
-  const autoChatSlugKey = autoChatSlugs.join("|");
   const recordingOnlyMessages = useMemo(
     () => chatMessages.filter(message =>
       recordingOnlyChannels.some(channel => channel.name.toLowerCase() === message.channelSlug.toLowerCase())
     ),
     [chatMessages, recordingOnlyChannels]
   );
-
-  useEffect(() => {
-    if (!isReady || !isDesktop || !window.kickRecorder) return;
-    const slugs = autoChatSlugKey ? autoChatSlugKey.split("|") : [];
-    let active = true;
-
-    if (slugs.length === 0) {
-      void window.kickRecorder.stopChatReceiver().then(status => {
-        if (active) setChatStatus(status);
-      }).catch(error => {
-        if (active) setChatSetupMessage(error instanceof Error ? error.message : "チャット受信を停止できませんでした。");
-      });
-      const hasAnyChannels = channels.length > 0 || recordingOnlyChannels.length > 0;
-      if (hasAnyChannels) {
-        setChatSetupMessage("チャット自動取得は停止中です。設定画面または録画専用画面で有効にできます。");
-      }
-      return () => { active = false; };
-    }
-
-    setIsStartingChat(true);
-    setChatSetupMessage("登録チャンネルのコメントを自動取得しています...");
-    void window.kickRecorder.startChatReceiver(slugs).then(status => {
-      if (!active) return;
-      setChatStatus(status);
-      setChatSetupMessage(status.connectedChannels + "チャンネルのコメントを自動取得しています。");
-    }).catch(error => {
-      if (active) setChatSetupMessage(error instanceof Error ? error.message : "コメントの自動取得を開始できませんでした。");
-    }).finally(() => {
-      if (active) setIsStartingChat(false);
-    });
-
-    return () => { active = false; };
-  }, [isReady, isDesktop, autoChatSlugKey, channels.length, recordingOnlyChannels.length]);
 
   useEffect(() => {
     if ((tab !== "library" && tab !== "dashboard" && tab !== "comment-video") || !isDesktop || !window.kickRecorder) return;
@@ -514,96 +507,6 @@ export default function App() {
     const timer = window.setInterval(() => setLiveClock(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [liveChannelCards.length]);
-
-  useEffect(() => {
-    if (
-      !isReady ||
-      !isDesktop ||
-      !kickCredentialsConfigured ||
-      !settings.autoMonitorEnabled ||
-      monitorSlugs.length === 0 ||
-      !window.kickRecorder
-    ) return;
-
-    let stopped = false;
-    let running = false;
-
-    const runAutomaticCheck = async () => {
-      if (running || stopped || !window.kickRecorder) return;
-      running = true;
-      try {
-        const results = await window.kickRecorder.checkKickChannels(monitorSlugs);
-        if (stopped) return;
-
-        const nextChecks = Object.fromEntries(
-          results.map(result => [result.slug.toLowerCase(), result])
-        );
-        const previousChecks = previousChecksRef.current;
-
-        for (const result of results) {
-          const previous = previousChecks[result.slug.toLowerCase()];
-          const watchedChannel = channels.find(channel => channel.name.toLowerCase() === result.slug.toLowerCase());
-          if (
-            settings.autoRecordOnStreamStart &&
-            watchedChannel?.mode === "auto" &&
-            result.found &&
-            result.isLive &&
-            !previous?.isLive &&
-            !watchedChannel.recording
-          ) {
-            void window.kickRecorder.startRecording(result.slug).catch(error => {
-              setRecordingMessage(error instanceof Error ? error.message : `${result.slug} の自動録画を開始できませんでした。`);
-            });
-          }
-          if (
-            settings.notifyOnLive &&
-            result.found &&
-            result.isLive &&
-            previous?.found &&
-            !previous.isLive
-          ) {
-            void window.kickRecorder.notifyLive(result.slug, {
-              displayName: result.displayName,
-              streamTitle: result.streamTitle,
-              categoryName: result.categoryName,
-              startedAt: result.startedAt,
-              viewerCount: result.viewerCount
-            }).catch(() => undefined);
-          }
-        }
-
-        previousChecksRef.current = nextChecks;
-        setChannelChecks(nextChecks);
-        setLastChannelCheck(new Date().toLocaleString("ja-JP"));
-        setMonitorError("");
-      } catch (error) {
-        if (!stopped) {
-          setMonitorError(error instanceof Error ? error.message : "自動監視でエラーが発生しました。次回の確認時に再試行します。");
-        }
-      } finally {
-        running = false;
-      }
-    };
-
-    void runAutomaticCheck();
-    const interval = Math.max(10, Math.min(3600, settings.monitorIntervalSeconds)) * 1000;
-    const timer = window.setInterval(() => void runAutomaticCheck(), interval);
-
-    return () => {
-      stopped = true;
-      window.clearInterval(timer);
-    };
-  }, [
-    isReady,
-    isDesktop,
-    kickCredentialsConfigured,
-    settings.autoMonitorEnabled,
-    settings.monitorIntervalSeconds,
-    settings.notifyOnLive,
-    settings.autoRecordOnStreamStart,
-    channels,
-    monitorSlugs
-  ]);
 
   useEffect(() => {
     if (!isReady) return;
@@ -791,20 +694,6 @@ export default function App() {
     setKickMessage("");
     try {
       const results = await window.kickRecorder.checkKickChannels(monitorSlugs);
-      for (const result of results) {
-        const channel = channels.find(item => item.name.toLowerCase() === result.slug.toLowerCase());
-        if (
-          settings.autoRecordOnStreamStart &&
-          channel?.mode === "auto" &&
-          result.found &&
-          result.isLive &&
-          !channel.recording
-        ) {
-          void window.kickRecorder.startRecording(result.slug).catch(error => {
-            setRecordingMessage(error instanceof Error ? error.message : `${result.slug} の自動録画を開始できませんでした。`);
-          });
-        }
-      }
       const nextChecks = Object.fromEntries(results.map(result => [result.slug.toLowerCase(), result]));
       previousChecksRef.current = nextChecks;
       setChannelChecks(nextChecks);
@@ -1413,37 +1302,46 @@ export default function App() {
 
         <div className="settings-subsection monitor-settings">
           <div className="settings-subheading">
-            <h3>配信の自動監視（KickChecker参考）</h3>
-            <span className={settings.autoMonitorEnabled ? "api-state connected" : "api-state"}>{settings.autoMonitorEnabled ? "自動監視：有効" : "自動監視：停止中"}</span>
+            <h3>24時間バックグラウンド監視・自動録画</h3>
+            <span className={backgroundMonitorStatus.running ? "api-state connected" : "api-state"}>{backgroundMonitorStatus.running ? "監視中" : "停止中"}</span>
           </div>
           <div className="setting-row">
-            <div><strong>登録チャンネルを自動で確認</strong><small>アプリ起動中にKick公式APIで配信状態を定期確認します</small></div>
+            <div><strong>登録チャンネルを24時間監視</strong><small>メインプロセスで監視するため、ウィンドウを閉じて通知領域に常駐していても配信を検知します。</small></div>
             <label className="setting-control"><input type="checkbox" checked={settings.autoMonitorEnabled} onChange={e => setSettings(prev => ({ ...prev, autoMonitorEnabled: e.target.checked }))} /><span>{settings.autoMonitorEnabled ? "有効" : "無効"}</span></label>
           </div>
           <div className="setting-row">
-            <div><strong>監視間隔</strong><small>最短10秒。短いほどAPIへの問い合わせが増えます。制限時は自動で待機します。</small></div>
+            <div><strong>配信開始時に通常チャンネルを自動録画</strong><small>チャンネル管理で「自動録画」に設定したチャンネルが対象です。</small></div>
+            <label className="setting-control"><input type="checkbox" checked={settings.autoRecordOnStreamStart} onChange={e => setSettings(prev => ({ ...prev, autoRecordOnStreamStart: e.target.checked }))} /><span>{settings.autoRecordOnStreamStart ? "有効" : "無効"}</span></label>
+          </div>
+          <div className="setting-row">
+            <div><strong>録画専用チャンネルも配信開始時に自動録画</strong><small>録画専用一覧に登録したチャンネルも、LIVE検知時に録画とコメント取得を開始します。</small></div>
+            <label className="setting-control"><input type="checkbox" checked={settings.autoRecordRecordingOnlyOnStreamStart} onChange={e => setSettings(prev => ({ ...prev, autoRecordRecordingOnlyOnStreamStart: e.target.checked }))} /><span>{settings.autoRecordRecordingOnlyOnStreamStart ? "有効" : "無効"}</span></label>
+          </div>
+          <div className="setting-row">
+            <div><strong>監視間隔</strong><small>最短10秒。配信開始後、次の確認で録画を開始します。APIのアクセス制限時はRetry-Afterに従って待機します。</small></div>
             <select className="setting-select" value={settings.monitorIntervalSeconds} onChange={e => setSettings(prev => ({ ...prev, monitorIntervalSeconds: Number(e.target.value) }))}>
-              <option value={10}>10秒（高速）</option>
-              <option value={15}>15秒</option>
-              <option value={20}>20秒</option>
-              <option value={30}>30秒</option>
-              <option value={60}>1分</option>
-              <option value={120}>2分</option>
-              <option value={300}>5分</option>
-              <option value={600}>10分</option>
+              <option value={10}>10秒（最速）</option><option value={15}>15秒</option><option value={20}>20秒</option><option value={30}>30秒</option>
+              <option value={60}>1分</option><option value={120}>2分</option><option value={300}>5分</option><option value={600}>10分</option>
             </select>
           </div>
           <div className="setting-row">
-            <div><strong>配信開始をWindows通知で知らせる</strong><small>前回オフラインで、今回配信中になった場合に通知します</small></div>
+            <div><strong>Windowsログイン時に自動起動</strong><small>PCへサインインするとアプリを通知領域で起動して監視を再開します（Windowsデスクトップ版）。</small></div>
+            <label className="setting-control"><input type="checkbox" checked={settings.launchAtLogin} onChange={e => setSettings(prev => ({ ...prev, launchAtLogin: e.target.checked }))} /><span>{settings.launchAtLogin ? "有効" : "無効"}</span></label>
+          </div>
+          <div className="setting-row">
+            <div><strong>監視中はPCのスリープを抑止</strong><small>監視中にWindowsがスリープへ移行しないよう要求します。ディスプレイは消灯できます。</small></div>
+            <label className="setting-control"><input type="checkbox" checked={settings.preventSystemSleep} onChange={e => setSettings(prev => ({ ...prev, preventSystemSleep: e.target.checked }))} /><span>{settings.preventSystemSleep ? "有効" : "無効"}</span></label>
+          </div>
+          <div className="setting-row">
+            <div><strong>配信開始をWindows通知で知らせる</strong><small>LIVEを検知したとき、録画開始の結果とともに通知します。</small></div>
             <label className="setting-control"><input type="checkbox" checked={settings.notifyOnLive} onChange={e => setSettings(prev => ({ ...prev, notifyOnLive: e.target.checked }))} /><span>{settings.notifyOnLive ? "有効" : "無効"}</span></label>
           </div>
           <div className="monitor-status-line">
-            {isDesktop && kickCredentialsConfigured && settings.autoMonitorEnabled
-              ? `監視中 · ${settings.monitorIntervalSeconds}秒ごと`
-              : (!isDesktop ? "Windowsデスクトップ版で利用できます" : (!kickCredentialsConfigured ? "Kick APIの認証情報を登録してください" : "自動監視は停止中"))}
-            {lastChannelCheck && ` · 最終確認：${lastChannelCheck}`}
+            {backgroundMonitorStatus.message}
+            {backgroundMonitorStatus.lastCheckAt && ` · 最終確認：${new Date(backgroundMonitorStatus.lastCheckAt).toLocaleString("ja-JP")}`}
           </div>
-          {monitorError && <div className="storage-error monitor-error">自動監視エラー：{monitorError} 次回の確認時に再試行します。</div>}
+          {backgroundMonitorStatus.lastError && <div className="storage-error monitor-error">監視・コメント取得エラー：{backgroundMonitorStatus.lastError} 自動再試行します。</div>}
+          <div className="notice">注意：24時間監視には、アプリのプロセスが動作していること、PCの電源とネットワークが利用可能であることが必要です。ウィンドウ右上の×は終了ではなく通知領域へ最小化します。完全終了は通知領域アイコンのメニューから行います。自動録画・コメント取得には対応する各チャット自動取得設定も有効にしてください。</div>
         </div>
         <div className="setting-row">
           <div><strong>録画・データの保存先</strong><small>{settings.outputDirectory || "未指定（初期設定の保存場所を使用）"}</small></div>

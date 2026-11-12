@@ -6,8 +6,11 @@ import {
   ipcMain,
   Menu,
   Notification,
+  nativeImage,
+  powerSaveBlocker,
   safeStorage,
   shell,
+  Tray,
   type IpcMainInvokeEvent,
   type MenuItemConstructorOptions
 } from "electron";
@@ -39,6 +42,9 @@ type AppSettings = {
   outputDirectory: string;
   autoMonitorEnabled: boolean;
   monitorIntervalSeconds: number;
+  autoRecordRecordingOnlyOnStreamStart: boolean;
+  launchAtLogin: boolean;
+  preventSystemSleep: boolean;
   recordingRetryCount: number;
   recordingRetryDelaySeconds: number;
   notifyOnLive: boolean;
@@ -61,7 +67,10 @@ const DEFAULT_STATE: AppState = {
     saveChat: true,
     outputDirectory: "",
     autoMonitorEnabled: true,
-    monitorIntervalSeconds: 60,
+    monitorIntervalSeconds: 10,
+    autoRecordRecordingOnlyOnStreamStart: true,
+    launchAtLogin: true,
+    preventSystemSleep: true,
     recordingRetryCount: 5,
     recordingRetryDelaySeconds: 10,
     notifyOnLive: true,
@@ -87,6 +96,17 @@ type KickChannelCheck = {
   categoryThumbnail: string | null;
   viewerCount: number;
   startedAt: string | null;
+};
+
+type BackgroundMonitorStatus = {
+  enabled: boolean;
+  running: boolean;
+  monitoredChannels: number;
+  intervalSeconds: number;
+  lastCheckAt: string | null;
+  lastError: string;
+  message: string;
+  results: KickChannelCheck[];
 };
 
 type KickTokenPayload = {
@@ -253,7 +273,7 @@ async function getKickAccessToken(): Promise<string> {
   return cachedKickToken.value;
 }
 
-async function checkKickChannels(input: unknown): Promise<KickChannelCheck[]> {
+async function checkKickChannels(input: unknown, includeProfiles = true): Promise<KickChannelCheck[]> {
   if (!Array.isArray(input)) throw new Error("チャンネル一覧が不正です。");
   const slugs = [...new Set(input.filter((value): value is string =>
     typeof value === "string" && /^[a-zA-Z0-9_]{1,25}$/.test(value)
@@ -324,9 +344,9 @@ async function checkKickChannels(input: unknown): Promise<KickChannelCheck[]> {
   }
 
   // 表示名とプロフィール画像はユーザー情報APIから取得。6時間キャッシュし、定期監視の追加API呼び出しを抑える。
-  const userIds = [...new Set([...resultBySlug.values()]
+  const userIds = includeProfiles ? [...new Set([...resultBySlug.values()]
     .map(channel => channel.broadcasterUserId)
-    .filter((id): id is number => id !== null))];
+    .filter((id): id is number => id !== null))] : [];
   const now = Date.now();
   const unresolvedUserIds = userIds.filter(id => {
     const cached = kickUserProfileCache.get(id);
@@ -382,7 +402,7 @@ async function checkKickChannels(input: unknown): Promise<KickChannelCheck[]> {
         startedAt: null
       };
     }
-    const profile = result.broadcasterUserId
+    const profile = includeProfiles && result.broadcasterUserId
       ? kickUserProfileCache.get(result.broadcasterUserId)
       : undefined;
     return {
@@ -486,6 +506,25 @@ function initializeAutoUpdater(): void {
 
 let mainWindow: BrowserWindow | null = null;
 
+function createTray(): void {
+  if (tray) return;
+  tray = new Tray(nativeImage.createFromBuffer(Buffer.from(TRAY_ICON_BASE64, "base64")));
+  tray.setToolTip("Kick Live Message Recorder");
+  tray.on("click", () => showMainWindow());
+  tray.on("double-click", () => showMainWindow());
+  publishBackgroundMonitorStatus();
+}
+
+function showMainWindow(): void {
+  if (!mainWindow) {
+    createWindow(true);
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
 const recordingManager = new KickRecordingManager(event => {
   mainWindow?.webContents.send("recording:status", event);
 });
@@ -559,7 +598,10 @@ function normalizeState(input: unknown): AppState {
       monitorIntervalSeconds: typeof settings.monitorIntervalSeconds === "number" &&
         Number.isFinite(settings.monitorIntervalSeconds)
         ? Math.max(10, Math.min(3600, Math.round(settings.monitorIntervalSeconds)))
-        : 60,
+        : 10,
+      autoRecordRecordingOnlyOnStreamStart: settings.autoRecordRecordingOnlyOnStreamStart !== false,
+      launchAtLogin: settings.launchAtLogin !== false,
+      preventSystemSleep: settings.preventSystemSleep !== false,
       recordingRetryCount: typeof settings.recordingRetryCount === "number" &&
         Number.isFinite(settings.recordingRetryCount)
         ? Math.max(0, Math.min(10, Math.round(settings.recordingRetryCount)))
@@ -600,7 +642,240 @@ function writeState(input: unknown): { ok: boolean } {
     mode: 0o600
   });
   renameSync(temporaryPath, filePath);
+  configureBackgroundServices();
   return { ok: true };
+}
+
+type BackgroundMonitorPatch = Partial<BackgroundMonitorStatus>;
+const TRAY_ICON_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAdElEQVR42mNgGAWjAA0Iy8n8pyUedQBdHeB/Zzp1HAAyCBkTa/mAOICQWpo6gBh1NHEAKSFEdQeQmj6o6gByEidVHECOxTRzAF0KImpYPPxCYEDTwIDngkFTDgyKknBQ1AWDpjakWXtgwFtEI6tROgpGHAAAwzanI8DLYZ4AAAAASUVORK5CYII=";
+
+let tray: Tray | null = null;
+let isQuitting = false;
+let backgroundMonitorTimer: NodeJS.Timeout | null = null;
+let backgroundMonitorInFlight = false;
+let backgroundMonitorSignature = "";
+let backgroundChatSignature = "";
+let sleepBlockerId: number | null = null;
+const backgroundPreviousLiveState = new Map<string, boolean>();
+let backgroundMonitorStatus: BackgroundMonitorStatus = {
+  enabled: true, running: false, monitoredChannels: 0, intervalSeconds: 10,
+  lastCheckAt: null, lastError: "", message: "バックグラウンド監視を初期化しています。", results: []
+};
+
+function publishBackgroundMonitorStatus(patch: BackgroundMonitorPatch = {}): void {
+  backgroundMonitorStatus = { ...backgroundMonitorStatus, ...patch };
+  tray?.setToolTip("Kick Live Message Recorder\n" + (backgroundMonitorStatus.running
+    ? `24時間監視中 · ${backgroundMonitorStatus.monitoredChannels}チャンネル`
+    : backgroundMonitorStatus.message));
+  if (tray) tray.setContextMenu(Menu.buildFromTemplate([
+    { label: backgroundMonitorStatus.running
+      ? `監視中：${backgroundMonitorStatus.monitoredChannels}チャンネル・${backgroundMonitorStatus.intervalSeconds}秒間隔`
+      : "監視停止中：" + backgroundMonitorStatus.message, enabled: false },
+    { type: "separator" },
+    { label: "ウィンドウを開く", click: () => showMainWindow() },
+    { label: "今すぐ配信状態を確認", enabled: backgroundMonitorStatus.running, click: () => { void runBackgroundMonitor(); } },
+    { type: "separator" },
+    { label: "アプリを終了", click: () => app.quit() }
+  ]));
+  mainWindow?.webContents.send("monitor:status", backgroundMonitorStatus);
+}
+
+function updateLaunchAtLogin(): void {
+  if (process.platform !== "win32" || !app.isPackaged) return;
+  try {
+    app.setLoginItemSettings({ openAtLogin: readState().settings.launchAtLogin, path: process.execPath, args: ["--background"] });
+  } catch (error) {
+    console.error("Failed to update Windows login startup:", error);
+  }
+}
+
+function updateSleepBlocker(enabled: boolean): void {
+  if (enabled && sleepBlockerId === null) sleepBlockerId = powerSaveBlocker.start("prevent-app-suspension");
+  else if (!enabled && sleepBlockerId !== null) {
+    powerSaveBlocker.stop(sleepBlockerId);
+    sleepBlockerId = null;
+  }
+}
+
+function getBackgroundChatSlugs(state: AppState): string[] {
+  const selected = [
+    ...(state.settings.autoReceiveChat ? state.channels : []),
+    ...(state.settings.autoReceiveChatForRecordingOnly ? state.recordingOnlyChannels : [])
+  ];
+  return [...new Set(selected.map(channel => channel.name.toLowerCase()))];
+}
+
+function syncBackgroundChatReceiver(state: AppState): void {
+  const slugs = getBackgroundChatSlugs(state);
+  const signature = slugs.join("|");
+  const desired = chatReceiver.getDesiredSlugs().join("|");
+  if (!signature) {
+    backgroundChatSignature = "";
+    if (desired) void chatReceiver.stop().catch(error => console.error("Chat receiver stop failed:", error));
+    return;
+  }
+  if (slugs.length > 50) {
+    backgroundChatSignature = "";
+    publishBackgroundMonitorStatus({ lastError: "コメント自動取得は最大50チャンネルです。対象を50件以内にしてください。" });
+    return;
+  }
+  if (desired === signature && backgroundChatSignature === signature) return;
+  if (desired === signature) {
+    backgroundChatSignature = signature;
+    return;
+  }
+  backgroundChatSignature = signature;
+  void chatReceiver.start(slugs).catch(error => {
+    if (backgroundChatSignature === signature) backgroundChatSignature = "";
+    console.error("Background chat receiver start failed:", error);
+    publishBackgroundMonitorStatus({
+      lastError: "コメント接続エラー：" + (error instanceof Error ? error.message : String(error)),
+      message: "配信監視中。コメント受信は再試行します。"
+    });
+  });
+}
+
+function scheduleBackgroundMonitor(delayMs: number): void {
+  if (backgroundMonitorTimer) clearTimeout(backgroundMonitorTimer);
+  backgroundMonitorTimer = setTimeout(() => {
+    backgroundMonitorTimer = null;
+    void runBackgroundMonitor();
+  }, Math.max(0, delayMs));
+}
+
+function notifyBackgroundLive(result: KickChannelCheck, recordingStarted: boolean): void {
+  if (!Notification.isSupported()) return;
+  const details = [
+    result.streamTitle || "配信タイトル未設定",
+    result.categoryName,
+    result.startedAt ? "開始 " + new Date(result.startedAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }) : "",
+    result.viewerCount.toLocaleString("ja-JP") + " 人視聴中",
+    recordingStarted ? "自動録画・コメント取得を開始しました。" : "配信を検知しました。"
+  ].filter(Boolean).join(" ・ ");
+  new Notification({ title: (result.displayName || result.slug) + " がLIVEを開始しました", body: details }).show();
+}
+
+async function runBackgroundMonitor(): Promise<void> {
+  if (backgroundMonitorInFlight || isQuitting) return;
+  const state = readState();
+  const slugs = [...new Set([
+    ...state.channels.map(channel => channel.name.toLowerCase()),
+    ...state.recordingOnlyChannels.map(channel => channel.name.toLowerCase())
+  ])].slice(0, 200);
+
+  if (!state.settings.autoMonitorEnabled || slugs.length === 0 || !getKickCredentialsStatus().configured) {
+    publishBackgroundMonitorStatus({
+      running: false, enabled: state.settings.autoMonitorEnabled, monitoredChannels: slugs.length,
+      intervalSeconds: state.settings.monitorIntervalSeconds,
+      message: !state.settings.autoMonitorEnabled ? "自動監視は設定で停止中です。"
+        : slugs.length === 0 ? "監視するチャンネルを登録してください。"
+        : "Kick APIのClient ID／Secretを設定してください。"
+    });
+    updateSleepBlocker(false);
+    return;
+  }
+
+  backgroundMonitorInFlight = true;
+  publishBackgroundMonitorStatus({
+    enabled: true, running: true, monitoredChannels: slugs.length,
+    intervalSeconds: state.settings.monitorIntervalSeconds, message: "バックグラウンドで配信状態を確認しています。"
+  });
+  let nextDelay = Math.max(10, state.settings.monitorIntervalSeconds) * 1000;
+  try {
+    // Skip additional profile lookups to prioritize the LIVE status request.
+    const results = await checkKickChannels(slugs, false);
+    for (const result of results) {
+      const live = result.found && result.isLive;
+      const wasLive = backgroundPreviousLiveState.get(result.slug) === true;
+      backgroundPreviousLiveState.set(result.slug, live);
+      if (!live || wasLive) continue;
+
+      const normalChannel = state.channels.find(channel => channel.name.toLowerCase() === result.slug);
+      const recordingOnly = state.recordingOnlyChannels.find(channel => channel.name.toLowerCase() === result.slug);
+      const shouldRecord = state.settings.autoRecordOnStreamStart && (
+        normalChannel?.mode === "auto" ||
+        (!normalChannel && Boolean(recordingOnly) && state.settings.autoRecordRecordingOnlyOnStreamStart)
+      );
+      let recordingStarted = false;
+      if (shouldRecord && !recordingManager.isRecording(result.slug)) {
+        try {
+          recordingManager.start(result.slug, getRecordingOutputDirectory(), {
+            retryCount: state.settings.recordingRetryCount,
+            retryDelaySeconds: state.settings.recordingRetryDelaySeconds
+          });
+          recordingStarted = true;
+        } catch (error) {
+          publishBackgroundMonitorStatus({
+            lastError: result.slug + " の自動録画開始に失敗：" + (error instanceof Error ? error.message : String(error))
+          });
+        }
+      }
+      if (state.settings.notifyOnLive) notifyBackgroundLive(result, recordingStarted);
+    }
+    for (const key of [...backgroundPreviousLiveState.keys()]) {
+      if (!slugs.includes(key)) backgroundPreviousLiveState.delete(key);
+    }
+    const lastCheckAt = new Date().toISOString();
+    publishBackgroundMonitorStatus({
+      running: true, monitoredChannels: slugs.length, intervalSeconds: state.settings.monitorIntervalSeconds,
+      lastCheckAt, lastError: "", results,
+      message: `24時間監視中 · ${slugs.length}チャンネル · 約${state.settings.monitorIntervalSeconds}秒間隔`
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    const retryAfterMs = Math.max(0, kickChannelRateLimitUntil - Date.now());
+    if (retryAfterMs > 0) nextDelay = Math.max(nextDelay, retryAfterMs + 1000);
+    publishBackgroundMonitorStatus({
+      running: true, monitoredChannels: slugs.length, intervalSeconds: state.settings.monitorIntervalSeconds,
+      lastError: detail, message: "監視エラー。自動再試行します。"
+    });
+  } finally {
+    backgroundMonitorInFlight = false;
+    const latest = readState();
+    if (latest.settings.autoMonitorEnabled && (latest.channels.length || latest.recordingOnlyChannels.length) &&
+      getKickCredentialsStatus().configured && !isQuitting) scheduleBackgroundMonitor(nextDelay);
+  }
+}
+
+function configureBackgroundServices(): void {
+  updateLaunchAtLogin();
+  const state = readState();
+  syncBackgroundChatReceiver(state);
+  const slugs = [...new Set([
+    ...state.channels.map(channel => channel.name.toLowerCase()),
+    ...state.recordingOnlyChannels.map(channel => channel.name.toLowerCase())
+  ])].slice(0, 200);
+  const enabled = state.settings.autoMonitorEnabled && slugs.length > 0 && getKickCredentialsStatus().configured;
+  const signature = JSON.stringify({
+    enabled: state.settings.autoMonitorEnabled, slugs, interval: state.settings.monitorIntervalSeconds,
+    autoRecord: state.settings.autoRecordOnStreamStart,
+    autoRecordRecordingOnly: state.settings.autoRecordRecordingOnlyOnStreamStart,
+    notify: state.settings.notifyOnLive, preventSleep: state.settings.preventSystemSleep,
+    credentials: getKickCredentialsStatus().configured
+  });
+  if (signature === backgroundMonitorSignature) return;
+  backgroundMonitorSignature = signature;
+  if (backgroundMonitorTimer) {
+    clearTimeout(backgroundMonitorTimer);
+    backgroundMonitorTimer = null;
+  }
+  if (!enabled) {
+    publishBackgroundMonitorStatus({
+      enabled: state.settings.autoMonitorEnabled, running: false, monitoredChannels: slugs.length,
+      intervalSeconds: state.settings.monitorIntervalSeconds,
+      message: !state.settings.autoMonitorEnabled ? "自動監視は設定で停止中です。"
+        : slugs.length === 0 ? "監視するチャンネルを登録してください。"
+        : "Kick APIのClient ID／Secretを設定してください。"
+    });
+    updateSleepBlocker(false);
+    return;
+  }
+  updateSleepBlocker(state.settings.preventSystemSleep);
+  publishBackgroundMonitorStatus({
+    enabled: true, running: true, monitoredChannels: slugs.length,
+    intervalSeconds: state.settings.monitorIntervalSeconds, lastError: "", message: "24時間監視を開始しています。"
+  });
+  scheduleBackgroundMonitor(0);
 }
 
 function assertTrustedSender(event: IpcMainInvokeEvent): void {
@@ -705,7 +980,9 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("kick:save-credentials", (event, credentials: unknown) => {
     assertTrustedSender(event);
-    return saveKickCredentials(credentials);
+    const result = saveKickCredentials(credentials);
+    configureBackgroundServices();
+    return result;
   });
 
   ipcMain.handle("kick:test-connection", async event => {
@@ -720,12 +997,19 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("kick:clear-credentials", event => {
     assertTrustedSender(event);
-    return clearKickCredentials();
+    const result = clearKickCredentials();
+    configureBackgroundServices();
+    return result;
   });
 
   ipcMain.handle("kick:check-channels", async (event, slugs: unknown) => {
     assertTrustedSender(event);
     return checkKickChannels(slugs);
+  });
+
+  ipcMain.handle("monitor:get-status", event => {
+    assertTrustedSender(event);
+    return backgroundMonitorStatus;
   });
 
   ipcMain.handle("chat:start", async (event, slugs: unknown) => {
@@ -929,8 +1213,9 @@ function createJapaneseApplicationMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-function createWindow(): void {
+function createWindow(showImmediately = true): void {
   mainWindow = new BrowserWindow({
+    show: false,
     width: 1440,
     height: 940,
     minWidth: 900,
@@ -984,6 +1269,16 @@ function createWindow(): void {
     }
   });
 
+  mainWindow.on("close", event => {
+    if (!isQuitting) {
+      event.preventDefault();
+      mainWindow?.hide();
+    }
+  });
+  mainWindow.once("ready-to-show", () => {
+    if (showImmediately) mainWindow?.show();
+  });
+
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   mainWindow.webContents.on("will-navigate", (event, navigationUrl) => {
     const devUrl = process.env.KICK_RECORDER_DEV_SERVER_URL;
@@ -1007,32 +1302,31 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
   app.quit();
 } else {
-  app.on("second-instance", () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
-  });
+  app.on("second-instance", () => showMainWindow());
 
   app.whenReady().then(() => {
     registerIpcHandlers();
     app.setAppUserModelId("jp.kanenao.kickrecorder");
     createJapaneseApplicationMenu();
-    createWindow();
+    createTray();
+    configureBackgroundServices();
     initializeAutoUpdater();
-    app.on("activate", () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow();
-    });
+    const startedInBackground = process.argv.includes("--background") ||
+      app.getLoginItemSettings().wasOpenedAtLogin;
+    createWindow(!startedInBackground);
+    app.on("activate", () => showMainWindow());
   });
 }
 
 app.on("before-quit", () => {
+  isQuitting = true;
+  if (backgroundMonitorTimer) clearTimeout(backgroundMonitorTimer);
+  backgroundMonitorTimer = null;
+  updateSleepBlocker(false);
+  tray?.destroy();
+  tray = null;
   recordingManager.stopAll();
   void chatReceiver.stop();
   vodChatDownloader.stopAll();
   commentVideoGenerator.stopAll();
-});
-
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
 });

@@ -188,6 +188,10 @@ export class KickChatReceiver {
     };
   }
 
+  getDesiredSlugs(): string[] {
+    return [...this.desiredSlugs];
+  }
+
   private publishStatus(message?: string): void {
     if (message) this.statusMessage = message;
     this.onStatus(this.getStatus());

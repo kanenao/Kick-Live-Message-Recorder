@@ -20,6 +20,9 @@ type KickRecorderAppState = {
     outputDirectory: string;
     autoMonitorEnabled: boolean;
     monitorIntervalSeconds: number;
+    autoRecordRecordingOnlyOnStreamStart: boolean;
+    launchAtLogin: boolean;
+    preventSystemSleep: boolean;
     notifyOnLive: boolean;
     showRecordingPreview: boolean;
   };
@@ -75,6 +78,11 @@ type KickRecorderUpdateStatus = {
   availableVersion?: string;
   percent?: number;
   message: string;
+};
+
+type KickRecorderBackgroundMonitorStatus = {
+  enabled: boolean; running: boolean; monitoredChannels: number; intervalSeconds: number;
+  lastCheckAt: string | null; lastError: string; message: string; results: KickRecorderChannelCheck[];
 };
 
 type KickRecorderChatMessage = {
@@ -134,6 +142,8 @@ declare global {
       testKickConnection: () => Promise<{ ok: boolean; message: string }>;
       clearKickCredentials: () => Promise<{ ok: boolean }>;
       checkKickChannels: (slugs: string[]) => Promise<KickRecorderChannelCheck[]>;
+      getBackgroundMonitorStatus: () => Promise<KickRecorderBackgroundMonitorStatus>;
+      onBackgroundMonitorStatus: (callback: (status: KickRecorderBackgroundMonitorStatus) => void) => () => void;
       startChatReceiver: (slugs: string[]) => Promise<KickRecorderChatStatus>;
       stopChatReceiver: () => Promise<KickRecorderChatStatus>;
       getChatReceiverStatus: () => Promise<KickRecorderChatStatus>;

@@ -17,6 +17,9 @@ type AppSettings = {
   outputDirectory: string;
   autoMonitorEnabled: boolean;
   monitorIntervalSeconds: number;
+  autoRecordRecordingOnlyOnStreamStart: boolean;
+  launchAtLogin: boolean;
+  preventSystemSleep: boolean;
   notifyOnLive: boolean;
   showRecordingPreview: boolean;
 };
@@ -86,6 +89,11 @@ type UpdateStatus = {
   message: string;
 };
 
+type BackgroundMonitorStatus = {
+  enabled: boolean; running: boolean; monitoredChannels: number; intervalSeconds: number;
+  lastCheckAt: string | null; lastError: string; message: string; results: KickChannelCheck[];
+};
+
 type ChatMessage = {
   eventId: string;
   messageId: string;
@@ -142,6 +150,12 @@ const api = {
   testKickConnection: (): Promise<{ ok: boolean; message: string }> => ipcRenderer.invoke("kick:test-connection"),
   clearKickCredentials: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("kick:clear-credentials"),
   checkKickChannels: (slugs: string[]): Promise<KickChannelCheck[]> => ipcRenderer.invoke("kick:check-channels", slugs),
+  getBackgroundMonitorStatus: (): Promise<BackgroundMonitorStatus> => ipcRenderer.invoke("monitor:get-status"),
+  onBackgroundMonitorStatus: (callback: (status: BackgroundMonitorStatus) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: BackgroundMonitorStatus): void => callback(status);
+    ipcRenderer.on("monitor:status", listener);
+    return () => ipcRenderer.removeListener("monitor:status", listener);
+  },
   startChatReceiver: (slugs: string[]): Promise<ChatReceiverStatus> => ipcRenderer.invoke("chat:start", slugs),
   stopChatReceiver: (): Promise<ChatReceiverStatus> => ipcRenderer.invoke("chat:stop"),
   getChatReceiverStatus: (): Promise<ChatReceiverStatus> => ipcRenderer.invoke("chat:get-status"),
