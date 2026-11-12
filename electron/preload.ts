@@ -94,6 +94,7 @@ const api = {
   stopChat: (): Promise<ChatServiceStatus> => ipcRenderer.invoke("chat:stop"),
   subscribeChat: (slugs: string[]): Promise<Array<{ slug: string; ok: boolean; message: string }>> => ipcRenderer.invoke("chat:subscribe", slugs),
   listChatMessages: (slug: string): Promise<SavedChatMessage[]> => ipcRenderer.invoke("chat:list", slug),
+  exportChatMessages: (slug: string, format: "csv" | "jsonl"): Promise<{ saved: boolean; path?: string; count: number }> => ipcRenderer.invoke("chat:export", { slug, format }),
   listArticles: (): Promise<Array<{ id: string; slug: string; broadcaster: string; streamTitle: string; startedAt: string | null; generatedAt: string; commentCount: number; isFinal: boolean; title: string; summary: string; paragraphs: string[]; topics: string[]; provider: string; model: string }>> => ipcRenderer.invoke("articles:list"),
   generateArticle: (slug: string): Promise<{ id: string; slug: string; title: string; summary: string; paragraphs: string[]; topics: string[]; generatedAt: string; commentCount: number; isFinal: boolean; provider: string; model: string }> => ipcRenderer.invoke("articles:generate", slug),
   onArticleNew: (callback: (article: any) => void): (() => void) => {
