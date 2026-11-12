@@ -117,8 +117,17 @@ type AiArticleStatus = {
 };
 type CommentVideoEvent = { status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string; outputPath?: string; generatedComments?: number; skippedComments?: number };
 
-const APP_VERSION = "0.1.0-beta.33";
+const APP_VERSION = "0.1.0-beta.34";
 const VERSION_HISTORY = [
+  {
+    version: "0.1.0-beta.34",
+    title: "LIVE中の配信者一覧から手動録画",
+    changes: [
+      "LIVE中の配信者カードに手動録画開始・停止ボタンを追加",
+      "各配信者の録画中／録画停止中ステータスをカード内に表示",
+      "自動録画設定に関係なく、配信中の登録チャンネルを個別に録画操作可能に"
+    ]
+  },
   {
     version: "0.1.0-beta.33",
     title: "配信記事のAI分析を強化",
@@ -1162,7 +1171,7 @@ export default function App() {
 
         {monitorSlugs.length > 0 && <section className="panel live-now-panel">
           <div className="panel-heading">
-            <div><h2>LIVE中の配信者</h2><p>チャンネル管理・録画専用に登録した配信者の情報を自動更新します</p></div>
+            <div><h2>LIVE中の配信者</h2><p>配信情報を自動更新し、各カードから手動で録画を開始・停止できます</p></div>
             <span className="live-status live">LIVE · {liveChannelCards.length}件</span>
           </div>
           {!kickCredentialsConfigured
@@ -1189,6 +1198,20 @@ export default function App() {
                         <div><small>配信開始</small><strong>{formatLiveStartTime(live.startedAt)}</strong></div>
                         <div><small>配信時間</small><strong className="live-elapsed">{formatLiveElapsed(live.startedAt, liveClock)}</strong></div>
                         <div><small>視聴者数</small><strong>{live.viewerCount.toLocaleString("ja-JP")} 人</strong></div>
+                      </div>
+                      <div className="live-stream-actions">
+                        <span className={channel.recording ? "live-recording-indicator is-recording" : "live-recording-indicator"}>
+                          <i />{channel.recording ? "録画中" : "録画停止中"}
+                        </span>
+                        <button
+                          className={channel.recording ? "live-recording-button is-recording" : "live-recording-button"}
+                          onClick={() => void toggleRecording(channel.name, channel.recording)}
+                          disabled={!isDesktop || Boolean(recordingRequests[channel.name.toLowerCase()])}
+                        >
+                          {recordingRequests[channel.name.toLowerCase()]
+                            ? "処理中..."
+                            : channel.recording ? "録画停止" : "手動で録画開始"}
+                        </button>
                       </div>
                       <div className="live-stream-footer"><span>https://kick.com/{channel.name}</span><span>{isRecordingOnly ? "録画専用・監視中" : "監視中"}</span></div>
                     </article>)}
