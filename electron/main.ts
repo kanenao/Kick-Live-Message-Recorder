@@ -274,6 +274,95 @@ async function checkKickChannels(input: unknown): Promise<KickChannelCheck[]> {
 }
 
 
+
+type KickChatSubscriptionStatus = {
+  slug: string;
+  broadcasterUserId: number | null;
+  subscribed: boolean;
+  subscriptionId: string | null;
+  createdAt: string | null;
+};
+
+type KickEventSubscription = {
+  id?: string;
+  broadcaster_user_id?: number | string;
+  event?: string;
+  version?: number;
+  method?: string;
+  created_at?: string;
+};
+
+async function getKickChatSubscriptionStatuses(input: unknown): Promise<KickChatSubscriptionStatus[]> {
+  if (!Array.isArray(input)) throw new Error("購読状態を確認するチャンネル一覧が不正です。");
+  const slugs = [...new Set(input.filter((value): value is string =>
+    typeof value === "string" && /^[a-zA-Z0-9_]{1,25}$/.test(value)
+  ).map(value => value.toLowerCase()))].slice(0, 200);
+  if (slugs.length === 0) return [];
+
+  const accessToken = await getKickAccessToken();
+  const broadcasterIds = new Map<string, number>();
+
+  // KickのChannels APIはslugを最大50件まとめて指定できます。
+  for (let offset = 0; offset < slugs.length; offset += 50) {
+    const batch = slugs.slice(offset, offset + 50);
+    const url = new URL("https://api.kick.com/public/v1/channels");
+    for (const slug of batch) url.searchParams.append("slug", slug);
+    const response = await fetch(url, {
+      headers: { Authorization: "Bearer " + accessToken, Accept: "application/json" },
+      signal: AbortSignal.timeout(15000)
+    });
+    if (!response.ok) throw new Error("チャンネル情報取得 HTTP " + response.status);
+    const payload = await response.json() as { data?: Array<{ slug?: string; broadcaster_user_id?: number | string }> };
+    if (!Array.isArray(payload.data)) throw new Error("Kick APIからチャンネル情報を取得できませんでした。");
+    for (const channel of payload.data) {
+      const slug = typeof channel.slug === "string" ? channel.slug.toLowerCase() : "";
+      const id = Number(channel.broadcaster_user_id);
+      if (slug && Number.isSafeInteger(id) && id > 0) broadcasterIds.set(slug, id);
+    }
+  }
+
+  const subscriptionsResponse = await fetch("https://api.kick.com/public/v1/events/subscriptions", {
+    headers: { Authorization: "Bearer " + accessToken, Accept: "application/json" },
+    signal: AbortSignal.timeout(15000)
+  });
+  const subscriptionsPayload = await subscriptionsResponse.json().catch(() => ({})) as {
+    message?: string;
+    data?: KickEventSubscription[];
+  };
+  if (!subscriptionsResponse.ok) {
+    throw new Error(subscriptionsPayload.message || "購読状態の取得 HTTP " + subscriptionsResponse.status);
+  }
+  if (!Array.isArray(subscriptionsPayload.data)) {
+    throw new Error("Kick APIから購読一覧を取得できませんでした。");
+  }
+
+  const activeByBroadcaster = new Map<number, KickEventSubscription>();
+  for (const subscription of subscriptionsPayload.data) {
+    const broadcasterId = Number(subscription.broadcaster_user_id);
+    if (
+      Number.isSafeInteger(broadcasterId) &&
+      broadcasterId > 0 &&
+      subscription.event === "chat.message.sent" &&
+      Number(subscription.version) === 1 &&
+      (!subscription.method || subscription.method === "webhook")
+    ) {
+      activeByBroadcaster.set(broadcasterId, subscription);
+    }
+  }
+
+  return slugs.map(slug => {
+    const broadcasterUserId = broadcasterIds.get(slug) ?? null;
+    const subscription = broadcasterUserId ? activeByBroadcaster.get(broadcasterUserId) : undefined;
+    return {
+      slug,
+      broadcasterUserId,
+      subscribed: Boolean(subscription),
+      subscriptionId: typeof subscription?.id === "string" ? subscription.id : null,
+      createdAt: typeof subscription?.created_at === "string" ? subscription.created_at : null
+    };
+  });
+}
+
 async function subscribeToKickChat(input: unknown): Promise<Array<{ slug: string; ok: boolean; message: string }>> {
   if (!Array.isArray(input)) throw new Error("購読チャンネル一覧が不正です。");
   const slugs = [...new Set(input.filter((value): value is string =>
@@ -282,26 +371,23 @@ async function subscribeToKickChat(input: unknown): Promise<Array<{ slug: string
   if (slugs.length === 0) throw new Error("先にチャンネルを登録してください。");
 
   const accessToken = await getKickAccessToken();
+  const knownStatuses = await getKickChatSubscriptionStatuses(slugs);
   const results: Array<{ slug: string; ok: boolean; message: string }> = [];
-  for (const slug of slugs) {
+  for (const status of knownStatuses) {
+    const { slug, broadcasterUserId } = status;
+    if (!broadcasterUserId) {
+      results.push({ slug, ok: false, message: "配信者IDを取得できません。チャンネル名を確認してください。" });
+      continue;
+    }
+    if (status.subscribed) {
+      results.push({ slug, ok: true, message: "Kick APIで購読登録済みと確認できたため、重複登録をスキップしました。" });
+      continue;
+    }
     try {
-      const url = new URL("https://api.kick.com/public/v1/channels");
-      url.searchParams.set("slug", slug);
-      const channelResponse = await fetch(url, {
-        headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
-        signal: AbortSignal.timeout(15000)
-      });
-      if (!channelResponse.ok) throw new Error(`チャンネル情報取得 HTTP ${channelResponse.status}`);
-      const channelPayload = await channelResponse.json() as { data?: Array<{ broadcaster_user_id?: number | string; slug?: string }> };
-      const channel = channelPayload.data?.find(item => item.slug?.toLowerCase() === slug);
-      const broadcasterUserId = Number(channel?.broadcaster_user_id);
-      if (!Number.isSafeInteger(broadcasterUserId) || broadcasterUserId <= 0) {
-        throw new Error("配信者IDを取得できませんでした。チャンネル名を確認してください。");
-      }
       const response = await fetch("https://api.kick.com/public/v1/events/subscriptions", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: "Bearer " + accessToken,
           Accept: "application/json",
           "Content-Type": "application/json"
         },
@@ -316,19 +402,19 @@ async function subscribeToKickChat(input: unknown): Promise<Array<{ slug: string
         message?: string;
         data?: Array<{ name?: string; version?: number; subscription_id?: string; error?: string }>;
       };
-      if (!response.ok) throw new Error(payload.message || `購読登録 HTTP ${response.status}`);
+      if (!response.ok) throw new Error(payload.message || "購読登録 HTTP " + response.status);
       const eventResult = payload.data?.find(item => item.name === "chat.message.sent" && item.version === 1);
       if (!eventResult) {
         throw new Error("Kick APIの応答に chat.message.sent の登録結果がありません。購読状態を確認してください。");
       }
       if (eventResult.error) {
-        throw new Error(`Kick APIのイベント登録エラー：${eventResult.error}`);
+        throw new Error("Kick APIのイベント登録エラー：" + eventResult.error);
       }
       results.push({
         slug,
         ok: true,
         message: eventResult.subscription_id
-          ? `購読要求を受け付けました（ID: ${eventResult.subscription_id}）。実際のWebhook到着は受信件数で確認してください。`
+          ? "購読要求を受け付けました（ID: " + eventResult.subscription_id + "）。実際のWebhook到着は受信件数で確認してください。"
           : "購読要求を受け付けました。実際のWebhook到着は受信件数で確認してください。"
       });
     } catch (error) {
@@ -337,6 +423,7 @@ async function subscribeToKickChat(input: unknown): Promise<Array<{ slug: string
   }
   return results;
 }
+
 
 
 type UpdateStatus = {
@@ -843,6 +930,11 @@ function registerIpcHandlers(): void {
   ipcMain.handle("chat:subscribe", async (event, slugs: unknown) => {
     assertTrustedSender(event);
     return subscribeToKickChat(slugs);
+  });
+
+  ipcMain.handle("chat:subscription-status", async (event, slugs: unknown) => {
+    assertTrustedSender(event);
+    return getKickChatSubscriptionStatuses(slugs);
   });
 
   ipcMain.handle("chat:list", (event, slug: unknown) => {
