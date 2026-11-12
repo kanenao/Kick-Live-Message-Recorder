@@ -69,6 +69,14 @@ jobs:
           }
           & $target --version
           if ($LASTEXITCODE -ne 0) { throw "yt-dlp.exe を実行できませんでした。" }
+      - name: Cloudflare Tunnel Windows版を取得してアプリへ同梱
+        shell: pwsh
+        run: |
+          $target = "vendor/win-x64/cloudflared.exe"
+          Invoke-WebRequest -Uri "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe" -OutFile $target
+          if ((Get-Item $target).Length -lt 10000000) { throw "cloudflared.exe のダウンロードサイズが不正です。" }
+          & $target --version
+          if ($LASTEXITCODE -ne 0) { throw "cloudflared.exe を実行できませんでした。" }
       - name: Windowsインストーラーを作成
         run: npm run dist:win
       - name: インストーラーを保存
