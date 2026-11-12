@@ -51,6 +51,12 @@ type KickRecorderRecordingEvent = {
   isVod?: boolean;
 };
 type KickRecorderCommentLogFile = { path: string; name: string; channelSlug: string; kind: "LIVE" | "VOD"; size: number; modifiedAt: string };
+type KickRecorderStreamArticle = {
+  id: string; slug: string; displayName: string; headline: string; category: string; startedAt: string;
+  durationSeconds: number; commentCount: number; uniqueCommenters: number; keywords: string[];
+  paragraphs: string[]; sourceVideo: string; sourceLogs: string[]; createdAt: string;
+};
+
 type KickRecorderCommentVideoEvent = {
   status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string;
   outputPath?: string; generatedComments?: number; skippedComments?: number;
@@ -164,6 +170,8 @@ declare global {
       deleteRecording: (filePath: string) => Promise<{ ok: true; name: string }>;
       openRecording: (filePath: string) => Promise<{ ok: true }>;
       revealRecording: (filePath: string) => Promise<{ ok: true }>;
+      listStreamArticles: (slug?: string) => Promise<KickRecorderStreamArticle[]>;
+      generateStreamArticle: (input: { videoPath: string; slug: string; displayName?: string; category?: string; headline?: string; chatPaths?: string[] }) => Promise<KickRecorderStreamArticle>;
       listCommentLogFiles: () => Promise<KickRecorderCommentLogFile[]>;
       startCommentVideo: (options: { videoPath: string; chatPath?: string; chatPaths?: string[]; delaySeconds?: number; fontSize?: number; displaySeconds?: number; rowLimit?: number; opacity?: number; quality?: "high" | "standard" | "compact"; showUsername?: boolean }) => Promise<{ ok: true; outputPath: string }>;
       stopCommentVideo: () => Promise<{ ok: true }>;
