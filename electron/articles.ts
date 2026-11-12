@@ -17,6 +17,14 @@ export type StreamArticle = {
   sourceVideo: string;
   sourceLogs: string[];
   createdAt: string;
+  status?: "live" | "completed";
+  aiGenerated?: boolean;
+  aiSummary?: string;
+  highlights?: string[];
+  lastAiUpdateAt?: string | null;
+  viewerCount?: number;
+  peakViewerCount?: number;
+  aiError?: string;
 };
 
 type ChatLine = {
