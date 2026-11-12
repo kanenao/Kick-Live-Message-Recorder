@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { KickChatMessage } from "./chat";
 
@@ -56,6 +56,7 @@ type LiveSession = {
   article: LiveArticle;
   directory: string;
   commenters: Set<string>;
+  uniqueCommenterBaseline: number;
   keywordCounts: Map<string, number>;
   pendingComments: CommentSample[];
   lastAnalysisAt: number;
@@ -140,7 +141,7 @@ export class LiveStreamArticleManager {
 
   startOrUpdate(metadata: LiveMetadata): void {
     const config = this.getConfig();
-    if (!config.enabled || !this.getApiKey()) return;
+    const apiKey = this.getApiKey();
     const slug = slugify(metadata.slug);
     const existing = this.sessions.get(slug);
     if (existing) {
@@ -159,7 +160,25 @@ export class LiveStreamArticleManager {
       ? new Date(metadata.startedAt) : new Date();
     const stamp = started.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
     const id = `${slug}_${stamp}`;
-    const article: LiveArticle = {
+    const articlePath = join(articleRoot, `${id}.json`);
+    let previous: LiveArticle | null = null;
+    if (existsSync(articlePath)) {
+      try {
+        const stored = JSON.parse(readFileSync(articlePath, "utf8")) as LiveArticle;
+        if (stored && stored.id === id && stored.slug === slug && Array.isArray(stored.paragraphs)) previous = stored;
+      } catch { /* Ignore an incomplete previous checkpoint and start a fresh article. */ }
+    }
+    if (!previous && (!config.enabled || !apiKey)) return;
+    const currentViewerCount = Math.max(0, Math.floor(metadata.viewerCount));
+    const article: LiveArticle = previous ? {
+      ...previous,
+      displayName: metadata.displayName || previous.displayName || slug,
+      category: metadata.categoryName || previous.category,
+      status: "live",
+      viewerCount: currentViewerCount,
+      peakViewerCount: Math.max(previous.peakViewerCount ?? 0, currentViewerCount),
+      aiError: ""
+    } : {
       id, slug, displayName: metadata.displayName || slug,
       headline: metadata.streamTitle || `${metadata.displayName || slug}のLIVE配信`,
       category: metadata.categoryName || "", startedAt: started.toISOString(),
@@ -167,11 +186,13 @@ export class LiveStreamArticleManager {
       paragraphs: ["LIVE配信が始まりました。コメントの受信状況に応じてAIが話題を整理し、この記事を随時更新します。", "記事の分析対象はKickの配信タイトル・カテゴリ・視聴者数・公開チャットコメントです。映像や音声を直接認識した内容ではありません。"],
       sourceVideo: "", sourceLogs: [], createdAt: new Date().toISOString(),
       status: "live", aiGenerated: false, aiSummary: "コメントの受信を待っています。",
-      highlights: [], lastAiUpdateAt: null, viewerCount: Math.max(0, Math.floor(metadata.viewerCount)),
-      peakViewerCount: Math.max(0, Math.floor(metadata.viewerCount))
+      highlights: [], lastAiUpdateAt: null, viewerCount: currentViewerCount,
+      peakViewerCount: currentViewerCount
     };
     const session: LiveSession = {
-      article, directory: articleRoot, commenters: new Set(), keywordCounts: new Map(),
+      article, directory: articleRoot, commenters: new Set(),
+      uniqueCommenterBaseline: previous?.uniqueCommenters ?? 0,
+      keywordCounts: new Map((previous?.keywords ?? []).map(word => [word, 1])),
       pendingComments: [], lastAnalysisAt: 0, analysisInFlight: false, finishing: false
     };
     this.sessions.set(slug, session);
@@ -189,7 +210,7 @@ export class LiveStreamArticleManager {
     if (!content) return;
     session.article.commentCount += 1;
     if (message.senderUsername) session.commenters.add(message.senderUsername.toLowerCase());
-    session.article.uniqueCommenters = session.commenters.size;
+    session.article.uniqueCommenters = session.uniqueCommenterBaseline + session.commenters.size;
     session.pendingComments.push({
       at: message.createdAt,
       text: content
