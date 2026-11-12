@@ -93,3 +93,15 @@
 .chat-message-text{color:#dce1e8;line-height:1.6;overflow-wrap:anywhere;white-space:pre-wrap}
 .chat-message-row small{color:#bcae78;font-size:9px;white-space:nowrap}
 @media(max-width:1050px){.chat-message-row{grid-template-columns:60px minmax(80px,110px) minmax(0,1fr);gap:8px}.chat-message-row small{grid-column:2 / -1}.chat-view-toolbar{align-items:stretch}.chat-channel-select{flex:1}.chat-search-input{flex-basis:100%}}
+
+
+.chat-subscription-panel{margin:14px 0;padding:13px;background:#14171d;border:1px solid #303540;border-radius:8px}
+.chat-subscription-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+.chat-subscription-heading strong{font-size:11px;color:#dce2ea}
+.chat-subscription-heading small{font-size:9px;color:#74808e}
+.chat-subscription-list{display:flex;flex-direction:column;border-top:1px solid #2b303a}
+.chat-subscription-row{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid #282e37;min-width:0}
+.chat-subscription-row>strong{font-size:10px;color:#dce2ea;flex:1;overflow-wrap:anywhere}
+.chat-subscription-row>small{font-size:9px;color:#74808e}
+.chat-subscription-panel>.settings-help{margin:10px 0 0}
+@media(max-width:700px){.chat-subscription-heading{align-items:flex-start;flex-direction:column;gap:4px}.chat-subscription-row{flex-wrap:wrap}.chat-subscription-row>strong{flex-basis:50%}.chat-subscription-row>small{flex-basis:100%}}
