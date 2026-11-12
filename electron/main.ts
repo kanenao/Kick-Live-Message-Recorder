@@ -19,7 +19,7 @@ import { join } from "node:path";
 import { autoUpdater } from "electron-updater";
 import { KickChatReceiver } from "./chat";
 import { KickVodChatDownloader } from "./vod-chat";
-import { KickCommentVideoGenerator, listCommentLogFiles } from "./comment-video";
+import { KickCommentVideoGenerator, listCommentLogFiles, previewCommentVideo } from "./comment-video";
 import { generateStreamArticle, listStreamArticles } from "./articles";
 import { LiveStreamArticleManager } from "./live-articles";
 import { deleteRecordingFile, isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
@@ -1257,6 +1257,15 @@ function registerIpcHandlers(): void {
   ipcMain.handle("comment-video:list-logs", event => {
     assertTrustedSender(event);
     return listCommentLogFiles(getRecordingOutputDirectory());
+  });
+
+  ipcMain.handle("comment-video:preview", async (event, input: unknown) => {
+    assertTrustedSender(event);
+    return previewCommentVideo(
+      input,
+      getRecordingOutputDirectory(),
+      filePath => recordingManager.isFileActive(filePath)
+    );
   });
 
   ipcMain.handle("comment-video:start", (event, input: unknown) => {
