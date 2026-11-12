@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve, sep } from "node:path";
 
 export type RecordingEvent = {
@@ -7,6 +7,8 @@ export type RecordingEvent = {
   status: "starting" | "recording" | "stopped" | "error";
   filePath?: string;
   message?: string;
+  startedAt?: string;
+  endedAt?: string;
 };
 
 export type RecordingFile = {
@@ -23,6 +25,8 @@ type ActiveRecording = {
   filePath: string;
   stderrTail: string;
   settled: boolean;
+  outputDirectory: string;
+  startedAt: string | null;
 };
 
 function validateSlug(value: unknown): string {
@@ -54,6 +58,54 @@ function timestampForFilename(date: Date): string {
     pad(date.getMinutes()),
     pad(date.getSeconds())
   ].join("");
+}
+
+
+function findCompletedVideoPath(session: ActiveRecording): string | null {
+  const candidate = resolve(session.filePath);
+  if (existsSync(candidate)) {
+    try {
+      if (statSync(candidate).isFile() && extname(candidate)) return candidate;
+    } catch { /* 録画ファイルが確定する直前なら候補一覧へ */ }
+  }
+
+  const prefix = basename(session.filePath).replace(/\.[^.]+$/, "");
+  try {
+    const candidates = readdirSync(session.outputDirectory)
+      .filter(name => name.startsWith(prefix) && [".mp4", ".mkv", ".ts", ".webm", ".m4v", ".mov"].includes(extname(name).toLowerCase()))
+      .map(name => join(session.outputDirectory, name))
+      .filter(path => {
+        try { return statSync(path).isFile() && statSync(path).size > 0; } catch { return false; }
+      })
+      .sort((a, b) => {
+        try { return statSync(b).mtimeMs - statSync(a).mtimeMs; } catch { return 0; }
+      });
+    return candidates[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function saveRecordingTimeline(session: ActiveRecording, slug: string, endedAt: string): string | null {
+  if (!session.startedAt) return null;
+  const videoPath = findCompletedVideoPath(session);
+  if (!videoPath) return null;
+  const metadata = {
+    version: 1,
+    slug,
+    videoFile: basename(videoPath),
+    startedAt: session.startedAt,
+    endedAt,
+    startReference: "yt-dlp-process-spawn",
+    note: "開始時刻は録画プロセスの起動時刻です。映像の最初のフレームとは数秒ずれる場合があります。"
+  };
+  try {
+    writeFileSync(videoPath + ".recording.json", JSON.stringify(metadata, null, 2), { encoding: "utf8", mode: 0o600 });
+    return videoPath;
+  } catch (error) {
+    console.error("Failed to save recording timeline metadata:", error);
+    return videoPath;
+  }
 }
 
 export class KickRecordingManager {
@@ -109,7 +161,9 @@ export class KickRecordingManager {
       stopRequested: false,
       filePath: prefix,
       stderrTail: "",
-      settled: false
+      settled: false,
+      outputDirectory,
+      startedAt: null
     };
     this.active.set(slug, session);
 
@@ -117,7 +171,7 @@ export class KickRecordingManager {
       const text = String(chunk);
       for (const line of text.split(/\r?\n/)) {
         const trimmed = line.trim();
-        if (trimmed && !trimmed.startsWith("[") && (trimmed.includes("/") || trimmed.includes("\\\\"))) {
+        if (trimmed && !trimmed.startsWith("[") && (trimmed.includes("/") || trimmed.includes("\\"))) {
           session.filePath = trimmed;
         }
       }
@@ -127,7 +181,8 @@ export class KickRecordingManager {
     });
 
     child.once("spawn", () => {
-      this.onEvent({ slug, status: "recording", filePath: prefix, message: "録画を開始しました。" });
+      session.startedAt = new Date().toISOString();
+      this.onEvent({ slug, status: "recording", filePath: prefix, startedAt: session.startedAt, message: "録画を開始しました。" });
     });
 
     child.once("error", error => {
@@ -148,11 +203,15 @@ export class KickRecordingManager {
       session.settled = true;
       this.active.delete(slug);
       if (session.stopRequested || code === 0) {
+        const endedAt = new Date().toISOString();
+        const videoPath = saveRecordingTimeline(session, slug, endedAt) ?? session.filePath;
         this.onEvent({
           slug,
           status: "stopped",
-          filePath: session.filePath,
-          message: session.stopRequested ? "録画を停止しました。" : "配信が終了し、録画を完了しました。"
+          filePath: videoPath,
+          startedAt: session.startedAt ?? undefined,
+          endedAt,
+          message: session.stopRequested ? "録画を停止しました。コメント同期用の時刻情報を保存しました。" : "配信が終了し、録画を完了しました。コメント同期用の時刻情報を保存しました。"
         });
         return;
       }
