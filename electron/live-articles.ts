@@ -1,4 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { extname, join, resolve } from "node:path";
+import { isPathInsideDirectory } from "./recording";
 import { join } from "node:path";
 import type { KickChatMessage } from "./chat";
 
@@ -201,6 +203,48 @@ export class LiveStreamArticleManager {
 
   updateViewerCount(metadata: LiveMetadata): void {
     this.startOrUpdate(metadata);
+  }
+
+  async enhanceArchivedArticle(article: LiveArticle): Promise<LiveArticle> {
+    const key = this.getApiKey();
+    const config = this.getConfig();
+    if (!config.enabled || !key) return article;
+    const slug = slugify(article.slug);
+    const root = resolve(this.getOutputDirectory());
+    const chatRoot = join(root, "Chat", slug);
+    const sourceLogs = Array.isArray(article.sourceLogs) ? article.sourceLogs.slice(0, 31) : [];
+    const comments: CommentSample[] = [];
+    for (const path of sourceLogs) {
+      if (typeof path !== "string" || !isPathInsideDirectory(path, chatRoot) ||
+          extname(path).toLowerCase() !== ".jsonl" || !existsSync(path)) continue;
+      let lines: string[];
+      try { lines = readFileSync(path, "utf8").split(/\\r?\\n/); } catch { continue; }
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        let item: Record<string, unknown>;
+        try { item = JSON.parse(line) as Record<string, unknown>; } catch { continue; }
+        const content = typeof item.content === "string" ? item.content : typeof item.message === "string" ? item.message : "";
+        const text = content.normalize("NFKC").replace(/\\s+/g, " ").trim().slice(0, 500);
+        if (!text) continue;
+        const at = typeof item.createdAt === "string" && !Number.isNaN(Date.parse(item.createdAt))
+          ? item.createdAt : new Date().toISOString();
+        comments.push({ at, text });
+        if (comments.length > 120) comments.shift();
+      }
+    }
+    if (comments.length === 0) {
+      article.aiError = "AI分析できるコメントログがありません。";
+      return article;
+    }
+    const directory = join(root, "Articles", slug);
+    mkdirSync(directory, { recursive: true });
+    const session: LiveSession = {
+      article, directory, commenters: new Set(), uniqueCommenterBaseline: article.uniqueCommenters,
+      keywordCounts: new Map((article.keywords ?? []).map(word => [word, 1])),
+      pendingComments: comments, lastAnalysisAt: 0, analysisInFlight: false, finishing: true
+    };
+    await this.analyze(session, true);
+    return { ...article, paragraphs: [...article.paragraphs], keywords: [...article.keywords], highlights: [...(article.highlights ?? [])] };
   }
 
   onChatMessage(message: KickChatMessage): void {
