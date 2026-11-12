@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type OllamaStatus = { connected: boolean; baseUrl: string; models: Array<{ name: string; size: number }>; message?: string };
+type ChatStatus = { serverRunning: boolean; tunnelRunning: boolean; localUrl: string; publicUrl: string; receivedCount: number; lastMessageAt: string | null; message: string };
 
 type Channel = {
   id: number;
@@ -57,7 +58,7 @@ type RecordingEvent = {
   message?: string;
 };
 
-const APP_VERSION = "0.1.0-beta.10";
+const APP_VERSION = "0.1.0-beta.11";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -136,6 +137,9 @@ export default function App() {
   const [kickCredentialsConfigured, setKickCredentialsConfigured] = useState(false);
   const [kickEncryptionAvailable, setKickEncryptionAvailable] = useState(false);
   const [kickMessage, setKickMessage] = useState("");
+  const [chatStatus, setChatStatus] = useState<ChatStatus>({ serverRunning: false, tunnelRunning: false, localUrl: "", publicUrl: "", receivedCount: 0, lastMessageAt: null, message: "停止中" });
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatMessage, setChatMessage] = useState("");
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus>({ connected: false, baseUrl: "http://127.0.0.1:11434", models: [], message: "未確認" });
   const [ollamaChecking, setOllamaChecking] = useState(false);
   const [channelChecks, setChannelChecks] = useState<Record<string, ChannelCheck>>({});
@@ -161,6 +165,7 @@ export default function App() {
     let active = true;
     let unsubscribeUpdate: (() => void) | undefined;
     let unsubscribeRecording: (() => void) | undefined;
+    let unsubscribeChat: (() => void) | undefined;
     void loadState().then(state => {
       if (!active) return;
       setChannels(state.channels);
@@ -177,6 +182,12 @@ export default function App() {
       unsubscribeUpdate = window.kickRecorder.onUpdateStatus(status => {
         if (active) setUpdateStatus(status);
       });
+      unsubscribeChat = window.kickRecorder.onChatEvent(event => {
+        if (!active) return;
+        if (event.type === "status") setChatStatus(event.status);
+        else setChatStatus(previous => ({ ...previous, receivedCount: previous.receivedCount + 1, lastMessageAt: event.message.receivedAt, message: `${event.message.slug}：コメントを保存しました` }));
+      });
+      void window.kickRecorder.getChatStatus().then(status => { if (active) setChatStatus(status); }).catch(() => undefined);
       unsubscribeRecording = window.kickRecorder.onRecordingStatus((event: RecordingEvent) => {
         if (!active) return;
         setChannels(previous => previous.map(channel =>
@@ -217,6 +228,7 @@ export default function App() {
       active = false;
       unsubscribeUpdate?.();
       unsubscribeRecording?.();
+      unsubscribeChat?.();
     };
   }, []);
 
@@ -359,6 +371,59 @@ export default function App() {
       recording: false
     }]);
     setNewChannel("");
+  }
+
+  async function startChatCapture() {
+    if (!window.kickRecorder) return;
+    setChatBusy(true);
+    setChatMessage("");
+    try {
+      const status = await window.kickRecorder.startChat();
+      setChatStatus(status);
+      setChatMessage("受信サーバーとCloudflare Tunnelを起動しました。公開URLをKick Developerへ登録してから購読登録してください。");
+    } catch (error) {
+      const status = await window.kickRecorder.getChatStatus().catch(() => chatStatus);
+      setChatStatus(status);
+      setChatMessage(error instanceof Error ? error.message : "チャット受信を開始できませんでした。");
+    } finally { setChatBusy(false); }
+  }
+
+  async function stopChatCapture() {
+    if (!window.kickRecorder) return;
+    setChatBusy(true);
+    try {
+      const status = await window.kickRecorder.stopChat();
+      setChatStatus(status);
+      setChatMessage("チャット受信を停止しました。");
+    } catch (error) {
+      setChatMessage(error instanceof Error ? error.message : "停止できませんでした。");
+    } finally { setChatBusy(false); }
+  }
+
+  async function registerChatSubscriptions() {
+    if (!window.kickRecorder || channels.length === 0) {
+      setChatMessage("先に監視チャンネルを登録してください。");
+      return;
+    }
+    setChatBusy(true);
+    try {
+      const results = await window.kickRecorder.subscribeChat(channels.map(channel => channel.name));
+      const successCount = results.filter(result => result.ok).length;
+      const errors = results.filter(result => !result.ok).map(result => `${result.slug}: ${result.message}`);
+      setChatMessage(`購読登録要求：${successCount}/${results.length}件成功。${errors.length ? " エラー：" + errors.join(" / ") : " 実際のコメント受信は受信件数で確認してください。"}`);
+    } catch (error) {
+      setChatMessage(error instanceof Error ? error.message : "購読登録に失敗しました。");
+    } finally { setChatBusy(false); }
+  }
+
+  async function copyWebhookUrl() {
+    if (!chatStatus.publicUrl) return;
+    try {
+      await navigator.clipboard.writeText(chatStatus.publicUrl);
+      setChatMessage("Webhook URLをコピーしました。");
+    } catch {
+      setChatMessage("URLをコピーできませんでした。表示されたURLを手動でコピーしてください。");
+    }
   }
 
   async function checkOllamaStatus() {
@@ -590,7 +655,7 @@ export default function App() {
               <button className="remove" aria-label={`${c.name}を削除`} onClick={() => setChannels(prev => prev.filter(x => x.id !== c.id))}>×</button>
             </div>)}
           </div>
-          <div className="notice">Kickの配信状態監視と、yt-dlpによる映像・音声の手動／自動録画に対応しました。チャットの取得・保存とコメント流し込み動画の生成は未実装です。{lastChannelCheck && ` 最終確認：${lastChannelCheck}`}</div>
+          <div className="notice">Kickの配信状態監視、映像・音声録画、公式Webhookによるチャット受信・JSONL保存に対応しています。コメント受信には設定画面でWebhook URL登録と購読設定が必要です。{lastChannelCheck && ` 最終確認：${lastChannelCheck}`}</div>
           {recordingMessage && <div className="api-message" role="status">{recordingMessage}</div>}
         </section>
 
@@ -641,15 +706,15 @@ export default function App() {
           {ollamaStatus.connected
             ? <p className="settings-help">検出したモデル：{ollamaStatus.models.length ? ollamaStatus.models.map(model => model.name).join("、") : "なし"}</p>
             : <div className="notice">{ollamaStatus.message || "Ollamaを起動してから接続確認してください。"}<br />モデルの導入コマンド：ollama pull qwen2.5:3b</div>}
-          <div className="notice">注意：Kick版は現在のβ10ではチャット取得・保存機能が未実装です。Ollama接続と記事生成エンジンを先行追加しました。チャット取得機能の実装後、配信コメントを記事生成へ自動連携します。</div>
+          <div className="notice">Kick版ではOllama記事生成エンジンを利用できます。チャット受信を開始して公式Webhookからコメントが届くと、取得したコメントを記事生成へ連携できるようになります。まずは受信件数が増えることを確認してください。</div>
         </div>
         <div className="setting-row">
           <div><strong>配信開始時に自動録画</strong><small>自動モードの登録チャンネルが配信を開始すると録画します</small></div>
           <label className="setting-control"><input type="checkbox" checked={settings.autoRecordOnStreamStart} onChange={e => setSettings(prev => ({ ...prev, autoRecordOnStreamStart: e.target.checked }))} /><span>{settings.autoRecordOnStreamStart ? "有効" : "無効"}</span></label>
         </div>
         <div className="setting-row">
-          <div><strong>チャットを保存（開発中）</strong><small>Kickのチャット取得と保存は未実装です。現在は映像・音声のみ録画します。</small></div>
-          <label className="setting-control"><input type="checkbox" checked={settings.saveChat} disabled /><span>未対応</span></label>
+          <div><strong>チャットログ保存</strong><small>Webhook受信サーバー起動中に、署名検証済みコメントをJSONLで保存します。</small></div>
+          <label className="setting-control"><input type="checkbox" checked={settings.saveChat} disabled /><span>受信設定で管理</span></label>
         </div>
 
         <div className="settings-subsection monitor-settings">
@@ -708,6 +773,34 @@ export default function App() {
           </div>
           <p className="settings-help">起動時と6時間ごとに新しいバージョンを確認します。更新が見つかると自動でダウンロードし、アプリ終了時に適用します。更新の適用にはアプリの再起動が必要です。</p>
           {!isDesktop && <div className="notice">自動更新はWindowsデスクトップ版をインストールして利用してください。</div>}
+        </div>
+
+        <div className="settings-subsection chat-settings">
+          <div className="settings-subheading">
+            <h3>Kickチャット受信・保存</h3>
+            <span className={chatStatus.serverRunning && chatStatus.tunnelRunning ? "api-state connected" : "api-state"}>{chatStatus.serverRunning && chatStatus.tunnelRunning ? "受信準備完了" : "停止中／未接続"}</span>
+          </div>
+          <p className="settings-help">Kick公式Webhookの chat.message.sent を使ってコメントをリアルタイム保存します。受信データは録画保存先の ChatLogs フォルダーへJSONL形式で保存されます。Kickから届いたデータはRSA署名を検証してから保存します。</p>
+          <div className="chat-status-grid">
+            <div><small>受信サーバー</small><strong>{chatStatus.serverRunning ? "起動中" : "停止中"}</strong></div>
+            <div><small>Cloudflare Tunnel</small><strong>{chatStatus.tunnelRunning ? "接続中" : "停止中"}</strong></div>
+            <div><small>保存コメント</small><strong>{chatStatus.receivedCount.toLocaleString("ja-JP")}件</strong></div>
+            <div><small>最終受信</small><strong>{chatStatus.lastMessageAt ? new Date(chatStatus.lastMessageAt).toLocaleTimeString("ja-JP") : "未受信"}</strong></div>
+          </div>
+          {chatStatus.publicUrl && <label className="credential-field">Kick Developerへ登録するWebhook URL
+            <input readOnly value={chatStatus.publicUrl} onFocus={event => event.currentTarget.select()} />
+          </label>}
+          <div className="update-actions">
+            {!chatStatus.serverRunning || !chatStatus.tunnelRunning
+              ? <button className="primary-small" onClick={() => void startChatCapture()} disabled={!isDesktop || !kickCredentialsConfigured || chatBusy}>{chatBusy ? "起動中..." : "チャット受信を開始"}</button>
+              : <button className="small-action" onClick={() => void stopChatCapture()} disabled={chatBusy}>受信を停止</button>}
+            <button className="small-action" onClick={() => void copyWebhookUrl()} disabled={!chatStatus.publicUrl}>Webhook URLをコピー</button>
+            <button className="small-action" onClick={() => void registerChatSubscriptions()} disabled={!isDesktop || !kickCredentialsConfigured || channels.length === 0 || chatBusy}>登録チャンネルを購読</button>
+          </div>
+          <div className="notice">設定手順：①「チャット受信を開始」②表示されたURLをKick Developerの対象アプリでWebhooksを有効にしてWebhook URLへ登録 ③「登録チャンネルを購読」を実行。Quick TunnelのURLは起動ごとに変わるため、再起動後はDeveloper側のURLも更新してください。アプリが起動中のみ受信できます。</div>
+          <p className="settings-help">{chatStatus.message}</p>
+          {chatMessage && <div className="api-message" role="status">{chatMessage}</div>}
+          {!isDesktop && <div className="notice">チャット受信はWindowsデスクトップ版で利用できます。</div>}
         </div>
 
         <div className="settings-subsection">
