@@ -96,6 +96,16 @@ jobs:
           & $ffmpegTarget -version
           if ($LASTEXITCODE -ne 0) { throw "同梱するffmpeg.exeを実行できませんでした。" }
 
+          $ffprobeSource = Get-ChildItem -Path $extractPath -Filter "ffprobe.exe" -File -Recurse | Select-Object -First 1
+          if (-not $ffprobeSource) { throw "FFmpegアーカイブ内にffprobe.exeがありません。" }
+          $ffprobeTarget = "vendor/win-x64/ffprobe.exe"
+          Copy-Item -LiteralPath $ffprobeSource.FullName -Destination $ffprobeTarget -Force
+          if ((Get-Item $ffprobeTarget).Length -lt 1000000) {
+            throw "ffprobe.exe のサイズが不正です。"
+          }
+          & $ffprobeTarget -version
+          if ($LASTEXITCODE -ne 0) { throw "同梱するffprobe.exeを実行できませんでした。" }
+
           $licenseTarget = "vendor/win-x64/FFmpeg-LGPL-2.1.txt"
           Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FFmpeg/FFmpeg/n9.0/COPYING.LGPLv2.1" -OutFile $licenseTarget
           if ((Get-Item $licenseTarget).Length -lt 10000) {
@@ -261,6 +271,16 @@ jobs:
           & $ffmpegTarget -version
           if ($LASTEXITCODE -ne 0) { throw "同梱するffmpeg.exeを実行できませんでした。" }
 
+          $ffprobeSource = Get-ChildItem -Path $extractPath -Filter "ffprobe.exe" -File -Recurse | Select-Object -First 1
+          if (-not $ffprobeSource) { throw "FFmpegアーカイブ内にffprobe.exeがありません。" }
+          $ffprobeTarget = "vendor/win-x64/ffprobe.exe"
+          Copy-Item -LiteralPath $ffprobeSource.FullName -Destination $ffprobeTarget -Force
+          if ((Get-Item $ffprobeTarget).Length -lt 1000000) {
+            throw "ffprobe.exe のサイズが不正です。"
+          }
+          & $ffprobeTarget -version
+          if ($LASTEXITCODE -ne 0) { throw "同梱するffprobe.exeを実行できませんでした。" }
+
           $licenseTarget = "vendor/win-x64/FFmpeg-LGPL-2.1.txt"
           Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FFmpeg/FFmpeg/n9.0/COPYING.LGPLv2.1" -OutFile $licenseTarget
           if ((Get-Item $licenseTarget).Length -lt 10000) {
@@ -280,7 +300,7 @@ jobs:
       - name: Releases用の同梱ファイルを再確認
         shell: pwsh
         run: |
-          $required = @("vendor/win-x64/yt-dlp.exe")
+          $required = @("vendor/win-x64/yt-dlp.exe", "vendor/win-x64/ffmpeg.exe", "vendor/win-x64/ffprobe.exe")
           foreach ($path in $required) {
             if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
               throw "インストーラーへ同梱するファイルがありません: $path"

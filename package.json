@@ -1,6 +1,6 @@
 {
   "name": "kick-live-message-recorder",
-  "version": "0.1.0-beta.26",
+  "version": "0.1.0-beta.27",
   "private": true,
   "description": "Kick配信の映像・音声・チャットを保存するWindowsアプリ",
   "main": "dist-electron/main.js",
@@ -87,6 +87,10 @@
       {
         "from": "vendor/win-x64/ffmpeg.exe",
         "to": "tools/ffmpeg.exe"
+      },
+      {
+        "from": "vendor/win-x64/ffprobe.exe",
+        "to": "tools/ffprobe.exe"
       },
       {
         "from": "vendor/win-x64/FFmpeg-LGPL-2.1.txt",

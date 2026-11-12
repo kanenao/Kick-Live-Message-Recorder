@@ -370,24 +370,27 @@ export function listRecordingFiles(outputDirectory: string): RecordingFile[] {
 
   const supportedExtensions = new Set([".mp4", ".mkv", ".ts", ".webm", ".m4v", ".mov"]);
   const files: RecordingFile[] = [];
+  const scanDirectories = [directory, join(directory, "CommentVideos")].filter(existsSync);
 
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    if (!entry.isFile()) continue;
-    const fullPath = join(directory, entry.name);
-    const extension = extname(entry.name).toLowerCase();
-    if (!supportedExtensions.has(extension)) continue;
+  for (const scanDirectory of scanDirectories) {
+    for (const entry of readdirSync(scanDirectory, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      const fullPath = join(scanDirectory, entry.name);
+      const extension = extname(entry.name).toLowerCase();
+      if (!supportedExtensions.has(extension)) continue;
 
-    try {
-      const stats = statSync(fullPath);
-      files.push({
-        path: fullPath,
-        name: basename(entry.name),
-        extension: extension.slice(1).toUpperCase(),
-        size: stats.size,
-        modifiedAt: stats.mtime.toISOString()
-      });
-    } catch {
-      // 録画一覧の取得中にファイルが削除された場合はスキップする。
+      try {
+        const stats = statSync(fullPath);
+        files.push({
+          path: fullPath,
+          name: basename(entry.name),
+          extension: extension.slice(1).toUpperCase(),
+          size: stats.size,
+          modifiedAt: stats.mtime.toISOString()
+        });
+      } catch {
+        // 録画一覧の取得中にファイルが削除された場合はスキップする。
+      }
     }
   }
 

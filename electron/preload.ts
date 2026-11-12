@@ -50,6 +50,18 @@ type RecordingEvent = {
   isVod?: boolean;
 };
 
+type CommentLogFile = {
+  path: string; name: string; channelSlug: string; kind: "LIVE" | "VOD"; size: number; modifiedAt: string;
+};
+type CommentVideoOptions = {
+  videoPath: string; chatPath: string; delaySeconds?: number; fontSize?: number; displaySeconds?: number;
+  rowLimit?: number; opacity?: number; quality?: "high" | "standard" | "compact"; showUsername?: boolean;
+};
+type CommentVideoEvent = {
+  status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string;
+  outputPath?: string; generatedComments?: number; skippedComments?: number;
+};
+
 type VodChatEvent = {
   status: "starting" | "progress" | "completed" | "stopped" | "error";
   slug: string;
@@ -172,6 +184,14 @@ const api = {
     ipcRenderer.invoke("recording:open", filePath),
   revealRecording: (filePath: string): Promise<{ ok: true }> =>
     ipcRenderer.invoke("recording:reveal", filePath),
+  listCommentLogFiles: (): Promise<CommentLogFile[]> => ipcRenderer.invoke("comment-video:list-logs"),
+  startCommentVideo: (options: CommentVideoOptions): Promise<{ ok: true; outputPath: string }> => ipcRenderer.invoke("comment-video:start", options),
+  stopCommentVideo: (): Promise<{ ok: true }> => ipcRenderer.invoke("comment-video:stop"),
+  onCommentVideoStatus: (callback: (event: CommentVideoEvent) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, event: CommentVideoEvent): void => callback(event);
+    ipcRenderer.on("comment-video:status", listener);
+    return () => ipcRenderer.removeListener("comment-video:status", listener);
+  },
   onRecordingStatus: (callback: (event: RecordingEvent) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, event: RecordingEvent): void => callback(event);
     ipcRenderer.on("recording:status", listener);

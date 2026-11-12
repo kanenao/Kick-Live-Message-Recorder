@@ -90,8 +90,10 @@ type RecordingEvent = {
   message?: string;
   isVod?: boolean;
 };
+type CommentLogFile = { path: string; name: string; channelSlug: string; kind: "LIVE" | "VOD"; size: number; modifiedAt: string };
+type CommentVideoEvent = { status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string; outputPath?: string; generatedComments?: number; skippedComments?: number };
 
-const APP_VERSION = "0.1.0-beta.26";
+const APP_VERSION = "0.1.0-beta.27";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -224,7 +226,7 @@ export default function App() {
   const [vodDownloadActive, setVodDownloadActive] = useState(false);
   const [vodChatStatus, setVodChatStatus] = useState("");
   const [vodChatActive, setVodChatActive] = useState(false);
-  const [tab, setTab] = useState<"dashboard" | "recording" | "library" | "settings">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "recording" | "library" | "comment-video" | "settings">("dashboard");
   const [isReady, setIsReady] = useState(false);
   const [storageError, setStorageError] = useState("");
   const [appDataDirectory, setAppDataDirectory] = useState("");
@@ -264,6 +266,20 @@ export default function App() {
   const [deletingRecordingPath, setDeletingRecordingPath] = useState<string | null>(null);
   const [recordingMessage, setRecordingMessage] = useState("");
   const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
+  const [commentLogFiles, setCommentLogFiles] = useState<CommentLogFile[]>([]);
+  const [selectedCommentVideoPath, setSelectedCommentVideoPath] = useState("");
+  const [selectedCommentLogPath, setSelectedCommentLogPath] = useState("");
+  const [isLoadingCommentLogs, setIsLoadingCommentLogs] = useState(false);
+  const [commentVideoDelay, setCommentVideoDelay] = useState(0);
+  const [commentVideoFontSize, setCommentVideoFontSize] = useState(42);
+  const [commentVideoDuration, setCommentVideoDuration] = useState(6);
+  const [commentVideoRows, setCommentVideoRows] = useState(8);
+  const [commentVideoOpacity, setCommentVideoOpacity] = useState(92);
+  const [commentVideoQuality, setCommentVideoQuality] = useState<"high" | "standard" | "compact">("standard");
+  const [commentVideoShowUsername, setCommentVideoShowUsername] = useState(false);
+  const [commentVideoBusy, setCommentVideoBusy] = useState(false);
+  const [commentVideoEvent, setCommentVideoEvent] = useState<CommentVideoEvent | null>(null);
+  const [commentVideoOutputPath, setCommentVideoOutputPath] = useState("");
   const activeCount = useMemo(() => [...channels, ...recordingOnlyChannels].filter(c => c.recording).length, [channels, recordingOnlyChannels]);
   const activeRecordingChannels = useMemo(() => {
     const unique = new Map<string, Channel>();
@@ -299,6 +315,7 @@ export default function App() {
     let unsubscribeChatMessage: (() => void) | undefined;
     let unsubscribeChatStatus: (() => void) | undefined;
     let unsubscribeVodChat: (() => void) | undefined;
+    let unsubscribeCommentVideo: (() => void) | undefined;
     void loadState().then(state => {
       if (!active) return;
       setChannels(state.channels);
@@ -332,6 +349,13 @@ export default function App() {
         if (!active) return;
         setVodChatStatus(event.message);
         setVodChatActive(event.status === "starting" || event.status === "progress");
+        if (event.status === "completed") setLibraryRefreshKey(value => value + 1);
+      });
+      unsubscribeCommentVideo = window.kickRecorder.onCommentVideoStatus(event => {
+        if (!active) return;
+        setCommentVideoEvent(event);
+        setCommentVideoBusy(event.status === "starting" || event.status === "encoding");
+        if (event.outputPath) setCommentVideoOutputPath(event.outputPath);
         if (event.status === "completed") setLibraryRefreshKey(value => value + 1);
       });
       unsubscribeRecording = window.kickRecorder.onRecordingStatus((event: RecordingEvent) => {
@@ -386,6 +410,7 @@ export default function App() {
       unsubscribeChatMessage?.();
       unsubscribeChatStatus?.();
       unsubscribeVodChat?.();
+      unsubscribeCommentVideo?.();
     };
   }, []);
 
@@ -443,7 +468,7 @@ export default function App() {
   }, [isReady, isDesktop, autoChatSlugKey, channels.length, recordingOnlyChannels.length]);
 
   useEffect(() => {
-    if ((tab !== "library" && tab !== "dashboard") || !isDesktop || !window.kickRecorder) return;
+    if ((tab !== "library" && tab !== "dashboard" && tab !== "comment-video") || !isDesktop || !window.kickRecorder) return;
     let active = true;
     setIsLoadingRecordings(true);
     void window.kickRecorder.listRecordings().then(files => {
@@ -455,6 +480,30 @@ export default function App() {
     });
     return () => { active = false; };
   }, [tab, isDesktop, libraryRefreshKey, settings.outputDirectory]);
+
+  useEffect(() => {
+    if (tab !== "comment-video" || !isDesktop || !window.kickRecorder) return;
+    let active = true;
+    setIsLoadingCommentLogs(true);
+    void window.kickRecorder.listCommentLogFiles().then(files => {
+      if (active) setCommentLogFiles(files);
+    }).catch(error => {
+      if (active) setRecordingMessage(error instanceof Error ? error.message : "コメントファイル一覧を取得できませんでした。");
+    }).finally(() => {
+      if (active) setIsLoadingCommentLogs(false);
+    });
+    return () => { active = false; };
+  }, [tab, isDesktop, libraryRefreshKey, settings.outputDirectory]);
+
+  useEffect(() => {
+    if (!selectedCommentVideoPath && recordingFiles.length > 0) setSelectedCommentVideoPath(recordingFiles[0].path);
+    else if (selectedCommentVideoPath && !recordingFiles.some(file => file.path === selectedCommentVideoPath)) setSelectedCommentVideoPath(recordingFiles[0]?.path ?? "");
+  }, [recordingFiles, selectedCommentVideoPath]);
+
+  useEffect(() => {
+    if (!selectedCommentLogPath && commentLogFiles.length > 0) setSelectedCommentLogPath(commentLogFiles[0].path);
+    else if (selectedCommentLogPath && !commentLogFiles.some(file => file.path === selectedCommentLogPath)) setSelectedCommentLogPath(commentLogFiles[0]?.path ?? "");
+  }, [commentLogFiles, selectedCommentLogPath]);
 
   useEffect(() => {
     if (liveChannelCards.length === 0) return;
@@ -938,6 +987,37 @@ export default function App() {
     }
   }
 
+  async function startCommentVideoGeneration() {
+    if (!window.kickRecorder) return;
+    if (!selectedCommentVideoPath || !selectedCommentLogPath) {
+      setCommentVideoEvent({ status: "error", percent: 0, message: "元動画とコメントファイルの両方を選択してください。" });
+      return;
+    }
+    setCommentVideoBusy(true);
+    setCommentVideoOutputPath("");
+    setCommentVideoEvent({ status: "starting", percent: 0, message: "コメント付き動画の生成を準備しています。" });
+    try {
+      const result = await window.kickRecorder.startCommentVideo({
+        videoPath: selectedCommentVideoPath, chatPath: selectedCommentLogPath, delaySeconds: commentVideoDelay,
+        fontSize: commentVideoFontSize, displaySeconds: commentVideoDuration, rowLimit: commentVideoRows,
+        opacity: commentVideoOpacity, quality: commentVideoQuality, showUsername: commentVideoShowUsername
+      });
+      setCommentVideoOutputPath(result.outputPath);
+    } catch (error) {
+      setCommentVideoBusy(false);
+      setCommentVideoEvent({ status: "error", percent: 0, message: error instanceof Error ? error.message : "コメント付き動画を開始できませんでした。" });
+    }
+  }
+
+  async function stopCommentVideoGeneration() {
+    if (!window.kickRecorder) return;
+    try { await window.kickRecorder.stopCommentVideo(); }
+    catch (error) {
+      setCommentVideoBusy(false);
+      setCommentVideoEvent({ status: "error", percent: 0, message: error instanceof Error ? error.message : "生成を停止できませんでした。" });
+    }
+  }
+
   async function installAppUpdate() {
     if (!window.kickRecorder) return;
     try {
@@ -968,13 +1048,14 @@ export default function App() {
       <button className={tab === "dashboard" ? "nav-item selected" : "nav-item"} onClick={() => setTab("dashboard")}>▦ <span>ダッシュボード</span></button>
       <button className={tab === "recording" ? "nav-item selected" : "nav-item"} onClick={() => setTab("recording")}>● <span>録画専用</span></button>
       <button className={tab === "library" ? "nav-item selected" : "nav-item"} onClick={() => setTab("library")}>▤ <span>録画ライブラリ</span></button>
+      <button className={tab === "comment-video" ? "nav-item selected" : "nav-item"} onClick={() => setTab("comment-video")}>✦ <span>コメント付き動画</span></button>
       <button className={tab === "settings" ? "nav-item selected" : "nav-item"} onClick={() => setTab("settings")}>⚙ <span>設定</span></button>
       <div className="sidebar-bottom"><span className="status-dot" /> β版・開発テスト中<small>現在のバージョン {appVersion}</small></div>
     </aside>
 
     <main className="main">
       <header className="topbar">
-        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "recording" ? "録画専用" : tab === "library" ? "録画ライブラリ" : "設定"}</h1></div>
+        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "recording" ? "録画専用" : tab === "library" ? "録画ライブラリ" : tab === "comment-video" ? "コメント付き動画を生成" : "設定"}</h1></div>
         <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="beta-tag">β版</span><div className="avatar">KR</div></div>
       </header>
 
@@ -1219,6 +1300,61 @@ export default function App() {
                   </div>)}
                 </div>}
         <div className="data-path-note">保存先：{settings.outputDirectory || "アプリ既定のビデオフォルダー"}</div>
+      </section>}
+
+      {tab === "comment-video" && <section className="panel comment-video-panel">
+        <div className="panel-heading">
+          <div><h2>コメント付き動画を生成</h2><p>NicoConvAssのコメント流し込みと、HandBrakeの画質設定を参考にした動画合成</p></div>
+          <button className="small-action" onClick={() => setLibraryRefreshKey(value => value + 1)} disabled={!isDesktop || commentVideoBusy || isLoadingRecordings || isLoadingCommentLogs}>一覧を更新</button>
+        </div>
+        {!isDesktop
+          ? <div className="empty-state"><div className="empty-icon">✦</div><strong>Windowsデスクトップ版で利用できます</strong><span>ブラウザープレビューでは動画ファイルの読み書きやエンコードを実行できません。</span></div>
+          : <>
+            <div className="comment-video-intro">録画した動画と保存済みコメント（JSONL）を選ぶと、コメントを右から左へ流して動画に焼き込みます。元動画は変更せず、CommentVideosフォルダーへ別ファイルとして保存します。</div>
+            <div className="comment-video-form-grid">
+              <label className="comment-video-field"><span>元動画</span>
+                <select value={selectedCommentVideoPath} onChange={event => setSelectedCommentVideoPath(event.target.value)} disabled={commentVideoBusy || isLoadingRecordings}>
+                  <option value="">動画を選択してください</option>
+                  {recordingFiles.map(file => <option key={file.path} value={file.path}>{file.name} ・ {(file.size / (1024 * 1024)).toFixed(1)} MB</option>)}
+                </select>
+                {recordingFiles.length === 0 && <small>録画ライブラリに動画がありません。先に配信を録画してください。</small>}
+              </label>
+              <label className="comment-video-field"><span>コメントファイル</span>
+                <select value={selectedCommentLogPath} onChange={event => setSelectedCommentLogPath(event.target.value)} disabled={commentVideoBusy || isLoadingCommentLogs}>
+                  <option value="">コメントJSONLを選択してください</option>
+                  {commentLogFiles.map(file => <option key={file.path} value={file.path}>{file.channelSlug} ・ {file.kind} ・ {file.name} ・ {(file.size / (1024 * 1024)).toFixed(2)} MB</option>)}
+                </select>
+                {isLoadingCommentLogs
+                  ? <small>コメントファイルを読み込み中...</small>
+                  : commentLogFiles.length === 0
+                    ? <small>ChatフォルダーにJSONLがありません。コメント保存を有効にして配信コメントを取得してください。</small>
+                    : <small>LIVEログは動画の更新時刻と再生時間から開始位置を推定します。VODログは配信開始からの経過秒数を使用します。</small>}
+              </label>
+            </div>
+            <div className="settings-subsection">
+              <div className="settings-subheading"><h3>コメント表示設定</h3><span className="api-state connected">ASS字幕合成</span></div>
+              <div className="comment-video-settings-grid">
+                <label className="comment-video-field"><span>同期ずれ（秒）</span><input type="number" min="-300" max="300" step="0.1" value={commentVideoDelay} onChange={event => setCommentVideoDelay(Number(event.target.value))} disabled={commentVideoBusy} /><small>＋はコメントを遅らせ、－は早めます。</small></label>
+                <label className="comment-video-field"><span>文字サイズ</span><input type="number" min="16" max="80" value={commentVideoFontSize} onChange={event => setCommentVideoFontSize(Number(event.target.value))} disabled={commentVideoBusy} /><small>動画の解像度に合わせて調整します。</small></label>
+                <label className="comment-video-field"><span>コメント表示時間（秒）</span><input type="number" min="2" max="15" value={commentVideoDuration} onChange={event => setCommentVideoDuration(Number(event.target.value))} disabled={commentVideoBusy} /></label>
+                <label className="comment-video-field"><span>最大表示行数</span><input type="number" min="1" max="20" value={commentVideoRows} onChange={event => setCommentVideoRows(Number(event.target.value))} disabled={commentVideoBusy} /></label>
+                <label className="comment-video-field"><span>文字の不透明度（%）</span><input type="number" min="20" max="100" value={commentVideoOpacity} onChange={event => setCommentVideoOpacity(Number(event.target.value))} disabled={commentVideoBusy} /><small>100で不透明、低いほど透過します。</small></label>
+                <label className="comment-video-field"><span>出力画質</span><select value={commentVideoQuality} onChange={event => setCommentVideoQuality(event.target.value as "high" | "standard" | "compact")} disabled={commentVideoBusy}><option value="high">高画質・大きめ</option><option value="standard">標準（おすすめ）</option><option value="compact">容量優先</option></select><small>利用可能なH.264エンコーダーを優先し、ない場合は互換形式へ切り替えます。</small></label>
+              </div>
+              <label className="comment-video-checkbox"><input type="checkbox" checked={commentVideoShowUsername} onChange={event => setCommentVideoShowUsername(event.target.checked)} disabled={commentVideoBusy} /><span>コメントに投稿者名も表示する</span></label>
+            </div>
+            {commentVideoEvent && <div className={commentVideoEvent.status === "error" ? "comment-video-status error" : "comment-video-status"} role="status">
+              <div className="comment-video-status-line"><strong>{commentVideoEvent.message}</strong>{commentVideoBusy && <span>{Math.round(commentVideoEvent.percent)}%</span>}</div>
+              {commentVideoBusy && <div className="comment-video-progress"><div style={{ width: Math.max(0, Math.min(100, commentVideoEvent.percent)).toString() + "%" }} /></div>}
+              {commentVideoEvent.status === "completed" && <small>合成コメント：{(commentVideoEvent.generatedComments ?? 0).toLocaleString("ja-JP")}件 ・ 省略：{(commentVideoEvent.skippedComments ?? 0).toLocaleString("ja-JP")}件</small>}
+            </div>}
+            <div className="comment-video-actions">
+              <button className="primary-small" onClick={() => void startCommentVideoGeneration()} disabled={commentVideoBusy || !selectedCommentVideoPath || !selectedCommentLogPath || isLoadingRecordings || isLoadingCommentLogs}>コメント付き動画を生成</button>
+              {commentVideoBusy && <button className="remove" onClick={() => void stopCommentVideoGeneration()}>生成を停止</button>}
+              {!commentVideoBusy && commentVideoEvent?.status === "completed" && commentVideoOutputPath && <button className="small-action" onClick={() => void revealRecordingFile(commentVideoOutputPath)}>生成ファイルの保存先を表示</button>}
+            </div>
+            <div className="notice">生成には動画の再エンコードが必要なため、動画の長さ・解像度・PC性能によって時間がかかります。元動画とコメントJSONLは削除・変更しません。</div>
+          </>}
       </section>}
 
       {tab === "settings" && <section className="panel">

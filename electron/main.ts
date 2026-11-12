@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { autoUpdater } from "electron-updater";
 import { KickChatReceiver } from "./chat";
 import { KickVodChatDownloader } from "./vod-chat";
+import { KickCommentVideoGenerator, listCommentLogFiles } from "./comment-video";
 import { deleteRecordingFile, isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
 
 // Chromiumが提供する標準メニューやコンテキストメニューも日本語で表示する。
@@ -489,6 +490,10 @@ const recordingManager = new KickRecordingManager(event => {
   mainWindow?.webContents.send("recording:status", event);
 });
 
+const commentVideoGenerator = new KickCommentVideoGenerator(event => {
+  mainWindow?.webContents.send("comment-video:status", event);
+});
+
 const chatReceiver = new KickChatReceiver(
   getRecordingOutputDirectory,
   () => readState().settings.saveChat,
@@ -782,6 +787,21 @@ function registerIpcHandlers(): void {
     return listRecordingFiles(getRecordingOutputDirectory());
   });
 
+  ipcMain.handle("comment-video:list-logs", event => {
+    assertTrustedSender(event);
+    return listCommentLogFiles(getRecordingOutputDirectory());
+  });
+
+  ipcMain.handle("comment-video:start", (event, input: unknown) => {
+    assertTrustedSender(event);
+    return commentVideoGenerator.start(input, getRecordingOutputDirectory(), filePath => recordingManager.isFileActive(filePath));
+  });
+
+  ipcMain.handle("comment-video:stop", event => {
+    assertTrustedSender(event);
+    return commentVideoGenerator.stop();
+  });
+
   ipcMain.handle("recording:delete", (event, filePath: unknown) => {
     assertTrustedSender(event);
     if (typeof filePath !== "string" || filePath.length > 4096) {
@@ -1010,6 +1030,7 @@ app.on("before-quit", () => {
   recordingManager.stopAll();
   void chatReceiver.stop();
   vodChatDownloader.stopAll();
+  commentVideoGenerator.stopAll();
 });
 
 app.on("window-all-closed", () => {

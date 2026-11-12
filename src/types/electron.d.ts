@@ -47,6 +47,11 @@ type KickRecorderRecordingEvent = {
   message?: string;
   isVod?: boolean;
 };
+type KickRecorderCommentLogFile = { path: string; name: string; channelSlug: string; kind: "LIVE" | "VOD"; size: number; modifiedAt: string };
+type KickRecorderCommentVideoEvent = {
+  status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string;
+  outputPath?: string; generatedComments?: number; skippedComments?: number;
+};
 
 type KickRecorderVodChatEvent = {
   status: "starting" | "progress" | "completed" | "stopped" | "error";
@@ -149,6 +154,10 @@ declare global {
       deleteRecording: (filePath: string) => Promise<{ ok: true; name: string }>;
       openRecording: (filePath: string) => Promise<{ ok: true }>;
       revealRecording: (filePath: string) => Promise<{ ok: true }>;
+      listCommentLogFiles: () => Promise<KickRecorderCommentLogFile[]>;
+      startCommentVideo: (options: { videoPath: string; chatPath: string; delaySeconds?: number; fontSize?: number; displaySeconds?: number; rowLimit?: number; opacity?: number; quality?: "high" | "standard" | "compact"; showUsername?: boolean }) => Promise<{ ok: true; outputPath: string }>;
+      stopCommentVideo: () => Promise<{ ok: true }>;
+      onCommentVideoStatus: (callback: (event: KickRecorderCommentVideoEvent) => void) => () => void;
       onRecordingStatus: (callback: (event: KickRecorderRecordingEvent) => void) => () => void;
     };
   }
