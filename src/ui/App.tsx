@@ -60,7 +60,7 @@ type RecordingEvent = {
   message?: string;
 };
 
-const APP_VERSION = "0.1.0-beta.12";
+const APP_VERSION = "0.1.0-beta.13";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -131,7 +131,7 @@ export default function App() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [newChannel, setNewChannel] = useState("");
-  const [tab, setTab] = useState<"dashboard" | "library" | "articles" | "settings">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "library" | "chat" | "articles" | "settings">("dashboard");
   const [isReady, setIsReady] = useState(false);
   const [storageError, setStorageError] = useState("");
   const [appDataDirectory, setAppDataDirectory] = useState("");
@@ -144,6 +144,13 @@ export default function App() {
   const [chatStatus, setChatStatus] = useState<ChatStatus>({ serverRunning: false, tunnelRunning: false, localUrl: "", publicUrl: "", receivedCount: 0, lastMessageAt: null, message: "停止中" });
   const [chatBusy, setChatBusy] = useState(false);
   const [chatMessage, setChatMessage] = useState("");
+  const [chatSelectedChannel, setChatSelectedChannel] = useState("");
+  const chatSelectedChannelRef = useRef("");
+  const [chatLogMessages, setChatLogMessages] = useState<KickRecorderSavedChatMessage[]>([]);
+  const [chatLogLoading, setChatLogLoading] = useState(false);
+  const [chatSearch, setChatSearch] = useState("");
+  const [chatExporting, setChatExporting] = useState(false);
+  const [chatViewMessage, setChatViewMessage] = useState("");
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus>({ connected: false, baseUrl: "http://127.0.0.1:11434", models: [], message: "未確認" });
   const [ollamaChecking, setOllamaChecking] = useState(false);
   const [channelChecks, setChannelChecks] = useState<Record<string, ChannelCheck>>({});
@@ -168,6 +175,14 @@ export default function App() {
   const [articleBusySlug, setArticleBusySlug] = useState("");
   const [articleMessage, setArticleMessage] = useState("");
   const activeCount = useMemo(() => channels.filter(c => c.recording).length, [channels]);
+
+  useEffect(() => {
+    chatSelectedChannelRef.current = chatSelectedChannel.toLowerCase();
+  }, [chatSelectedChannel]);
+
+  useEffect(() => {
+    if (!chatSelectedChannel && channels.length > 0) setChatSelectedChannel(channels[0].name);
+  }, [channels, chatSelectedChannel]);
 
   useEffect(() => {
     let active = true;
@@ -195,7 +210,12 @@ export default function App() {
       unsubscribeChat = window.kickRecorder.onChatEvent(event => {
         if (!active) return;
         if (event.type === "status") setChatStatus(event.status);
-        else setChatStatus(previous => ({ ...previous, receivedCount: previous.receivedCount + 1, lastMessageAt: event.message.receivedAt, message: `${event.message.slug}：コメントを保存しました` }));
+        else {
+          setChatStatus(previous => ({ ...previous, receivedCount: previous.receivedCount + 1, lastMessageAt: event.message.receivedAt, message: `${event.message.slug}：コメントを保存しました` }));
+          if (event.message.slug === chatSelectedChannelRef.current) {
+            setChatLogMessages(previous => [...previous.filter(item => item.messageId !== event.message.messageId), event.message].slice(-500));
+          }
+        }
       });
       void window.kickRecorder.getChatStatus().then(status => { if (active) setChatStatus(status); }).catch(() => undefined);
       unsubscribeArticleNew = window.kickRecorder.onArticleNew(article => {
@@ -256,6 +276,19 @@ export default function App() {
     () => channels.map(channel => channel.name),
     [channels]
   );
+
+  useEffect(() => {
+    if (tab !== "chat" || !chatSelectedChannel || !isDesktop || !window.kickRecorder) return;
+    let active = true;
+    setChatLogLoading(true);
+    setChatViewMessage("");
+    void window.kickRecorder.listChatMessages(chatSelectedChannel).then(messages => {
+      if (active) setChatLogMessages(messages.slice(-500));
+    }).catch(error => {
+      if (active) setChatViewMessage(error instanceof Error ? error.message : "チャットログを読み込めませんでした。");
+    }).finally(() => { if (active) setChatLogLoading(false); });
+    return () => { active = false; };
+  }, [tab, chatSelectedChannel, isDesktop]);
 
   useEffect(() => {
     if (tab !== "articles" || !isDesktop || !window.kickRecorder) return;
@@ -574,6 +607,32 @@ export default function App() {
     }
   }
 
+  async function exportChatLog(format: "csv" | "jsonl") {
+    if (!window.kickRecorder || !chatSelectedChannel) return;
+    setChatExporting(true);
+    setChatViewMessage(`${chatSelectedChannel} のコメントを書き出しています...`);
+    try {
+      const result = await window.kickRecorder.exportChatMessages(chatSelectedChannel, format);
+      setChatViewMessage(result.saved
+        ? `${result.count.toLocaleString("ja-JP")}件を書き出しました：${result.path}`
+        : "書き出しをキャンセルしました。");
+    } catch (error) {
+      setChatViewMessage(error instanceof Error ? error.message : "チャットログを書き出せませんでした。");
+    } finally { setChatExporting(false); }
+  }
+
+  async function refreshChatLog() {
+    if (!window.kickRecorder || !chatSelectedChannel) return;
+    setChatLogLoading(true);
+    try {
+      const messages = await window.kickRecorder.listChatMessages(chatSelectedChannel);
+      setChatLogMessages(messages.slice(-500));
+      setChatViewMessage(`${messages.length.toLocaleString("ja-JP")}件を読み込みました。`);
+    } catch (error) {
+      setChatViewMessage(error instanceof Error ? error.message : "チャットログを更新できませんでした。");
+    } finally { setChatLogLoading(false); }
+  }
+
   async function generateArticleNow(slug: string) {
     if (!window.kickRecorder) return;
     setArticleBusySlug(slug);
@@ -654,6 +713,7 @@ export default function App() {
       <div className="nav-label">メインメニュー</div>
       <button className={tab === "dashboard" ? "nav-item selected" : "nav-item"} onClick={() => setTab("dashboard")}>▦ <span>ダッシュボード</span></button>
       <button className={tab === "library" ? "nav-item selected" : "nav-item"} onClick={() => setTab("library")}>▤ <span>録画ライブラリ</span></button>
+      <button className={tab === "chat" ? "nav-item selected" : "nav-item"} onClick={() => setTab("chat")}>☷ <span>チャットビューアー</span></button>
       <button className={tab === "articles" ? "nav-item selected" : "nav-item"} onClick={() => setTab("articles")}>▧ <span>配信記事</span></button>
       <button className={tab === "settings" ? "nav-item selected" : "nav-item"} onClick={() => setTab("settings")}>⚙ <span>設定</span></button>
       <div className="sidebar-bottom"><span className="status-dot" /> β版・開発テスト中<small>現在のバージョン {appVersion}</small></div>
@@ -661,7 +721,7 @@ export default function App() {
 
     <main className="main">
       <header className="topbar">
-        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "library" ? "録画ライブラリ" : tab === "articles" ? "配信記事" : "設定"}</h1></div>
+        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "library" ? "録画ライブラリ" : tab === "chat" ? "チャットビューアー" : tab === "articles" ? "配信記事" : "設定"}</h1></div>
         <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="beta-tag">β版</span><div className="avatar">KR</div></div>
       </header>
 
@@ -737,6 +797,60 @@ export default function App() {
         <div className="data-path-note">保存先：{settings.outputDirectory || "アプリ既定のビデオフォルダー"}</div>
       </section>}
 
+
+
+      {tab === "chat" && <section className="panel">
+        <div className="panel-heading">
+          <div><h2>チャットビューアー</h2><p>Kickの配信コメントをリアルタイム表示・検索・書き出し</p></div>
+          <span className={chatStatus.serverRunning && chatStatus.tunnelRunning ? "api-state connected" : "api-state"}>{chatStatus.serverRunning && chatStatus.tunnelRunning ? "リアルタイム受信中" : "保存ログを表示中"}</span>
+        </div>
+        {!isDesktop
+          ? <div className="empty-state"><strong>Windowsデスクトップ版で利用できます</strong><span>チャットログはPC内に保存されます。</span></div>
+          : <>
+            <div className="chat-view-toolbar">
+              <label className="chat-channel-select">チャンネル
+                <select className="setting-select" value={chatSelectedChannel} onChange={event => setChatSelectedChannel(event.target.value)}>
+                  {channels.map(channel => <option key={channel.id} value={channel.name}>{channel.name}</option>)}
+                </select>
+              </label>
+              <input className="chat-search-input" value={chatSearch} onChange={event => setChatSearch(event.target.value)} placeholder="コメント・ユーザー名を検索" aria-label="コメント検索" />
+              <button className="small-action" onClick={() => void refreshChatLog()} disabled={!chatSelectedChannel || chatLogLoading}>{chatLogLoading ? "読込中..." : "更新"}</button>
+              <button className="small-action" onClick={() => void exportChatLog("csv")} disabled={!chatSelectedChannel || chatLogMessages.length === 0 || chatExporting}>CSV出力</button>
+              <button className="small-action" onClick={() => void exportChatLog("jsonl")} disabled={!chatSelectedChannel || chatLogMessages.length === 0 || chatExporting}>JSONL出力</button>
+            </div>
+            <div className="chat-view-summary">
+              <span>表示中：{chatLogMessages.length.toLocaleString("ja-JP")}件（最大500件）</span>
+              <span>新着受信：{chatStatus.receivedCount.toLocaleString("ja-JP")}件</span>
+              <span>保存形式：JSONL</span>
+            </div>
+            {chatViewMessage && <div className="api-message" role="status">{chatViewMessage}</div>}
+            {channels.length === 0
+              ? <div className="empty-state"><strong>チャンネルが登録されていません</strong><span>ダッシュボードでチャンネルを追加してください。</span></div>
+              : chatLogLoading && chatLogMessages.length === 0
+                ? <div className="empty-state"><strong>チャットログを読み込み中...</strong></div>
+                : <div className="chat-message-list">
+                    {chatLogMessages
+                      .filter(message => {
+                        const query = chatSearch.trim().toLocaleLowerCase();
+                        return !query || message.text.toLocaleLowerCase().includes(query) || message.user.toLocaleLowerCase().includes(query);
+                      })
+                      .slice()
+                      .reverse()
+                      .map(message => <div className="chat-message-row" key={message.messageId}>
+                        <time>{new Date(message.timestamp || message.receivedAt).toLocaleTimeString("ja-JP")}</time>
+                        <strong>{message.user || "匿名ユーザー"}</strong>
+                        <span className="chat-message-text">{message.text}</span>
+                        {message.badges.length > 0 && <small>{message.badges.join("・")}</small>}
+                      </div>)}
+                    {chatLogMessages.length > 0 && chatLogMessages.filter(message => {
+                      const query = chatSearch.trim().toLocaleLowerCase();
+                      return !query || message.text.toLocaleLowerCase().includes(query) || message.user.toLocaleLowerCase().includes(query);
+                    }).length === 0 && <div className="empty-inline">検索に一致するコメントがありません。</div>}
+                    {chatLogMessages.length === 0 && <div className="empty-state"><strong>保存済みコメントはありません</strong><span>設定画面でチャット受信を開始し、Kick Developer側でWebhookを設定してください。</span></div>}
+                  </div>}
+            <div className="data-path-note">チャットログの保存先：{settings.outputDirectory || "アプリ既定のビデオフォルダー"} / ChatLogs</div>
+          </>}
+      </section>}
 
       {tab === "articles" && <section className="panel">
         <div className="panel-heading">
