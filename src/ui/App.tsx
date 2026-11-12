@@ -19,6 +19,7 @@ type AppSettings = {
   autoMonitorEnabled: boolean;
   monitorIntervalSeconds: number;
   notifyOnLive: boolean;
+  autoGenerateArticles: boolean;
 };
 
 type PersistedState = {
@@ -58,7 +59,7 @@ type RecordingEvent = {
   message?: string;
 };
 
-const APP_VERSION = "0.1.0-beta.11";
+const APP_VERSION = "0.1.0-beta.12";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -67,7 +68,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   outputDirectory: "",
   autoMonitorEnabled: true,
   monitorIntervalSeconds: 60,
-  notifyOnLive: true
+  notifyOnLive: true,
+  autoGenerateArticles: true
 };
 
 function normalizeState(value: unknown): PersistedState {
@@ -105,7 +107,8 @@ function normalizeState(value: unknown): PersistedState {
       monitorIntervalSeconds: typeof settings.monitorIntervalSeconds === "number"
         ? Math.max(30, Math.min(3600, Math.round(settings.monitorIntervalSeconds)))
         : 60,
-      notifyOnLive: settings.notifyOnLive !== false
+      notifyOnLive: settings.notifyOnLive !== false,
+      autoGenerateArticles: settings.autoGenerateArticles !== false
     }
   };
 }
@@ -127,7 +130,7 @@ export default function App() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [newChannel, setNewChannel] = useState("");
-  const [tab, setTab] = useState<"dashboard" | "library" | "settings">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "library" | "articles" | "settings">("dashboard");
   const [isReady, setIsReady] = useState(false);
   const [storageError, setStorageError] = useState("");
   const [appDataDirectory, setAppDataDirectory] = useState("");
@@ -159,6 +162,10 @@ export default function App() {
   const [isLoadingRecordings, setIsLoadingRecordings] = useState(false);
   const [recordingMessage, setRecordingMessage] = useState("");
   const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
+  const [articles, setArticles] = useState<KickRecorderArticle[]>([]);
+  const [articlesLoading, setArticlesLoading] = useState(false);
+  const [articleBusySlug, setArticleBusySlug] = useState("");
+  const [articleMessage, setArticleMessage] = useState("");
   const activeCount = useMemo(() => channels.filter(c => c.recording).length, [channels]);
 
   useEffect(() => {
@@ -166,6 +173,8 @@ export default function App() {
     let unsubscribeUpdate: (() => void) | undefined;
     let unsubscribeRecording: (() => void) | undefined;
     let unsubscribeChat: (() => void) | undefined;
+    let unsubscribeArticleNew: (() => void) | undefined;
+    let unsubscribeArticleStatus: (() => void) | undefined;
     void loadState().then(state => {
       if (!active) return;
       setChannels(state.channels);
@@ -188,6 +197,14 @@ export default function App() {
         else setChatStatus(previous => ({ ...previous, receivedCount: previous.receivedCount + 1, lastMessageAt: event.message.receivedAt, message: `${event.message.slug}：コメントを保存しました` }));
       });
       void window.kickRecorder.getChatStatus().then(status => { if (active) setChatStatus(status); }).catch(() => undefined);
+      unsubscribeArticleNew = window.kickRecorder.onArticleNew(article => {
+        if (!active) return;
+        setArticles(previous => [article, ...previous.filter(item => item.id !== article.id)].slice(0, 100));
+        setArticleMessage(`${article.slug} の${article.isFinal ? "配信終了記事" : "ライブ記事"}を保存しました。`);
+      });
+      unsubscribeArticleStatus = window.kickRecorder.onArticleStatus(status => {
+        if (active) setArticleMessage(`${status.slug ? status.slug + "：" : ""}${status.message}`);
+      });
       unsubscribeRecording = window.kickRecorder.onRecordingStatus((event: RecordingEvent) => {
         if (!active) return;
         setChannels(previous => previous.map(channel =>
@@ -229,6 +246,8 @@ export default function App() {
       unsubscribeUpdate?.();
       unsubscribeRecording?.();
       unsubscribeChat?.();
+      unsubscribeArticleNew?.();
+      unsubscribeArticleStatus?.();
     };
   }, []);
 
@@ -236,6 +255,18 @@ export default function App() {
     () => channels.map(channel => channel.name),
     [channels]
   );
+
+  useEffect(() => {
+    if (tab !== "articles" || !isDesktop || !window.kickRecorder) return;
+    let active = true;
+    setArticlesLoading(true);
+    void window.kickRecorder.listArticles().then(items => {
+      if (active) setArticles(items);
+    }).catch(error => {
+      if (active) setArticleMessage(error instanceof Error ? error.message : "記事一覧を読み込めませんでした。");
+    }).finally(() => { if (active) setArticlesLoading(false); });
+    return () => { active = false; };
+  }, [tab, isDesktop]);
 
   useEffect(() => {
     if (tab !== "library" || !isDesktop || !window.kickRecorder) return;
@@ -542,6 +573,19 @@ export default function App() {
     }
   }
 
+  async function generateArticleNow(slug: string) {
+    if (!window.kickRecorder) return;
+    setArticleBusySlug(slug);
+    setArticleMessage(`${slug} の記事を生成しています。Ollamaの処理には数分かかる場合があります。`);
+    try {
+      const article = await window.kickRecorder.generateArticle(slug);
+      setArticles(previous => [article, ...previous.filter(item => item.id !== article.id)].slice(0, 100));
+      setArticleMessage(`${slug} の記事を保存しました。`);
+    } catch (error) {
+      setArticleMessage(error instanceof Error ? error.message : "記事を生成できませんでした。");
+    } finally { setArticleBusySlug(""); }
+  }
+
   async function openRecordingFile(filePath: string) {
     if (!window.kickRecorder) return;
     try {
@@ -609,13 +653,14 @@ export default function App() {
       <div className="nav-label">メインメニュー</div>
       <button className={tab === "dashboard" ? "nav-item selected" : "nav-item"} onClick={() => setTab("dashboard")}>▦ <span>ダッシュボード</span></button>
       <button className={tab === "library" ? "nav-item selected" : "nav-item"} onClick={() => setTab("library")}>▤ <span>録画ライブラリ</span></button>
+      <button className={tab === "articles" ? "nav-item selected" : "nav-item"} onClick={() => setTab("articles")}>▧ <span>配信記事</span></button>
       <button className={tab === "settings" ? "nav-item selected" : "nav-item"} onClick={() => setTab("settings")}>⚙ <span>設定</span></button>
       <div className="sidebar-bottom"><span className="status-dot" /> β版・開発テスト中<small>現在のバージョン {appVersion}</small></div>
     </aside>
 
     <main className="main">
       <header className="topbar">
-        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "library" ? "録画ライブラリ" : "設定"}</h1></div>
+        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "library" ? "録画ライブラリ" : tab === "articles" ? "配信記事" : "設定"}</h1></div>
         <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="beta-tag">β版</span><div className="avatar">KR</div></div>
       </header>
 
@@ -691,6 +736,39 @@ export default function App() {
         <div className="data-path-note">保存先：{settings.outputDirectory || "アプリ既定のビデオフォルダー"}</div>
       </section>}
 
+
+      {tab === "articles" && <section className="panel">
+        <div className="panel-heading">
+          <div><h2>AI配信記事</h2><p>保存されたKickチャットをOllamaで日本語記事にします</p></div>
+          <span className={ollamaStatus.connected ? "api-state connected" : "api-state"}>{ollamaStatus.connected ? "Ollama接続済み" : "Ollama未接続"}</span>
+        </div>
+        <div className="article-toolbar">
+          <span className="settings-help">ライブ受信中は約3分ごとに新しいコメントを確認して記事スナップショットを保存します。配信終了も検知した場合は最終記事を作成します。</span>
+          <div className="update-actions">
+            {channels.map(channel => <button key={channel.id} className="small-action" onClick={() => void generateArticleNow(channel.name)} disabled={!isDesktop || !ollamaStatus.connected || Boolean(articleBusySlug)}>
+              {articleBusySlug === channel.name ? "生成中..." : `${channel.name} の記事を生成`}
+            </button>)}
+          </div>
+        </div>
+        {articleMessage && <div className="api-message" role="status">{articleMessage}</div>}
+        {articlesLoading
+          ? <div className="empty-state"><strong>記事一覧を読み込み中...</strong></div>
+          : articles.length === 0
+            ? <div className="empty-state"><div className="empty-icon">▧</div><strong>記事はまだありません</strong><span>チャット受信を有効にしてコメントを保存するか、チャンネルごとの記事生成を実行してください。</span></div>
+            : <div className="article-list">
+                {articles.map(article => <article className="article-card" key={article.id}>
+                  <div className="article-card-head">
+                    <div><strong>{article.title}</strong><small>{article.slug} ・ {new Date(article.generatedAt).toLocaleString("ja-JP")} ・ コメント {article.commentCount.toLocaleString("ja-JP")}件</small></div>
+                    <span className="api-state connected">{article.isFinal ? "最終記事" : "ライブ記事"}</span>
+                  </div>
+                  {article.summary && <p className="article-summary">{article.summary}</p>}
+                  <div className="article-body">{article.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
+                  {article.topics.length > 0 && <div className="article-topics">{article.topics.map(topic => <span key={topic}>{topic}</span>)}</div>}
+                  <small className="article-meta">生成：{article.provider} / {article.model}</small>
+                </article>)}
+              </div>}
+      </section>}
+
       {tab === "settings" && <section className="panel">
         <div className="panel-heading"><div><h2>基本設定</h2><p>β版の録画動作・保存先の設定</p></div></div>
         <div className="settings-subsection">
@@ -706,7 +784,11 @@ export default function App() {
           {ollamaStatus.connected
             ? <p className="settings-help">検出したモデル：{ollamaStatus.models.length ? ollamaStatus.models.map(model => model.name).join("、") : "なし"}</p>
             : <div className="notice">{ollamaStatus.message || "Ollamaを起動してから接続確認してください。"}<br />モデルの導入コマンド：ollama pull qwen2.5:3b</div>}
-          <div className="notice">Kick版ではOllama記事生成エンジンを利用できます。チャット受信を開始して公式Webhookからコメントが届くと、取得したコメントを記事生成へ連携できるようになります。まずは受信件数が増えることを確認してください。</div>
+          <div className="notice">配信記事タブから手動生成できるほか、チャット受信中は約3分ごとに新しいコメントからライブ記事を自動保存します。配信終了を検出した際には最終記事を作成します。Ollamaとモデルが必要です。</div>
+        </div>
+        <div className="setting-row">
+          <div><strong>配信中の記事を自動生成</strong><small>チャット受信中、約3分ごとに新しいコメントから記事を生成し、配信終了時に最終記事を保存します</small></div>
+          <label className="setting-control"><input type="checkbox" checked={settings.autoGenerateArticles} onChange={e => setSettings(prev => ({ ...prev, autoGenerateArticles: e.target.checked }))} /><span>{settings.autoGenerateArticles ? "有効" : "無効"}</span></label>
         </div>
         <div className="setting-row">
           <div><strong>配信開始時に自動録画</strong><small>自動モードの登録チャンネルが配信を開始すると録画します</small></div>
