@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { autoUpdater } from "electron-updater";
 import { isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
 import { getOllamaStatus, generateKickBroadcastArticle } from "./ollama";
+import { KickChatReceiver } from "./chat";
 
 // Chromiumが提供する標準メニューやコンテキストメニューも日本語で表示する。
 app.commandLine.appendSwitch("lang", "ja-JP");
@@ -63,6 +64,7 @@ type StoredKickCredentials = {
 
 type KickChannelCheck = {
   slug: string;
+  broadcasterUserId: number | null;
   found: boolean;
   isLive: boolean;
   streamTitle: string;
@@ -78,6 +80,7 @@ type KickTokenPayload = {
 type KickChannelPayload = {
   data?: Array<{
     slug?: string;
+    broadcaster_user_id?: number | string;
     stream_title?: string;
     stream?: {
       is_live?: boolean;
@@ -247,6 +250,7 @@ async function checkKickChannels(input: unknown): Promise<KickChannelCheck[]> {
       const stream = channel.stream;
       resultBySlug.set(channel.slug.toLowerCase(), {
         slug: channel.slug.toLowerCase(),
+        broadcasterUserId: Number.isSafeInteger(Number(channel.broadcaster_user_id)) ? Number(channel.broadcaster_user_id) : null,
         found: true,
         isLive: stream?.is_live === true,
         streamTitle: typeof channel.stream_title === "string" ? channel.stream_title : "",
@@ -258,12 +262,66 @@ async function checkKickChannels(input: unknown): Promise<KickChannelCheck[]> {
 
   return slugs.map(slug => resultBySlug.get(slug) ?? {
     slug,
+    broadcasterUserId: null,
     found: false,
     isLive: false,
     streamTitle: "",
     viewerCount: 0,
     startedAt: null
   });
+}
+
+
+async function subscribeToKickChat(input: unknown): Promise<Array<{ slug: string; ok: boolean; message: string }>> {
+  if (!Array.isArray(input)) throw new Error("購読チャンネル一覧が不正です。");
+  const slugs = [...new Set(input.filter((value): value is string =>
+    typeof value === "string" && /^[a-zA-Z0-9_]{1,25}$/.test(value)
+  ).map(value => value.toLowerCase()))].slice(0, 200);
+  if (slugs.length === 0) throw new Error("先にチャンネルを登録してください。");
+
+  const accessToken = await getKickAccessToken();
+  const results: Array<{ slug: string; ok: boolean; message: string }> = [];
+  for (const slug of slugs) {
+    try {
+      const url = new URL("https://api.kick.com/public/v1/channels");
+      url.searchParams.set("slug", slug);
+      const channelResponse = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+        signal: AbortSignal.timeout(15000)
+      });
+      if (!channelResponse.ok) throw new Error(`チャンネル情報取得 HTTP ${channelResponse.status}`);
+      const channelPayload = await channelResponse.json() as { data?: Array<{ broadcaster_user_id?: number | string; slug?: string }> };
+      const channel = channelPayload.data?.find(item => item.slug?.toLowerCase() === slug);
+      const broadcasterUserId = Number(channel?.broadcaster_user_id);
+      if (!Number.isSafeInteger(broadcasterUserId) || broadcasterUserId <= 0) {
+        throw new Error("配信者IDを取得できませんでした。チャンネル名を確認してください。");
+      }
+      const response = await fetch("https://api.kick.com/public/v1/events/subscriptions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          broadcaster_user_id: broadcasterUserId,
+          method: "webhook",
+          events: [{ name: "chat.message.sent", version: 1 }]
+        }),
+        signal: AbortSignal.timeout(15000)
+      });
+      const payload = await response.json().catch(() => ({})) as { message?: string };
+      if (!response.ok) throw new Error(payload.message || `購読登録 HTTP ${response.status}`);
+      results.push({
+        slug,
+        ok: true,
+        message: "Kick APIに購読登録要求を送信しました。実際のWebhook到着は受信ログで確認してください。"
+      });
+    } catch (error) {
+      results.push({ slug, ok: false, message: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return results;
 }
 
 
@@ -362,6 +420,15 @@ let mainWindow: BrowserWindow | null = null;
 
 const recordingManager = new KickRecordingManager(event => {
   mainWindow?.webContents.send("recording:status", event);
+});
+
+const chatReceiver = new KickChatReceiver(event => {
+  mainWindow?.webContents.send("chat:event", event);
+});
+
+app.on("before-quit", () => {
+  chatReceiver.stop();
+  recordingManager.stopAll();
 });
 
 function getRecordingOutputDirectory(): string {
@@ -564,6 +631,32 @@ function registerIpcHandlers(): void {
   ipcMain.handle("kick:check-channels", async (event, slugs: unknown) => {
     assertTrustedSender(event);
     return checkKickChannels(slugs);
+  });
+
+  ipcMain.handle("chat:get-status", event => {
+    assertTrustedSender(event);
+    return chatReceiver.getStatus();
+  });
+
+  ipcMain.handle("chat:start", async event => {
+    assertTrustedSender(event);
+    await chatReceiver.startServer(getRecordingOutputDirectory());
+    return chatReceiver.startTunnel(app.getPath("userData"));
+  });
+
+  ipcMain.handle("chat:stop", event => {
+    assertTrustedSender(event);
+    return chatReceiver.stop();
+  });
+
+  ipcMain.handle("chat:subscribe", async (event, slugs: unknown) => {
+    assertTrustedSender(event);
+    return subscribeToKickChat(slugs);
+  });
+
+  ipcMain.handle("chat:list", (event, slug: unknown) => {
+    assertTrustedSender(event);
+    return chatReceiver.listMessages(slug, 500);
   });
 
   ipcMain.handle("recording:start", (event, slug: unknown) => {
