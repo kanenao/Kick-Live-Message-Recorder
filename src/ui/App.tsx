@@ -99,9 +99,14 @@ type RecordingEvent = {
   isVod?: boolean;
 };
 type CommentLogFile = { path: string; name: string; channelSlug: string; kind: "LIVE" | "VOD"; size: number; modifiedAt: string };
+type StreamArticle = {
+  id: string; slug: string; displayName: string; headline: string; category: string; startedAt: string;
+  durationSeconds: number; commentCount: number; uniqueCommenters: number; keywords: string[];
+  paragraphs: string[]; sourceVideo: string; sourceLogs: string[]; createdAt: string;
+};
 type CommentVideoEvent = { status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string; outputPath?: string; generatedComments?: number; skippedComments?: number };
 
-const APP_VERSION = "0.1.0-beta.29";
+const APP_VERSION = "0.1.0-beta.30";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -240,7 +245,7 @@ export default function App() {
   const [vodDownloadActive, setVodDownloadActive] = useState(false);
   const [vodChatStatus, setVodChatStatus] = useState("");
   const [vodChatActive, setVodChatActive] = useState(false);
-  const [tab, setTab] = useState<"dashboard" | "recording" | "library" | "comment-video" | "settings">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "recording" | "library" | "comment-video" | "articles" | "settings">("dashboard");
   const [isReady, setIsReady] = useState(false);
   const [storageError, setStorageError] = useState("");
   const [appDataDirectory, setAppDataDirectory] = useState("");
@@ -298,6 +303,13 @@ export default function App() {
   const [commentVideoBusy, setCommentVideoBusy] = useState(false);
   const [commentVideoEvent, setCommentVideoEvent] = useState<CommentVideoEvent | null>(null);
   const [commentVideoOutputPath, setCommentVideoOutputPath] = useState("");
+  const [streamArticles, setStreamArticles] = useState<StreamArticle[]>([]);
+  const [articleSlug, setArticleSlug] = useState("");
+  const [articleVideoPath, setArticleVideoPath] = useState("");
+  const [articleHeadline, setArticleHeadline] = useState("");
+  const [articleBusy, setArticleBusy] = useState(false);
+  const [articleMessage, setArticleMessage] = useState("");
+
   const activeCount = useMemo(() => [...channels, ...recordingOnlyChannels].filter(c => c.recording).length, [channels, recordingOnlyChannels]);
   const activeRecordingChannels = useMemo(() => {
     const unique = new Map<string, Channel>();
@@ -461,7 +473,7 @@ export default function App() {
   );
 
   useEffect(() => {
-    if ((tab !== "library" && tab !== "dashboard" && tab !== "comment-video") || !isDesktop || !window.kickRecorder) return;
+    if ((tab !== "library" && tab !== "dashboard" && tab !== "comment-video" && tab !== "articles") || !isDesktop || !window.kickRecorder) return;
     let active = true;
     setIsLoadingRecordings(true);
     void window.kickRecorder.listRecordings().then(files => {
@@ -923,6 +935,31 @@ export default function App() {
     }
   }
 
+  async function createStreamArticle() {
+    if (!window.kickRecorder || !articleVideoPath || !articleSlug) return;
+    setArticleBusy(true);
+    setArticleMessage("");
+    try {
+      const channel = [...channels, ...recordingOnlyChannels].find(item => item.name.toLowerCase() === articleSlug.toLowerCase());
+      const logs = commentLogFiles.filter(file => file.channelSlug.toLowerCase() === articleSlug.toLowerCase()).map(file => file.path);
+      const article = await window.kickRecorder.generateStreamArticle({
+        videoPath: articleVideoPath,
+        slug: articleSlug,
+        displayName: channel?.name ?? articleSlug,
+        headline: articleHeadline.trim() || undefined,
+        chatPaths: logs
+      });
+      const updated = await window.kickRecorder.listStreamArticles();
+      setStreamArticles(updated);
+      setArticleMessage(`記事「${article.headline}」を保存しました。コメント${article.commentCount.toLocaleString("ja-JP")}件を集計しました。`);
+      setArticleHeadline("");
+    } catch (error) {
+      setArticleMessage(error instanceof Error ? error.message : "記事の生成に失敗しました。");
+    } finally {
+      setArticleBusy(false);
+    }
+  }
+
   async function chooseOutputDirectory() {
     if (!window.kickRecorder) return;
     try {
@@ -940,14 +977,14 @@ export default function App() {
       <button className={tab === "dashboard" ? "nav-item selected" : "nav-item"} onClick={() => setTab("dashboard")}>▦ <span>ダッシュボード</span></button>
       <button className={tab === "recording" ? "nav-item selected" : "nav-item"} onClick={() => setTab("recording")}>● <span>録画専用</span></button>
       <button className={tab === "library" ? "nav-item selected" : "nav-item"} onClick={() => setTab("library")}>▤ <span>録画ライブラリ</span></button>
-      <button className={tab === "comment-video" ? "nav-item selected" : "nav-item"} onClick={() => setTab("comment-video")}>✦ <span>コメント付き動画</span></button>
+      <button className={tab === "comment-video" ? "nav-item selected" : "nav-item"} onClick={() => setTab("comment-video")}>✦ <span>コメント付き動画</span></button>\n      <button className={tab === "articles" ? "nav-item selected" : "nav-item"} onClick={() => setTab("articles")}>▤ <span>配信記事</span></button>
       <button className={tab === "settings" ? "nav-item selected" : "nav-item"} onClick={() => setTab("settings")}>⚙ <span>設定</span></button>
       <div className="sidebar-bottom"><span className="status-dot" /> β版・開発テスト中<small>現在のバージョン {appVersion}</small></div>
     </aside>
 
     <main className="main">
       <header className="topbar">
-        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "recording" ? "録画専用" : tab === "library" ? "録画ライブラリ" : tab === "comment-video" ? "コメント付き動画を生成" : "設定"}</h1></div>
+        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "recording" ? "録画専用" : tab === "library" ? "録画ライブラリ" : tab === "comment-video" ? "コメント付き動画を生成" : tab === "articles" ? "配信記事" : "設定"}</h1></div>
         <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="beta-tag">β版</span><div className="avatar">KR</div></div>
       </header>
 
@@ -1248,6 +1285,40 @@ export default function App() {
             </div>
             <div className="notice">生成には動画の再エンコードが必要なため、動画の長さ・解像度・PC性能によって時間がかかります。元動画とコメントJSONLは削除・変更しません。</div>
           </>}
+      </section>}
+
+      {tab === "articles" && <section className="panel stream-articles-panel">
+        <div className="panel-heading">
+          <div><h2>登録配信者の放送記事</h2><p>録画とコメントログから配信ごとの記事を作成し、配信者別・日付順に保存します</p></div>
+          <button className="small-action" onClick={() => setLibraryRefreshKey(value => value + 1)} disabled={!isDesktop || articleBusy}>一覧を更新</button>
+        </div>
+        {!isDesktop ? <div className="empty-state"><strong>Windowsデスクトップ版で利用できます</strong><span>録画ファイルとコメントログを読み込む必要があります。</span></div> : <>
+          <div className="comment-video-intro">配信記事はローカルの録画ファイル名とコメントログから作成します。現在の自動要約はコメント頻出語の集計方式です。映像内容をAIが認識したものではありません。</div>
+          <div className="comment-video-form-grid">
+            <label className="comment-video-field"><span>登録配信者</span><select value={articleSlug} onChange={event => setArticleSlug(event.target.value)}>
+              <option value="">配信者を選択</option>
+              {[...channels, ...recordingOnlyChannels].filter((item, index, all) => all.findIndex(other => other.name.toLowerCase() === item.name.toLowerCase()) === index).map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
+            </select></label>
+            <label className="comment-video-field"><span>対象の録画動画</span><select value={articleVideoPath} onChange={event => setArticleVideoPath(event.target.value)}>
+              <option value="">動画を選択してください</option>
+              {recordingFiles.filter(file => file.name.toLowerCase().startsWith((articleSlug || "").toLowerCase() + "_")).map(file => <option key={file.path} value={file.path}>{file.name}</option>)}
+            </select></label>
+            <label className="comment-video-field"><span>記事見出し（任意）</span><input value={articleHeadline} onChange={event => setArticleHeadline(event.target.value)} maxLength={160} placeholder="空欄なら配信者名から自動作成" /></label>
+          </div>
+          <div className="comment-video-actions"><button className="primary-small" onClick={() => void createStreamArticle()} disabled={articleBusy || !articleSlug || !articleVideoPath}>{articleBusy ? "記事を作成中..." : "この配信の記事を生成"}</button><span className="comment-video-log-count">同じ配信者のコメントログ {commentLogFiles.filter(file => file.channelSlug.toLowerCase() === articleSlug.toLowerCase()).length}件を自動で参照</span></div>
+          {articleMessage && <div className="api-message" role="status">{articleMessage}</div>}
+          <div className="article-list">
+            <div className="settings-subheading"><h3>記事一覧</h3><span className="api-state connected">{streamArticles.length}件</span></div>
+            {streamArticles.length === 0 ? <div className="empty-state"><strong>まだ記事がありません</strong><span>登録配信者の録画を選んで記事を生成してください。</span></div> : streamArticles.map(article => <article className="article-card" key={article.id}>
+              <div className="article-meta">{article.displayName} ・ {new Date(article.startedAt).toLocaleString("ja-JP")}</div>
+              <h3>{article.headline}</h3>
+              {article.category && <span className="live-stream-category">{article.category}</span>}
+              {article.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+              <div className="article-stats">コメント {article.commentCount.toLocaleString("ja-JP")}件 ・ 投稿者 {article.uniqueCommenters.toLocaleString("ja-JP")}人 ・ 分析キーワード {article.keywords.join("、") || "なし"}</div>
+              <div className="comment-video-actions"><button className="small-action" onClick={() => void window.kickRecorder?.openRecording(article.sourceVideo)}>元動画を開く</button><button className="small-action" onClick={() => void window.kickRecorder?.revealRecording(article.sourceVideo)}>録画の保存先</button></div>
+            </article>)}
+          </div>
+        </>}
       </section>}
 
       {tab === "settings" && <section className="panel">
