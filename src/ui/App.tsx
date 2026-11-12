@@ -487,6 +487,19 @@ export default function App() {
   }, [tab, isDesktop, libraryRefreshKey, settings.outputDirectory]);
 
   useEffect(() => {
+    if (tab !== "articles" || !isDesktop || !window.kickRecorder) return;
+    let active = true;
+    Promise.all([window.kickRecorder.listStreamArticles(), window.kickRecorder.listCommentLogFiles()])
+      .then(([articles, logs]) => {
+        if (!active) return;
+        setStreamArticles(articles);
+        setCommentLogFiles(logs);
+      })
+      .catch(error => setArticleMessage(error instanceof Error ? error.message : "記事データを読み込めませんでした。"));
+    return () => { active = false; };
+  }, [tab, isDesktop, libraryRefreshKey, settings.outputDirectory]);
+
+  useEffect(() => {
     if (tab !== "comment-video" || !isDesktop || !window.kickRecorder) return;
     let active = true;
     setIsLoadingCommentLogs(true);
