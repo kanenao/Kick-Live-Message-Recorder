@@ -56,6 +56,7 @@
 - [x] メッセージ本文・投稿者・受信時刻・バッジ・エモート情報のJSONL保存
 - [x] アプリ内チャットビューアー・検索・更新
 - [x] CSV/JSONLエクスポート（CSVはExcel向けUTF-8 BOM付き）
+- [x] Kick公式APIによる購読状態の取得・チャンネル別表示・登録済みの重複登録スキップ
 - [ ] Kick Developer側Webhook URL設定後の実配信受信テスト（Webhook到達確認を含む）
 - [ ] 録画タイムラインとの時刻同期
 - [ ] XML/SRT/ASS/JSON出力とエモート処理
