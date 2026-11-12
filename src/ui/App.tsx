@@ -117,8 +117,17 @@ type AiArticleStatus = {
 };
 type CommentVideoEvent = { status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string; outputPath?: string; generatedComments?: number; skippedComments?: number };
 
-const APP_VERSION = "0.1.0-beta.32";
+const APP_VERSION = "0.1.0-beta.33";
 const VERSION_HISTORY = [
+  {
+    version: "0.1.0-beta.33",
+    title: "配信記事のAI分析を強化",
+    changes: [
+      "録画済み配信の記事生成にもAI分析を適用。保存済みコメントログから記事本文・要約・注目ポイントを作成",
+      "アプリ再起動後も同じLIVEの記事を復元し、途中までのAI要約や集計値を引き継いで更新",
+      "AI分析に送信するデータの説明とプライバシー上の注意を追加"
+    ]
+  },
   {
     version: "0.1.0-beta.32",
     title: "LIVE中のリアルタイムAI配信記事",
