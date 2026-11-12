@@ -25,6 +25,9 @@ type KickRecorderAppState = {
     preventSystemSleep: boolean;
     notifyOnLive: boolean;
     showRecordingPreview: boolean;
+    aiArticleEnabled: boolean;
+    aiArticleModel: string;
+    aiArticleIntervalSeconds: number;
   };
 };
 
@@ -55,6 +58,13 @@ type KickRecorderStreamArticle = {
   id: string; slug: string; displayName: string; headline: string; category: string; startedAt: string;
   durationSeconds: number; commentCount: number; uniqueCommenters: number; keywords: string[];
   paragraphs: string[]; sourceVideo: string; sourceLogs: string[]; createdAt: string;
+  status?: "live" | "completed"; aiGenerated?: boolean; aiSummary?: string; highlights?: string[];
+  lastAiUpdateAt?: string | null; viewerCount?: number; peakViewerCount?: number; aiError?: string;
+};
+
+type KickRecorderAiArticleStatus = {
+  configured: boolean; encryptionAvailable: boolean;
+  aiArticleEnabled: boolean; aiArticleModel: string; aiArticleIntervalSeconds: number;
 };
 
 type KickRecorderCommentVideoEvent = {
@@ -172,6 +182,11 @@ declare global {
       deleteRecording: (filePath: string) => Promise<{ ok: true; name: string }>;
       openRecording: (filePath: string) => Promise<{ ok: true }>;
       revealRecording: (filePath: string) => Promise<{ ok: true }>;
+      getAiArticleStatus: () => Promise<KickRecorderAiArticleStatus>;
+      saveAiArticleKey: (apiKey: string) => Promise<{ ok: true }>;
+      clearAiArticleKey: () => Promise<{ ok: true }>;
+      testAiArticleConnection: (model: string) => Promise<{ ok: true; message: string }>;
+      onStreamArticleUpdate: (callback: (article: KickRecorderStreamArticle) => void) => () => void;
       listStreamArticles: (slug?: string) => Promise<KickRecorderStreamArticle[]>;
       generateStreamArticle: (input: { videoPath: string; slug: string; displayName?: string; category?: string; headline?: string; chatPaths?: string[] }) => Promise<KickRecorderStreamArticle>;
       listCommentLogFiles: () => Promise<KickRecorderCommentLogFile[]>;
