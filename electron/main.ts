@@ -15,6 +15,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileS
 import { join } from "node:path";
 import { autoUpdater } from "electron-updater";
 import { isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
+import { getOllamaStatus, generateKickBroadcastArticle } from "./ollama";
 
 // Chromiumが提供する標準メニューやコンテキストメニューも日本語で表示する。
 app.commandLine.appendSwitch("lang", "ja-JP");
@@ -471,6 +472,32 @@ function registerIpcHandlers(): void {
       properties: ["openDirectory", "createDirectory"]
     });
     return result.canceled ? null : (result.filePaths[0] ?? null);
+  });
+
+  ipcMain.handle("ollama:get-status", async event => {
+    assertTrustedSender(event);
+    return getOllamaStatus();
+  });
+
+  ipcMain.handle("ollama:generate-article", async (event, input: unknown) => {
+    assertTrustedSender(event);
+    if (!input || typeof input !== "object") throw new Error("記事生成データが不正です。");
+    const value = input as Record<string, unknown>;
+    const comments = Array.isArray(value.comments) ? value.comments : [];
+    if (comments.length > 5000) throw new Error("記事生成に渡せるコメントは5000件までです。");
+    return generateKickBroadcastArticle({
+      title: typeof value.title === "string" ? value.title.slice(0, 300) : "",
+      broadcaster: typeof value.broadcaster === "string" ? value.broadcaster.slice(0, 100) : "",
+      startedAt: typeof value.startedAt === "string" ? value.startedAt.slice(0, 60) : "",
+      comments: comments.filter(item => item && typeof item === "object").map(item => {
+        const row = item as Record<string, unknown>;
+        return {
+          user: typeof row.user === "string" ? row.user.slice(0, 40) : "",
+          timestamp: typeof row.timestamp === "string" ? row.timestamp.slice(0, 60) : "",
+          text: typeof row.text === "string" ? row.text.slice(0, 500) : ""
+        };
+      })
+    });
   });
 
   ipcMain.handle("app:notify-live", (event, slug: unknown) => {
