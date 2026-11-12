@@ -134,7 +134,7 @@
 \n
 .comment-video-intro{font-size:11px;line-height:1.7;color:#aab3c0;margin:-5px 0 18px}
 .comment-video-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-.comment-video-settings-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.comment-video-settings-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .comment-video-field{display:flex;flex-direction:column;gap:7px;min-width:0;color:#c4ccd6;font-size:11px}
 .comment-video-field>span{font-weight:700;color:#e0e5eb}
 .comment-video-field input,.comment-video-field select{width:100%;min-width:0;background:#11141a;border:1px solid #343945;border-radius:7px;padding:10px 11px;color:#edf0f5;outline:none;font:inherit}
