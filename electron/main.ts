@@ -419,8 +419,22 @@ type UpdateStatus = {
   currentVersion: string;
   availableVersion?: string;
   percent?: number;
+  releaseNotes?: string;
+  releaseDate?: string;
   message: string;
 };
+
+function normalizeReleaseNotes(value: unknown): string {
+  if (typeof value === "string") return value.trim().slice(0, 12000);
+  if (!Array.isArray(value)) return "";
+  return value.map(item => {
+    if (typeof item === "string") return item.trim();
+    if (item && typeof item === "object" && "note" in item && typeof item.note === "string") {
+      return item.note.trim();
+    }
+    return "";
+  }).filter(Boolean).join("\n\n").slice(0, 12000);
+}
 
 let updateStatus: UpdateStatus = {
   status: "idle",
@@ -452,6 +466,8 @@ function initializeAutoUpdater(): void {
     publishUpdateStatus({
       status: "available",
       availableVersion: info.version,
+      releaseNotes: normalizeReleaseNotes(info.releaseNotes),
+      releaseDate: info.releaseDate,
       percent: 0,
       message: `新しいバージョン ${info.version} が見つかりました。自動でダウンロードします。`
     });
@@ -469,15 +485,19 @@ function initializeAutoUpdater(): void {
     publishUpdateStatus({
       status: "downloaded",
       availableVersion: info.version,
+      releaseNotes: normalizeReleaseNotes(info.releaseNotes) || updateStatus.releaseNotes,
+      releaseDate: info.releaseDate || updateStatus.releaseDate,
       percent: 100,
       message: `バージョン ${info.version} をダウンロードしました。再起動して更新できます。`
     });
   });
 
-  autoUpdater.on("update-not-available", () => {
+  autoUpdater.on("update-not-available", info => {
     publishUpdateStatus({
       status: "not-available",
-      availableVersion: undefined,
+      availableVersion: info.version,
+      releaseNotes: normalizeReleaseNotes(info.releaseNotes),
+      releaseDate: info.releaseDate,
       percent: 100,
       message: "現在のバージョンは最新です。"
     });
