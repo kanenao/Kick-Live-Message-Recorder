@@ -117,8 +117,17 @@ type AiArticleStatus = {
 };
 type CommentVideoEvent = { status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string; outputPath?: string; generatedComments?: number; skippedComments?: number };
 
-const APP_VERSION = "0.1.0-beta.36";
+const APP_VERSION = "0.1.0-beta.37";
 const VERSION_HISTORY = [
+  {
+    version: "0.1.0-beta.37",
+    title: "コメントの縦配置・重なり判定を改善",
+    changes: [
+      "コメントを画面の上下余白を除く高さ全体へ均等に分散し、参考動画のように画面内の幅広い位置から流れるように調整",
+      "衝突判定を修正し、新しく流れ込むコメント自身の文字幅と速度差を使って必要な間隔を計算",
+      "動画の終端付近でコメントの移動が不自然に加速しないよう、表示時間と移動時間を分離"
+    ]
+  },
   {
     version: "0.1.0-beta.36",
     title: "参考動画に合わせたコメント配置",
@@ -1446,7 +1455,7 @@ export default function App() {
         {!isDesktop
           ? <div className="empty-state"><div className="empty-icon">✦</div><strong>Windowsデスクトップ版で利用できます</strong><span>ブラウザープレビューでは動画ファイルの読み書きやエンコードを実行できません。</span></div>
           : <>
-            <div className="comment-video-intro">参考動画のように、太字・黒縁取りのコメントを右から左へ流し、縦位置もランダムに分散して動画へ焼き込みます。文字サイズや速度、コメント同士の間隔は変更できます。元動画は変更せず、CommentVideosフォルダーへ別ファイルとして保存します。</div>
+            <div className="comment-video-intro">参考動画のように、太字・黒縁取りのコメントを右から左へ流し、縦位置を画面全体の高さへ均等に分散して動画へ焼き込みます。文字サイズや速度、コメント同士の間隔は変更できます。元動画は変更せず、CommentVideosフォルダーへ別ファイルとして保存します。</div>
             <div className="comment-video-form-grid">
               <label className="comment-video-field"><span>元動画</span>
                 <select value={selectedCommentVideoPath} onChange={event => setSelectedCommentVideoPath(event.target.value)} disabled={commentVideoBusy || isLoadingRecordings}>
