@@ -72,6 +72,16 @@ type KickRecorderCommentVideoEvent = {
   outputPath?: string; generatedComments?: number; skippedComments?: number;
 };
 
+type KickRecorderCommentVideoPreview = {
+  width: number;
+  height: number;
+  durationSeconds: number;
+  totalComments: number;
+  malformedLines: number;
+  outsideVideoCount: number;
+  comments: Array<{ seconds: number; content: string; username: string; color: string }>;
+};
+
 type KickRecorderVodChatEvent = {
   status: "starting" | "progress" | "completed" | "stopped" | "error";
   slug: string;
@@ -190,6 +200,7 @@ declare global {
       listStreamArticles: (slug?: string) => Promise<KickRecorderStreamArticle[]>;
       generateStreamArticle: (input: { videoPath: string; slug: string; displayName?: string; category?: string; headline?: string; chatPaths?: string[] }) => Promise<KickRecorderStreamArticle>;
       listCommentLogFiles: () => Promise<KickRecorderCommentLogFile[]>;
+      previewCommentVideo: (input: { videoPath: string; chatPaths: string[]; delaySeconds?: number }) => Promise<KickRecorderCommentVideoPreview>;
       startCommentVideo: (options: { videoPath: string; chatPath?: string; chatPaths?: string[]; delaySeconds?: number; fontFamily?: "ms-pgothic" | "meiryo" | "yu-gothic" | "arial"; fontSize?: number; displaySeconds?: number; speedPercent?: number; rowLimit?: number; collisionGap?: number; opacity?: number; quality?: "high" | "standard" | "compact"; showUsername?: boolean }) => Promise<{ ok: true; outputPath: string }>;
       stopCommentVideo: () => Promise<{ ok: true }>;
       onCommentVideoStatus: (callback: (event: KickRecorderCommentVideoEvent) => void) => () => void;
