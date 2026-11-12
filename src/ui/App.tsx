@@ -116,6 +116,15 @@ type AiArticleStatus = {
   aiArticleEnabled: boolean; aiArticleModel: string; aiArticleIntervalSeconds: number;
 };
 type CommentVideoEvent = { status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string; outputPath?: string; generatedComments?: number; skippedComments?: number };
+type CommentVideoPreviewData = {
+  width: number;
+  height: number;
+  durationSeconds: number;
+  totalComments: number;
+  malformedLines: number;
+  outsideVideoCount: number;
+  comments: Array<{ seconds: number; content: string; username: string; color: string }>;
+};
 
 const APP_VERSION = "0.1.0-beta.40";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean }> = [
@@ -475,7 +484,7 @@ export default function App() {
   const [commentVideoShowUsername, setCommentVideoShowUsername] = useState(false);
   const [commentVideoBusy, setCommentVideoBusy] = useState(false);
   const [commentVideoEvent, setCommentVideoEvent] = useState<CommentVideoEvent | null>(null);
-  const [commentVideoPreviewResult, setCommentVideoPreviewResult] = useState<KickRecorderCommentVideoPreview | null>(null);
+  const [commentVideoPreviewResult, setCommentVideoPreviewResult] = useState<CommentVideoPreviewData | null>(null);
   const [commentVideoPreviewLoading, setCommentVideoPreviewLoading] = useState(false);
   const [commentVideoPreviewError, setCommentVideoPreviewError] = useState("");
   const [commentVideoOutputPath, setCommentVideoOutputPath] = useState("");
@@ -1582,7 +1591,9 @@ export default function App() {
               key={[
                 commentVideoFontFamily, commentVideoFontSize, commentVideoDuration,
                 commentVideoSpeed, commentVideoRows, commentVideoGap, commentVideoOpacity,
-                commentVideoShowUsername
+                commentVideoShowUsername, commentVideoDelay, selectedCommentVideoPath,
+                selectedCommentLogPaths.join(","),
+                commentVideoPreviewResult?.comments.map(comment => comment.content + comment.color).join("|")
               ].join(":")}
             >
               <div className="comment-video-preview-heading">
