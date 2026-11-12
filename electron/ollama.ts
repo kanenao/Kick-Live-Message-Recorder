@@ -85,7 +85,7 @@ export async function generateKickBroadcastArticle(input: OllamaArticleInput): P
     "配信タイトル: " + String(input.title || "不明"),
     "開始時刻: " + String(input.startedAt || "不明"),
     "チャット: " + JSON.stringify(comments)
-  ].join("\\n\\n");
+  ].join("\n\n");
   const result = await fetchJson(baseUrl + "/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
