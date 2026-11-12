@@ -92,6 +92,7 @@ declare global {
       stopChat: () => Promise<KickRecorderChatStatus>;
       subscribeChat: (slugs: string[]) => Promise<Array<{ slug: string; ok: boolean; message: string }>>;
       listChatMessages: (slug: string) => Promise<KickRecorderSavedChatMessage[]>;
+      exportChatMessages: (slug: string, format: "csv" | "jsonl") => Promise<{ saved: boolean; path?: string; count: number }>;
       onChatEvent: (callback: (event: KickRecorderChatEvent) => void) => () => void;
       listArticles: () => Promise<KickRecorderArticle[]>;
       generateArticle: (slug: string) => Promise<KickRecorderArticle>;
