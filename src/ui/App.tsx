@@ -479,7 +479,6 @@ export default function App() {
   const [commentVideoPreviewLoading, setCommentVideoPreviewLoading] = useState(false);
   const [commentVideoPreviewError, setCommentVideoPreviewError] = useState("");
   const [commentVideoOutputPath, setCommentVideoOutputPath] = useState("");
-  const [commentVideoOutputPath, setCommentVideoOutputPath] = useState("");
   const [streamArticles, setStreamArticles] = useState<StreamArticle[]>([]);
   const [articleSlug, setArticleSlug] = useState("");
   const [articleVideoPath, setArticleVideoPath] = useState("");
