@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+type OllamaStatus = { connected: boolean; baseUrl: string; models: Array<{ name: string; size: number }>; message?: string };
+
 type Channel = {
   id: number;
   name: string;
@@ -134,6 +136,9 @@ export default function App() {
   const [kickCredentialsConfigured, setKickCredentialsConfigured] = useState(false);
   const [kickEncryptionAvailable, setKickEncryptionAvailable] = useState(false);
   const [kickMessage, setKickMessage] = useState("");
+  const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus>({ connected: false, baseUrl: "http://127.0.0.1:11434", models: [], message: "未確認" });
+  const [ollamaChecking, setOllamaChecking] = useState(false);
+  const [ollamaModel, setOllamaModel] = useState("qwen2.5:3b");
   const [channelChecks, setChannelChecks] = useState<Record<string, ChannelCheck>>({});
   const [isCheckingChannels, setIsCheckingChannels] = useState(false);
   const [lastChannelCheck, setLastChannelCheck] = useState("");
@@ -169,6 +174,7 @@ export default function App() {
 
     if (window.kickRecorder) {
       setIsDesktop(true);
+      void window.kickRecorder.getOllamaStatus().then(setOllamaStatus).catch(() => undefined);
       unsubscribeUpdate = window.kickRecorder.onUpdateStatus(status => {
         if (active) setUpdateStatus(status);
       });
@@ -354,6 +360,22 @@ export default function App() {
       recording: false
     }]);
     setNewChannel("");
+  }
+
+  async function checkOllamaStatus() {
+    if (!window.kickRecorder) return;
+    setOllamaChecking(true);
+    try {
+      const status = await window.kickRecorder.getOllamaStatus();
+      setOllamaStatus(status);
+      if (status.connected && status.models.length && !status.models.some(model => model.name === ollamaModel)) {
+        setOllamaModel(status.models[0].name);
+      }
+    } catch (error) {
+      setOllamaStatus({ connected: false, baseUrl: "http://127.0.0.1:11434", models: [], message: error instanceof Error ? error.message : "接続に失敗しました。" });
+    } finally {
+      setOllamaChecking(false);
+    }
   }
 
   async function saveKickApiCredentials() {
@@ -610,6 +632,28 @@ export default function App() {
 
       {tab === "settings" && <section className="panel">
         <div className="panel-heading"><div><h2>基本設定</h2><p>β版の録画動作・保存先の設定</p></div></div>
+        <div className="settings-subsection">
+          <div className="settings-subheading">
+            <h3>無料AI記事生成（Ollama）</h3>
+            <span className={ollamaStatus.connected ? "api-state connected" : "api-state"}>{ollamaStatus.connected ? "Ollama接続済み" : "未接続"}</span>
+          </div>
+          <p className="settings-help">AI処理をPC内で実行します。OpenAI APIキー・従量課金は不要です。接続先：{ollamaStatus.baseUrl}</p>
+          <div className="setting-row">
+            <div><strong>利用するAIモデル</strong><small>軽量モデルの例：qwen2.5:3b</small></div>
+            <select className="setting-select" value={ollamaModel} onChange={event => setOllamaModel(event.target.value)}>
+              {ollamaStatus.models.length
+                ? ollamaStatus.models.map(model => <option key={model.name} value={model.name}>{model.name}</option>)
+                : <option value="qwen2.5:3b">qwen2.5:3b（未インストール）</option>}
+            </select>
+          </div>
+          <div className="update-actions">
+            <button className="primary-small" onClick={() => void checkOllamaStatus()} disabled={!isDesktop || ollamaChecking}>{ollamaChecking ? "確認中..." : "Ollama接続を確認"}</button>
+          </div>
+          {ollamaStatus.connected
+            ? <p className="settings-help">検出したモデル：{ollamaStatus.models.length ? ollamaStatus.models.map(model => model.name).join("、") : "なし"}</p>
+            : <div className="notice">{ollamaStatus.message || "Ollamaを起動してから接続確認してください。"}<br />モデルの導入コマンド：ollama pull qwen2.5:3b</div>}
+          <div className="notice">注意：Kick版は現在のβ10ではチャット取得・保存機能が未実装です。Ollama接続と記事生成エンジンを先行追加しました。チャット取得機能の実装後、配信コメントを記事生成へ自動連携します。</div>
+        </div>
         <div className="setting-row">
           <div><strong>配信開始時に自動録画</strong><small>自動モードの登録チャンネルが配信を開始すると録画します</small></div>
           <label className="setting-control"><input type="checkbox" checked={settings.autoRecordOnStreamStart} onChange={e => setSettings(prev => ({ ...prev, autoRecordOnStreamStart: e.target.checked }))} /><span>{settings.autoRecordOnStreamStart ? "有効" : "無効"}</span></label>
