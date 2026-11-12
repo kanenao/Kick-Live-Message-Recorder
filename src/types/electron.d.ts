@@ -69,6 +69,7 @@ type KickRecorderChannelCheck = {
 };
 
 type KickRecorderChatStatus = { serverRunning: boolean; tunnelRunning: boolean; localUrl: string; publicUrl: string; receivedCount: number; lastMessageAt: string | null; message: string };
+type KickRecorderChatSubscriptionStatus = { slug: string; broadcasterUserId: number | null; subscribed: boolean; subscriptionId: string | null; createdAt: string | null };
 type KickRecorderSavedChatMessage = { messageId: string; slug: string; broadcaster: string; user: string; text: string; timestamp: string; receivedAt: string; badges: string[]; emotes: Array<{ emoteId: string; start: number; end: number }> };
 type KickRecorderChatEvent = { type: "status"; status: KickRecorderChatStatus } | { type: "message"; message: KickRecorderSavedChatMessage };
 type KickRecorderArticle = { id: string; slug: string; broadcaster: string; streamTitle: string; startedAt: string | null; generatedAt: string; commentCount: number; isFinal: boolean; title: string; summary: string; paragraphs: string[]; topics: string[]; provider: string; model: string };
@@ -91,6 +92,7 @@ declare global {
       startChat: () => Promise<KickRecorderChatStatus>;
       stopChat: () => Promise<KickRecorderChatStatus>;
       subscribeChat: (slugs: string[]) => Promise<Array<{ slug: string; ok: boolean; message: string }>>;
+      getChatSubscriptionStatus: (slugs: string[]) => Promise<KickRecorderChatSubscriptionStatus[]>;
       listChatMessages: (slug: string) => Promise<KickRecorderSavedChatMessage[]>;
       exportChatMessages: (slug: string, format: "csv" | "jsonl") => Promise<{ saved: boolean; path?: string; count: number }>;
       onChatEvent: (callback: (event: KickRecorderChatEvent) => void) => () => void;
