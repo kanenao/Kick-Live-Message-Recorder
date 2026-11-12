@@ -32,14 +32,19 @@ export type CommentLogFile = {
   modifiedAt: string;
 };
 
+export type CommentVideoFontFamily = "ms-pgothic" | "meiryo" | "yu-gothic" | "arial";
+
 export type CommentVideoOptions = {
   videoPath: string;
   chatPath?: string;
   chatPaths?: string[];
   delaySeconds?: number;
+  fontFamily?: CommentVideoFontFamily;
   fontSize?: number;
   displaySeconds?: number;
+  speedPercent?: number;
   rowLimit?: number;
+  collisionGap?: number;
   opacity?: number;
   quality?: "high" | "standard" | "compact";
   showUsername?: boolean;
@@ -64,7 +69,21 @@ type LaneState = {
   start: number;
   end: number;
   speed: number;
+  width: number;
 };
+
+const COMMENT_FONT_FAMILIES: Record<CommentVideoFontFamily, string> = {
+  "ms-pgothic": "ＭＳ Ｐゴシック",
+  "meiryo": "メイリオ",
+  "yu-gothic": "游ゴシック",
+  "arial": "Arial"
+};
+
+function normalizeFontFamily(value: unknown): CommentVideoFontFamily {
+  return value === "meiryo" || value === "yu-gothic" || value === "arial"
+    ? value
+    : "ms-pgothic";
+}
 
 type VideoInfo = {
   width: number;
@@ -354,9 +373,12 @@ export class KickCommentVideoGenerator {
       videoPath,
       chatPaths,
       delaySeconds: boundedNumber(values.delaySeconds, 0, -300, 300),
+      fontFamily: normalizeFontFamily(values.fontFamily),
       fontSize: boundedNumber(values.fontSize, 42, 16, 80),
       displaySeconds: boundedNumber(values.displaySeconds, 6, 2, 15),
+      speedPercent: boundedNumber(values.speedPercent, 100, 50, 200),
       rowLimit: Math.round(boundedNumber(values.rowLimit, 8, 1, 20)),
+      collisionGap: boundedNumber(values.collisionGap, 48, 0, 200),
       opacity: boundedNumber(values.opacity, 92, 20, 100),
       quality: values.quality === "high" || values.quality === "compact" ? values.quality : "standard",
       showUsername: values.showUsername === true
@@ -520,7 +542,7 @@ export class KickCommentVideoGenerator {
         "",
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        "Style: Default,Yu Gothic UI," + options.fontSize + ",&H00FFFFFF,&H000000FF,&H80000000,&H00000000,0,0,0,0,100,100,0,0,1,2,1,7,14,14,14,1",
+        "Style: Default," + COMMENT_FONT_FAMILIES[options.fontFamily] + "," + options.fontSize + ",&H00FFFFFF,&H000000FF,&H80000000,&H00000000,1,0,0,0,100,100,0,0,1,2,1,7,14,14,14,1",
         "",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
@@ -528,7 +550,8 @@ export class KickCommentVideoGenerator {
       writeFileSync(output.ass, header, "utf8");
 
       const lanes: Array<LaneState | null> = Array.from({ length: options.rowLimit }, () => null);
-      const lineHeight = Math.max(options.fontSize + 10, Math.round(options.fontSize * 1.48));
+      const lineHeight = Math.max(options.fontSize + 12, Math.round(options.fontSize * 1.55));
+      const moveDuration = options.displaySeconds * 100 / options.speedPercent;
       const topMargin = Math.max(20, Math.round(info.height * 0.025));
       let generated = 0;
       let skipped = 0;
@@ -536,8 +559,8 @@ export class KickCommentVideoGenerator {
 
       for (const comment of comments) {
         if (signal.aborted) throw new Error("生成を停止しました。");
-        const width = Math.min(info.width * 2, estimateTextWidth(comment.text, options.fontSize) + 24);
-        const speed = (info.width + width) / options.displaySeconds;
+        const width = Math.min(info.width * 4, estimateTextWidth(comment.text, options.fontSize) + 32);
+        const speed = (info.width + width) / moveDuration;
         let laneIndex = -1;
 
         for (let index = 0; index < lanes.length; index += 1) {
@@ -546,10 +569,12 @@ export class KickCommentVideoGenerator {
             laneIndex = index;
             break;
           }
-          const overlap = Math.max(0, Math.min(options.displaySeconds, previous.end - comment.seconds));
-          const gapNeeded = Math.max(options.fontSize * 1.8, 42) +
+          const overlap = Math.max(0, Math.min(moveDuration, previous.end - comment.seconds));
+          // 直前のコメントの右端から新しいコメントの左端までの実距離を見て、
+          // 追い越しが発生しても指定したピクセル間隔を保てる行だけを再利用する。
+          const gapNeeded = options.collisionGap +
             Math.max(0, speed - previous.speed) * overlap;
-          const currentGap = previous.speed * Math.max(0, comment.seconds - previous.start);
+          const currentGap = previous.speed * Math.max(0, comment.seconds - previous.start) - previous.width;
           if (currentGap >= gapNeeded) {
             laneIndex = index;
             break;
@@ -562,14 +587,15 @@ export class KickCommentVideoGenerator {
         }
 
         const start = comment.seconds;
-        const end = Math.min(info.duration, start + options.displaySeconds);
-        lanes[laneIndex] = { start, end, speed };
+        const end = Math.min(info.duration, start + moveDuration);
+        lanes[laneIndex] = { start, end, speed, width };
         const y = topMargin + laneIndex * lineHeight;
         const color = colorToAss(comment.color);
         const alpha = Math.round((100 - options.opacity) * 2.55).toString(16).padStart(2, "0").toUpperCase();
         const tags = "{\\move(" + (info.width + 16) + "," + y + "," + Math.round(-width) + "," + y +
           ",0," + Math.max(1, Math.round((end - start) * 1000)) + ")" +
-          "\\1c" + color + "\\alpha&H" + alpha + "&\\bord2\\shad1}";
+          "\\fn" + COMMENT_FONT_FAMILIES[options.fontFamily] + "\\b1\\1c" + color +
+          "\\alpha&H" + alpha + "&\\bord2\\shad1}";
         batch.push(
           "Dialogue: 0," + assTimestamp(start) + "," + assTimestamp(end) +
           ",Default,,0,0,0,," + tags + comment.text
