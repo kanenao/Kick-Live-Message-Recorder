@@ -1458,7 +1458,7 @@ export default function App() {
               <button className="small-action" onClick={() => void clearAiArticleApiKey()} disabled={aiArticleBusy || !aiArticleStatus.configured}>APIキーを削除</button>
             </div>
             {aiArticleMessage && <div className="api-message" role="status">{aiArticleMessage}</div>}
-            <div className="notice">AI記事を有効にすると、通常のコメント自動取得設定がOFFでも、登録した通常・録画専用チャンネルのコメントを記事作成用に受信します。12件程度の新着コメントをまとめて更新し、配信終了時に最終記事を作成します。API利用料はOpenAIアカウントへ発生します。料金上限をOpenAI側で設定してから利用してください。</div>
+            <div className="notice">AI記事を有効にすると、通常のコメント自動取得設定がOFFでも、登録した通常・録画専用チャンネルのコメントを記事作成用に受信します。12件程度の新着コメントをまとめて更新し、配信終了時に最終記事を作成します。コメント本文・配信者名・配信タイトル・カテゴリ・視聴者数などをOpenAI APIへ送信して分析します。公開コメントでも個人情報が含まれる可能性があるため、送信してよい配信だけを対象にしてください。API利用料はOpenAIアカウントへ発生します。料金上限をOpenAI側で設定してから利用してください。</div>
           </div>
           <div className="comment-video-form-grid">
             <label className="comment-video-field"><span>登録配信者</span><select value={articleSlug} onChange={event => setArticleSlug(event.target.value)}>
