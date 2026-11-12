@@ -117,7 +117,7 @@ type AiArticleStatus = {
 };
 type CommentVideoEvent = { status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string; outputPath?: string; generatedComments?: number; skippedComments?: number };
 
-const APP_VERSION = "0.1.0-beta.39";
+const APP_VERSION = "0.1.0-beta.40";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ff4545", lane: 1, delay: 0.7 },
@@ -145,6 +145,15 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffe64a", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.1.0-beta.40",
+    title: "実際のコメントログを使った生成前プレビュー",
+    changes: [
+      "選択した録画動画とコメントJSONLを読み取り、実際のコメント本文・投稿者名・色をプレビューへ反映",
+      "動画の再生時間内に表示できるコメント数、サンプル件数、対象外コメント、読み取り不能な行を生成前に確認",
+      "フォントや速度などの表示設定はそのままリアルタイム反映。プレビュー確認だけでは元動画・コメントログを変更しない"
+    ]
+  },
   {
     version: "0.1.0-beta.39",
     title: "コメントプレビューのリアルタイム反映を強化",
@@ -466,6 +475,10 @@ export default function App() {
   const [commentVideoShowUsername, setCommentVideoShowUsername] = useState(false);
   const [commentVideoBusy, setCommentVideoBusy] = useState(false);
   const [commentVideoEvent, setCommentVideoEvent] = useState<CommentVideoEvent | null>(null);
+  const [commentVideoPreviewResult, setCommentVideoPreviewResult] = useState<KickRecorderCommentVideoPreview | null>(null);
+  const [commentVideoPreviewLoading, setCommentVideoPreviewLoading] = useState(false);
+  const [commentVideoPreviewError, setCommentVideoPreviewError] = useState("");
+  const [commentVideoOutputPath, setCommentVideoOutputPath] = useState("");
   const [commentVideoOutputPath, setCommentVideoOutputPath] = useState("");
   const [streamArticles, setStreamArticles] = useState<StreamArticle[]>([]);
   const [articleSlug, setArticleSlug] = useState("");
@@ -699,6 +712,35 @@ export default function App() {
     });
     return () => { active = false; };
   }, [tab, isDesktop, libraryRefreshKey, settings.outputDirectory]);
+
+  useEffect(() => {
+    if (tab !== "comment-video" || !isDesktop || !window.kickRecorder) return;
+    if (!selectedCommentVideoPath || selectedCommentLogPaths.length === 0) {
+      setCommentVideoPreviewResult(null);
+      setCommentVideoPreviewError("");
+      setCommentVideoPreviewLoading(false);
+      return;
+    }
+
+    let active = true;
+    setCommentVideoPreviewLoading(true);
+    setCommentVideoPreviewError("");
+    void window.kickRecorder.previewCommentVideo({
+      videoPath: selectedCommentVideoPath,
+      chatPaths: selectedCommentLogPaths,
+      delaySeconds: commentVideoDelay
+    }).then(result => {
+      if (!active) return;
+      setCommentVideoPreviewResult(result);
+    }).catch(error => {
+      if (!active) return;
+      setCommentVideoPreviewResult(null);
+      setCommentVideoPreviewError(error instanceof Error ? error.message : "実際のコメントを読み込めませんでした。");
+    }).finally(() => {
+      if (active) setCommentVideoPreviewLoading(false);
+    });
+    return () => { active = false; };
+  }, [tab, isDesktop, selectedCommentVideoPath, selectedCommentLogPaths, commentVideoDelay, libraryRefreshKey, settings.outputDirectory]);
 
   useEffect(() => {
     if (!selectedCommentVideoPath && recordingFiles.length > 0) setSelectedCommentVideoPath(recordingFiles[0].path);
@@ -1546,7 +1588,21 @@ export default function App() {
             >
               <div className="comment-video-preview-heading">
                 <strong>コメント表示プレビュー</strong>
-                <span className="comment-video-preview-live"><i />リアルタイム反映</span>
+                <span className="comment-video-preview-live"><i />{commentVideoPreviewLoading ? "実際のログを解析中..." : commentVideoPreviewResult ? "実ログをプレビュー中" : "サンプル表示"}</span>
+              </div>
+              <div className="comment-video-preview-summary">
+                {commentVideoPreviewLoading
+                  ? "選択した動画とコメントログを確認しています..."
+                  : commentVideoPreviewResult
+                    ? "実コメント " + commentVideoPreviewResult.totalComments.toLocaleString("ja-JP") + "件中 " +
+                      commentVideoPreviewResult.comments.length.toLocaleString("ja-JP") + "件をプレビュー ・ " +
+                      commentVideoPreviewResult.width + "×" + commentVideoPreviewResult.height + " ・ " +
+                      "動画内 " + Math.round(commentVideoPreviewResult.durationSeconds).toLocaleString("ja-JP") + "秒 ・ " +
+                      "範囲外 " + commentVideoPreviewResult.outsideVideoCount.toLocaleString("ja-JP") + "件 ・ " +
+                      "破損行 " + commentVideoPreviewResult.malformedLines.toLocaleString("ja-JP") + "件"
+                    : commentVideoPreviewError
+                      ? "実ログプレビューを利用できません：" + commentVideoPreviewError
+                      : "動画とコメントログを選択すると、実際のコメント内容でプレビューします。"}
               </div>
               <div className="comment-video-preview-values">
                 <span>{commentVideoFontFamily === "ms-pgothic" ? "ＭＳ Ｐゴシック" : commentVideoFontFamily === "yu-gothic" ? "游ゴシック" : commentVideoFontFamily === "arial" ? "Arial" : "メイリオ"}</span>
@@ -1556,7 +1612,23 @@ export default function App() {
                 <span>表示 {Math.max(1, Math.min(20, commentVideoRows, Math.floor((1080 - 26 - Math.max(16, Math.min(80, commentVideoFontSize))) / Math.max(1, Math.max(commentVideoFontSize + 12, commentVideoFontSize * 1.55))) + 1))}行 / 上限 {Math.max(1, Math.min(20, commentVideoRows))}行</span>
               </div>
               <div className="comment-video-preview-screen" aria-label="設定をリアルタイム反映するコメント表示プレビュー">
-                {COMMENT_VIDEO_PREVIEW_ITEMS.filter(item => item.lane < Math.max(1, Math.min(20, commentVideoRows, Math.floor((1080 - 26 - Math.max(16, Math.min(80, commentVideoFontSize))) / Math.max(1, Math.max(commentVideoFontSize + 12, commentVideoFontSize * 1.55))) + 1))).map((item, index) => {
+                {(commentVideoPreviewResult?.comments.length
+                  ? commentVideoPreviewResult.comments.map((comment, index) => {
+                      const fontSize = Math.max(16, Math.min(80, commentVideoFontSize));
+                      const lineHeight = Math.max(fontSize + 12, fontSize * 1.55);
+                      const visibleRows = Math.max(1, Math.floor((1080 - 26 - fontSize) / lineHeight) + 1);
+                      const laneCount = Math.max(1, Math.min(20, commentVideoRows, visibleRows));
+                      return {
+                        text: commentVideoShowUsername && comment.username ? comment.username + " : " + comment.content : comment.content,
+                        color: /^#[0-9a-f]{6}$/i.test(comment.color) ? comment.color : "#ffffff",
+                        lane: index % laneCount,
+                        delay: Math.floor(index / laneCount) * 0.9 + (index % 4) * 0.16,
+                        repeatLane: index >= laneCount
+                      };
+                    })
+                  : COMMENT_VIDEO_PREVIEW_ITEMS)
+                  .filter(item => item.lane < Math.max(1, Math.min(20, commentVideoRows, Math.floor((1080 - 26 - Math.max(16, Math.min(80, commentVideoFontSize))) / Math.max(1, Math.max(commentVideoFontSize + 12, commentVideoFontSize * 1.55))) + 1)))
+                  .map((item, index) => {
                   const fontSize = Math.max(16, Math.min(80, commentVideoFontSize));
                   // 16:9の1080p動画を縮小表示した場合に合わせ、画面外にはみ出さない行数を計算する。
                   const lineHeight = Math.max(fontSize + 12, fontSize * 1.55);
@@ -1583,7 +1655,7 @@ export default function App() {
                       animationDuration: (duration * 100 / speed) + "s",
                       animationDelay: (item.delay + (item.repeatLane ? gapDelay : 0)).toFixed(3) + "s"
                     }}
-                  >{commentVideoShowUsername ? "@viewer : " + item.text : item.text}</span>;
+                  >{commentVideoPreviewResult?.comments.length ? item.text : commentVideoShowUsername ? "@viewer : " + item.text : item.text}</span>;
                 })}
               </div>
               <small>設定を変更するとプレビューをすぐに描き直し、コメントの流れも先頭から再生します。表示行数は1080p相当で計算した目安です。実際の表示行数・コメント配置・重なり判定は、選択した動画とログに応じて生成時に調整します。</small>
