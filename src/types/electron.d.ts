@@ -18,6 +18,7 @@ type KickRecorderAppState = {
     autoMonitorEnabled: boolean;
     monitorIntervalSeconds: number;
     notifyOnLive: boolean;
+    autoGenerateArticles: boolean;
   };
 };
 
@@ -70,6 +71,7 @@ type KickRecorderChannelCheck = {
 type KickRecorderChatStatus = { serverRunning: boolean; tunnelRunning: boolean; localUrl: string; publicUrl: string; receivedCount: number; lastMessageAt: string | null; message: string };
 type KickRecorderSavedChatMessage = { messageId: string; slug: string; broadcaster: string; user: string; text: string; timestamp: string; receivedAt: string; badges: string[]; emotes: Array<{ emoteId: string; start: number; end: number }> };
 type KickRecorderChatEvent = { type: "status"; status: KickRecorderChatStatus } | { type: "message"; message: KickRecorderSavedChatMessage };
+type KickRecorderArticle = { id: string; slug: string; broadcaster: string; streamTitle: string; startedAt: string | null; generatedAt: string; commentCount: number; isFinal: boolean; title: string; summary: string; paragraphs: string[]; topics: string[]; provider: string; model: string };
 
 declare global {
   interface Window {
@@ -91,6 +93,10 @@ declare global {
       subscribeChat: (slugs: string[]) => Promise<Array<{ slug: string; ok: boolean; message: string }>>;
       listChatMessages: (slug: string) => Promise<KickRecorderSavedChatMessage[]>;
       onChatEvent: (callback: (event: KickRecorderChatEvent) => void) => () => void;
+      listArticles: () => Promise<KickRecorderArticle[]>;
+      generateArticle: (slug: string) => Promise<KickRecorderArticle>;
+      onArticleNew: (callback: (article: KickRecorderArticle) => void) => () => void;
+      onArticleStatus: (callback: (status: { slug: string; message: string }) => void) => () => void;
       getUpdateStatus: () => Promise<KickRecorderUpdateStatus>;
       checkForUpdates: () => Promise<KickRecorderUpdateStatus>;
       installUpdate: () => Promise<{ ok: boolean }>;
