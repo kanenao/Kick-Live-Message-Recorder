@@ -2,7 +2,7 @@
   "name": "kick-live-message-recorder",
   "version": "0.1.0-beta.12",
   "private": true,
-  "description": "Kick配信の映像・音声を保存するWindowsアプリ（チャット記録は開発中）",
+  "description": "Kick配信の映像・音声・チャットを保存し、ローカルAIで配信記事を生成するWindowsアプリ",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && cross-env KICK_RECORDER_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
