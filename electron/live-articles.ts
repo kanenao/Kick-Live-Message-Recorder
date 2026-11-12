@@ -218,13 +218,13 @@ export class LiveStreamArticleManager {
       if (typeof path !== "string" || !isPathInsideDirectory(path, chatRoot) ||
           extname(path).toLowerCase() !== ".jsonl" || !existsSync(path)) continue;
       let lines: string[];
-      try { lines = readFileSync(path, "utf8").split(/\\r?\\n/); } catch { continue; }
+      try { lines = readFileSync(path, "utf8").split(/\r?\n/); } catch { continue; }
       for (const line of lines) {
         if (!line.trim()) continue;
         let item: Record<string, unknown>;
         try { item = JSON.parse(line) as Record<string, unknown>; } catch { continue; }
         const content = typeof item.content === "string" ? item.content : typeof item.message === "string" ? item.message : "";
-        const text = content.normalize("NFKC").replace(/\\s+/g, " ").trim().slice(0, 500);
+        const text = content.normalize("NFKC").replace(/\s+/g, " ").trim().slice(0, 500);
         if (!text) continue;
         const at = typeof item.createdAt === "string" && !Number.isNaN(Date.parse(item.createdAt))
           ? item.createdAt : new Date().toISOString();
