@@ -60,8 +60,9 @@ type CommentLogFile = {
   path: string; name: string; channelSlug: string; kind: "LIVE" | "VOD"; size: number; modifiedAt: string;
 };
 type CommentVideoOptions = {
-  videoPath: string; chatPath?: string; chatPaths?: string[]; delaySeconds?: number; fontSize?: number; displaySeconds?: number;
-  rowLimit?: number; opacity?: number; quality?: "high" | "standard" | "compact"; showUsername?: boolean;
+  videoPath: string; chatPath?: string; chatPaths?: string[]; delaySeconds?: number; fontFamily?: "ms-pgothic" | "meiryo" | "yu-gothic" | "arial"; fontSize?: number;
+  displaySeconds?: number; speedPercent?: number; rowLimit?: number; collisionGap?: number; opacity?: number;
+  quality?: "high" | "standard" | "compact"; showUsername?: boolean;
 };
 type StreamArticle = {
   id: string; slug: string; displayName: string; headline: string; category: string; startedAt: string;
