@@ -71,6 +71,7 @@ type KickChannelCheck = {
 };
 
 type ChatServiceStatus = { serverRunning: boolean; tunnelRunning: boolean; localUrl: string; publicUrl: string; receivedCount: number; lastMessageAt: string | null; message: string };
+type ChatSubscriptionStatus = { slug: string; broadcasterUserId: number | null; subscribed: boolean; subscriptionId: string | null; createdAt: string | null };
 type SavedChatMessage = { messageId: string; slug: string; broadcaster: string; user: string; text: string; timestamp: string; receivedAt: string; badges: string[]; emotes: Array<{ emoteId: string; start: number; end: number }> };
 type ChatEvent = { type: "status"; status: ChatServiceStatus } | { type: "message"; message: SavedChatMessage };
 
@@ -93,6 +94,7 @@ const api = {
   startChat: (): Promise<ChatServiceStatus> => ipcRenderer.invoke("chat:start"),
   stopChat: (): Promise<ChatServiceStatus> => ipcRenderer.invoke("chat:stop"),
   subscribeChat: (slugs: string[]): Promise<Array<{ slug: string; ok: boolean; message: string }>> => ipcRenderer.invoke("chat:subscribe", slugs),
+  getChatSubscriptionStatus: (slugs: string[]): Promise<ChatSubscriptionStatus[]> => ipcRenderer.invoke("chat:subscription-status", slugs),
   listChatMessages: (slug: string): Promise<SavedChatMessage[]> => ipcRenderer.invoke("chat:list", slug),
   exportChatMessages: (slug: string, format: "csv" | "jsonl"): Promise<{ saved: boolean; path?: string; count: number }> => ipcRenderer.invoke("chat:export", { slug, format }),
   listArticles: (): Promise<Array<{ id: string; slug: string; broadcaster: string; streamTitle: string; startedAt: string | null; generatedAt: string; commentCount: number; isFinal: boolean; title: string; summary: string; paragraphs: string[]; topics: string[]; provider: string; model: string }>> => ipcRenderer.invoke("articles:list"),
