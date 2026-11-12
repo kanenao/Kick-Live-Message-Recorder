@@ -553,8 +553,11 @@ export class KickCommentVideoGenerator {
       const moveDuration = options.displaySeconds * 100 / options.speedPercent;
       // 参考動画のように上端に寄りすぎない小さな余白を取り、動画の高さを超える行は作らない。
       const topMargin = Math.max(12, Math.round(info.height * 0.012));
-      const visibleRows = Math.max(1, Math.floor((info.height - topMargin * 2) / lineHeight));
+      // 上下の余白と文字の高さを差し引いた範囲へ、表示行を広く均等配置する。
+      const usableHeight = Math.max(1, info.height - topMargin * 2 - options.fontSize);
+      const visibleRows = Math.max(1, Math.floor(usableHeight / lineHeight) + 1);
       const laneCount = Math.min(options.rowLimit, visibleRows);
+      const laneSpacing = laneCount > 1 ? usableHeight / (laneCount - 1) : 0;
       const lanes: Array<LaneState | null> = Array.from({ length: laneCount }, () => null);
       // 同じコメント群を再生成しても配置が安定する、再現可能な疑似乱数。
       let laneRandomState = 0x12345678;
@@ -589,7 +592,9 @@ export class KickCommentVideoGenerator {
           // 追い越しが発生しても指定したピクセル間隔を保てる行だけを再利用する。
           const gapNeeded = options.collisionGap +
             Math.max(0, speed - previous.speed) * overlap;
-          const currentGap = previous.speed * Math.max(0, comment.seconds - previous.start) - previous.width;
+          // 新しく入るコメントの左端と、先行コメントの右端との距離を計算する。
+          // 先行コメントの幅ではなく、今回のコメント自身の幅を差し引く。
+          const currentGap = previous.speed * Math.max(0, comment.seconds - previous.start) - width;
           if (currentGap >= gapNeeded) {
             laneIndex = index;
             break;
@@ -604,11 +609,11 @@ export class KickCommentVideoGenerator {
         const start = comment.seconds;
         const end = Math.min(info.duration, start + moveDuration);
         lanes[laneIndex] = { start, end, speed, width };
-        const y = topMargin + laneIndex * lineHeight;
+        const y = Math.round(topMargin + laneIndex * laneSpacing);
         const color = colorToAss(comment.color);
         const alpha = Math.round((100 - options.opacity) * 2.55).toString(16).padStart(2, "0").toUpperCase();
         const tags = "{\\move(" + (info.width + 16) + "," + y + "," + Math.round(-width) + "," + y +
-          ",0," + Math.max(1, Math.round((end - start) * 1000)) + ")" +
+          ",0," + Math.max(1, Math.round(moveDuration * 1000)) + ")" +
           "\\fn" + COMMENT_FONT_FAMILIES[options.fontFamily] + "\\b1\\1c" + color +
           "\\alpha&H" + alpha + "&\\bord2.5\\shad1}";
         batch.push(
