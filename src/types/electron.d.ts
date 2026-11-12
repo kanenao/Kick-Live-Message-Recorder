@@ -42,6 +42,8 @@ type KickRecorderRecordingEvent = {
   status: "starting" | "recording" | "stopped" | "error";
   filePath?: string;
   message?: string;
+  startedAt?: string;
+  endedAt?: string;
 };
 
 type KickRecorderCredentialsStatus = {
@@ -109,6 +111,7 @@ declare global {
       listRecordings: () => Promise<KickRecorderRecordingFile[]>;
       openRecording: (filePath: string) => Promise<{ ok: true }>;
       revealRecording: (filePath: string) => Promise<{ ok: true }>;
+      exportRecordingChatAss: (filePath: string) => Promise<{ saved: boolean; path?: string; count: number; slug?: string; startedAt?: string; endedAt?: string; durationMs?: number; startReference?: string }>;
       onRecordingStatus: (callback: (event: KickRecorderRecordingEvent) => void) => () => void;
     };
   }
