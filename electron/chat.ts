@@ -228,7 +228,7 @@ export class KickChatReceiver {
     if (!slug) throw new Error("チャンネル名が不正です。");
     const directory = join(outputDirectory || this.outputDirectory || process.cwd(), "ChatLogs");
     if (!existsSync(directory)) return [];
-    const max = Math.max(1, Math.min(5000, limit));
+    const max = Math.max(1, Math.min(50000, limit));
     const files = readdirSync(directory)
       .filter(name => name.toLowerCase().startsWith(slug + "_") && name.toLowerCase().endsWith(".jsonl"))
       .map(name => ({ path: join(directory, name) }))
