@@ -126,7 +126,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string }>;
 };
 
-const APP_VERSION = "0.1.0-beta.41";
+const APP_VERSION = "0.1.0-beta.42";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ff4545", lane: 1, delay: 0.7 },
@@ -154,6 +154,14 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffe64a", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.1.0-beta.42",
+    title: "長文コメントの表示幅計算を改善",
+    changes: [
+      "非常に長いコメントでも元の文字幅を省略せずに計算し、横スクロールの移動速度・衝突判定を正確化",
+      "上部固定・下部固定の長文コメントは、画面幅に合わせてより小さい倍率まで縮小して表示領域からはみ出しにくく改善"
+    ]
+  },
   {
     version: "0.1.0-beta.41",
     title: "Saccubusを参考にコメントの表示位置を拡張",
