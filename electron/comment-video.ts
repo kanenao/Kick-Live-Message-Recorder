@@ -383,9 +383,31 @@ export class KickCommentVideoGenerator {
       if (signal.aborted) throw new Error("生成を停止しました。");
 
       const videoStats = statSync(options.videoPath);
-      // LIVEコメントは動画ファイルの更新時刻から再生時間を差し引いて録画開始時刻を推定する。
-      // VODコメントは取得時に保存したtimeInSecondsを優先するため、開始時刻推定に依存しない。
-      const estimatedVideoStartMs = videoStats.mtimeMs - info.duration * 1000;
+      // 録画ファイル名には録画開始時刻（YYYYMMDD_HHMMSS）が含まれるため、まずそれを使う。
+      // 手動で名称変更した動画などは、ファイル更新時刻から再生時間を差し引いて推定する。
+      // VODコメントは取得時に保存したtimeInSecondsを優先する。
+      const filenameTimestamp = basename(options.videoPath, extname(options.videoPath))
+        .match(/_(\d{8})_(\d{6})(?:_retry\d+)?$/);
+      const filenameStartMs = filenameTimestamp
+        ? (() => {
+            const stamp = filenameTimestamp[1] + filenameTimestamp[2];
+            const year = Number(stamp.slice(0, 4));
+            const month = Number(stamp.slice(4, 6)) - 1;
+            const day = Number(stamp.slice(6, 8));
+            const hour = Number(stamp.slice(8, 10));
+            const minute = Number(stamp.slice(10, 12));
+            const second = Number(stamp.slice(12, 14));
+            const parsed = new Date(year, month, day, hour, minute, second);
+            return parsed.getFullYear() === year && parsed.getMonth() === month &&
+              parsed.getDate() === day && parsed.getHours() === hour &&
+              parsed.getMinutes() === minute && parsed.getSeconds() === second
+              ? parsed.getTime()
+              : Number.NaN;
+          })()
+        : Number.NaN;
+      const estimatedVideoStartMs = Number.isFinite(filenameStartMs)
+        ? filenameStartMs
+        : videoStats.mtimeMs - info.duration * 1000;
       const interfaceReader = createInterface({
         input: createReadStream(options.chatPath, { encoding: "utf8" }),
         crlfDelay: Infinity
