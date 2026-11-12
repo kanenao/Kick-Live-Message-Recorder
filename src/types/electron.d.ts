@@ -74,6 +74,8 @@ declare global {
       selectOutputDirectory: () => Promise<string | null>;
       notifyLive: (slug: string) => Promise<{ ok: boolean }>;
       getAppInfo: () => Promise<KickRecorderAppInfo>;
+      getOllamaStatus: () => Promise<{ connected: boolean; baseUrl: string; models: Array<{ name: string; size: number }>; message?: string }>;
+      generateOllamaArticle: (input: { title?: string; broadcaster?: string; startedAt?: string; comments: Array<{ user?: string; text: string; timestamp?: string }> }) => Promise<{ title: string; summary: string; paragraphs: string[]; topics: string[]; provider: string; model: string }>;
       getKickCredentialsStatus: () => Promise<KickRecorderCredentialsStatus>;
       saveKickCredentials: (credentials: { clientId: string; clientSecret: string }) => Promise<{ ok: boolean; clientId: string }>;
       clearKickCredentials: () => Promise<{ ok: boolean }>;
