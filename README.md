@@ -1,94 +1,103 @@
 # Kick Live Message Recorder
 
-Kick のライブ配信を録画し、チャットを保存する Windows デスクトップアプリです。
+Kickの配信を監視・録画し、公式Webhookでチャットを保存するWindowsデスクトップアプリです。ローカルOllamaを使った日本語の配信記事生成にも対応します。
 
 <aside>
-<strong>開発版：0.1.0-beta.5</strong><br />
-配信状態の自動監視・Windows通知・日本語メニュー・自動更新に対応しています。映像・音声の実録画とチャット取得は引き続き開発中です。
+<strong>開発版：0.1.0-beta.12</strong><br />
+チャットWebhook受信・JSONL保存、Ollamaによるライブ記事の自動生成を実装中です。Kick Developer側のWebhook URL設定と実配信での受信確認は、利用環境での初回設定が必要です。
 </aside>
 
-## β版 0.1.0-beta.5 で利用できる機能
+## 主な機能
 
-- 日本語ダッシュボード
-- Windows上部メニュー（ファイル・編集・表示・ウィンドウ・ヘルプ）の日本語化
-- 右クリックメニュー（コピー・貼り付け等）の日本語化
-- バージョン情報とGitHubサポートへのメニュー追加
-- Kickチャンネルの追加・削除
-- チャンネルごとの自動/手動モード設定
-- Electronデスクトップアプリの起動基盤
-- チャンネル一覧と基本設定のPC内保存
-- 録画データ保存先フォルダーの選択
-- Kick公式APIで登録チャンネルの配信中/オフライン状態を手動確認
-- 30秒〜10分間隔の配信自動監視
-- 配信開始時のWindows通知
-- 監視エラー時は次回周期で自動再試行
-- Client SecretはElectron safeStorageで暗号化して保存（Windows環境）
-- 画面表示・Windowsインストーラーの日本語化
-- 現在のバージョン番号を画面に常時表示
-- 起動時・6時間ごとの自動更新確認と自動ダウンロード
-- GitHub Releases経由の更新配布
+- 日本語ダッシュボード・日本語メニュー・右クリックメニュー
+- Kickチャンネルの追加・削除、自動/手動モード
+- Kick公式APIで配信中/オフライン状態を確認
+- 30秒〜10分間隔の配信自動監視、Windows通知
+- 配信状態に応じた手動録画・自動録画
+- yt-dlp / FFmpegを使った映像・音声の保存
+- 録画ライブラリ、録画ファイルの再生・保存先表示
+- Client SecretをWindowsのElectron safeStorageで暗号化して保存
+- Kick公式Events APIの `chat.message.sent` をWebhookで購読
+- Cloudflare Quick TunnelでローカルのWebhook受信サーバーを公開
+- Webhook署名をKick公開鍵で検証し、コメントをJSONL保存
+- コメント投稿者・本文・時刻・バッジ・エモート位置を記録
+- Ollamaによる日本語の配信記事生成（クラウドAI APIキー不要）
+- 新着コメントから約3分ごとのライブ記事スナップショット
+- 配信終了を検知した際の最終記事生成
+- 記事タブ、保存済み記事一覧、チャンネルごとの手動生成
+- 起動時・6時間ごとの自動更新確認とダウンロード
 
-## 自動アップデートについて
+## チャットWebhookの初回設定
+
+1. Kick Developerで作成済みアプリを開き、Webhooksを有効にします。
+2. アプリの設定画面でClient IDとClient Secretを保存します。
+3. 「チャット受信を開始」を押し、表示されたWebhook URLをコピーします。
+4. Kick DeveloperのWebhook URL欄に貼り付けて保存します。
+5. アプリで「登録チャンネルを購読」を押します。
+6. 実際の配信チャットを投稿して、アプリの受信件数が増えることを確認します。
+
+Webhook URLはCloudflare Quick Tunnelから毎回発行されます。アプリ再起動後はURLが変わるため、Kick Developer側のWebhook URLも更新してください。設定手順の詳細は [CHAT-WEBHOOK-SETUP.md](CHAT-WEBHOOK-SETUP.md) を参照してください。
+
+購読APIへの登録成功とWebhookの実配信成功は別です。Kick側のWebhook配信状況も含め、受信件数が増えることを確認してから運用してください。
+
+## 無料のAI記事生成（Ollama）
+
+1. Windows版Ollamaを https://ollama.com/download からインストールします。
+2. PowerShellでモデルを取得します。
+
+```powershell
+ollama pull qwen2.5:3b
+```
+
+3. Ollamaを起動した状態でアプリの設定画面を開き、Ollamaの接続を確認します。
+4. 「配信中の記事を自動生成」を有効にします。
+5. チャット受信中に新着コメントがあれば約3分ごとに記事を保存します。
+
+記事は録画保存先の `Articles` フォルダー、チャットは `ChatLogs` フォルダーに保存します。記事生成はPC内のOllamaで行い、OpenAI APIキーや従量課金は不要です。モデルの実行速度はPCのメモリー・CPU/GPU性能に依存します。
+
+## 自動アップデート
 
 - Windows版は起動時と6時間ごとにGitHub Releasesを確認します。
-- 新版があれば自動でダウンロードし、アプリ終了時に適用します。設定画面から手動確認・即時再起動もできます。
-- β版の更新公開は `v0.1.0-beta.5` のように、`package.json` のバージョンと一致するタグを作成してpushします。GitHub ActionsがWindowsインストーラーと更新情報ファイルをReleaseへ公開します。
-- β2以前は自動更新機能を含まないため、β3は手動インストールが必要です。β3以降は自動更新に対応します。
-- 現在のWindowsビルドにはコード署名証明書がありません。更新ファイルはHTTPSとSHA-512で検証しますが、発行元のAuthenticode署名検証は無効化しています。将来の一般配布前にコード署名証明書を導入することを推奨します。
+- 新版があれば自動ダウンロードし、アプリ終了時に適用します。
+- 設定画面から手動確認と再起動による更新適用ができます。
+- リリース公開はバージョンと一致する `v*` タグをpushして実行します。
 
-## これから実装する機能
+現在のWindowsビルドにはコード署名証明書がありません。一般配布前にコード署名証明書の導入を推奨します。
 
-- 自動録画の開始・終了、手動録画の開始・停止
-- yt-dlp/FFmpegによる映像・音声の保存
-- チャットの取得・時刻付き保存
-- 録画ライブラリ、再生、検索、CSV/JSON出力
+## 開発環境
 
-## 動作確認・開発
-
-Node.js 22 以上を用意し、次を実行します。
+Node.js 22以上を用意し、次を実行します。
 
 ```bash
 npm install
 npm run dev
 ```
 
-Windows向けインストーラーをローカルで作成する場合：
+Windows向けインストーラーをローカル作成する場合：
 
 ```bash
 npm run dist:win
 ```
 
-GitHub Actionsでは、mainブランチのビルドをActions Artifactsに14日間保存します。バージョンに一致する `v*` タグをpushすると、Windowsインストーラーと自動更新用ファイルをGitHub Releasesへβ版として公開します。
-
-## メニューの日本語化
-
-Windowsアプリ上部の「ファイル」「編集」「表示」「ウィンドウ」「ヘルプ」を日本語で表示します。テキスト入力欄やリンク上の右クリックメニューも日本語化し、GitHubリポジトリ、不具合報告、バージョン情報へアクセスできます。
-
-## 参考アプリから取り入れた設計
-
-- KickChecker：配信の定期監視、監視間隔設定、配信開始通知、通信エラー後の再確認
-- KickLiveRecorder：録画エンジン（yt-dlp/FFmpeg）、再接続、保存容量監視、ファイル名・フォルダー名テンプレート、コメント出力形式
-- KickMessageRecorder：チャット時刻同期、エモート処理、XML/SRT/ASS出力、コメント色分け
-
-チャットのリアルタイム取得は、参考アプリが利用しているPusher接続をそのままコピーせず、Kick公式イベント/APIの認証・公開Webhook要件を満たす方法を優先します。Kick公式Webhookの受信先はインターネットから到達可能である必要があります。
-
-## Kick API接続設定
-
-Kick Developerでアプリを作成し、発行されたClient IDとClient Secretをアプリの設定画面に登録してください。Client SecretはWindowsのElectron safeStorageで暗号化し、レンダラーには渡しません。配信状態の確認にはKick公式の `GET /public/v1/channels` を利用します。最大50チャンネルずつ問い合わせ、ストリームキーや配信URLなどの機密フィールドは使用しません。
+GitHub Actionsではmainブランチの型チェック・アプリビルド・Windowsインストーラー作成を実行します。
 
 ## データ保存
 
-- チャンネル一覧と設定はElectronのユーザーデータ領域にJSON形式で保存します。
-- 録画ファイルの保存先は設定画面から選択できます（録画機能は未実装）。
-- ブラウザープレビューでは、設定をブラウザーのlocalStorageに保存します。
+- チャンネル一覧、設定、暗号化認証情報はPC内に保存します。
+- 録画ファイル、チャットログ、AI記事は設定画面の保存先フォルダーに保存します。
+- チャットログ：`ChatLogs/<チャンネル名>_YYYYMMDD.jsonl`
+- AI記事：`Articles/<チャンネル名>-<生成日時>.json`
 
 ## 技術構成
 
 - Electron 45
 - React 19 + TypeScript + Vite
+- yt-dlp / FFmpeg
+- Kick Public API / Events API
+- Cloudflare Tunnel（Quick Tunnel）
+- Ollama（既定モデル：qwen2.5:3b）
 - Windows NSIS installer
-- 今後：SQLite、FFmpeg、Kick公式API/イベント
 
 ## 注意事項
 
-録画・チャット保存はKickの利用規約、配信者の権利、プライバシー、適用法令を守って利用してください。チャットの保存期間や削除要求への対応を含め、公式に利用可能な方法を優先します。未公開の内部APIに依存する機能は、安定機能として提供しません。
+録画・チャット保存はKickの利用規約、配信者の権利、プライバシー、適用法令を守って利用してください。チャット保存の期間や削除要求への対応も含め、保存データを適切に管理してください。未公開の内部APIに依存する機能は安定機能として扱いません。
