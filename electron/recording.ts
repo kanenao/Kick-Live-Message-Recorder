@@ -104,7 +104,7 @@ function saveRecordingTimeline(session: ActiveRecording, slug: string, endedAt: 
     return videoPath;
   } catch (error) {
     console.error("Failed to save recording timeline metadata:", error);
-    return videoPath;
+    return null;
   }
 }
 
@@ -204,14 +204,18 @@ export class KickRecordingManager {
       this.active.delete(slug);
       if (session.stopRequested || code === 0) {
         const endedAt = new Date().toISOString();
-        const videoPath = saveRecordingTimeline(session, slug, endedAt) ?? session.filePath;
+        const timelinePath = saveRecordingTimeline(session, slug, endedAt);
+        const videoPath = timelinePath ?? session.filePath;
+        const timelineMessage = timelinePath
+          ? "コメント同期用の時刻情報を保存しました。"
+          : "動画は保存しましたが、時刻情報サイドカーを作成できませんでした。";
         this.onEvent({
           slug,
           status: "stopped",
           filePath: videoPath,
           startedAt: session.startedAt ?? undefined,
           endedAt,
-          message: session.stopRequested ? "録画を停止しました。コメント同期用の時刻情報を保存しました。" : "配信が終了し、録画を完了しました。コメント同期用の時刻情報を保存しました。"
+          message: session.stopRequested ? "録画を停止しました。" + timelineMessage : "配信が終了し、録画を完了しました。" + timelineMessage
         });
         return;
       }
