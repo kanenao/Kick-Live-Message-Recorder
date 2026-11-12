@@ -91,6 +91,8 @@ type UpdateStatus = {
   currentVersion: string;
   availableVersion?: string;
   percent?: number;
+  releaseNotes?: string;
+  releaseDate?: string;
   message: string;
 };
 
