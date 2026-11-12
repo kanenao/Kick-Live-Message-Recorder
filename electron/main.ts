@@ -312,12 +312,24 @@ async function subscribeToKickChat(input: unknown): Promise<Array<{ slug: string
         }),
         signal: AbortSignal.timeout(15000)
       });
-      const payload = await response.json().catch(() => ({})) as { message?: string };
+      const payload = await response.json().catch(() => ({})) as {
+        message?: string;
+        data?: Array<{ name?: string; version?: number; subscription_id?: string; error?: string }>;
+      };
       if (!response.ok) throw new Error(payload.message || `購読登録 HTTP ${response.status}`);
+      const eventResult = payload.data?.find(item => item.name === "chat.message.sent" && item.version === 1);
+      if (!eventResult) {
+        throw new Error("Kick APIの応答に chat.message.sent の登録結果がありません。購読状態を確認してください。");
+      }
+      if (eventResult.error) {
+        throw new Error(`Kick APIのイベント登録エラー：${eventResult.error}`);
+      }
       results.push({
         slug,
         ok: true,
-        message: "Kick APIに購読登録要求を送信しました。実際のWebhook到着は受信ログで確認してください。"
+        message: eventResult.subscription_id
+          ? `購読要求を受け付けました（ID: ${eventResult.subscription_id}）。実際のWebhook到着は受信件数で確認してください。`
+          : "購読要求を受け付けました。実際のWebhook到着は受信件数で確認してください。"
       });
     } catch (error) {
       results.push({ slug, ok: false, message: error instanceof Error ? error.message : String(error) });
@@ -682,6 +694,11 @@ function writeState(input: unknown): { ok: boolean } {
   return { ok: true };
 }
 
+function escapeCsvCell(value: unknown): string {
+  const text = String(value ?? "").replace(/\\r?\\n/g, " ");
+  return `"${text.replace(/"/g, `""`)}"`;
+}
+
 function assertTrustedSender(event: IpcMainInvokeEvent): void {
   if (!mainWindow || BrowserWindow.fromWebContents(event.sender) !== mainWindow) {
     throw new Error("Untrusted IPC sender");
@@ -828,6 +845,49 @@ function registerIpcHandlers(): void {
   ipcMain.handle("chat:list", (event, slug: unknown) => {
     assertTrustedSender(event);
     return chatReceiver.listMessages(slug, 500, getRecordingOutputDirectory());
+  });
+
+  ipcMain.handle("chat:export", async (event, input: unknown) => {
+    assertTrustedSender(event);
+    if (!input || typeof input !== "object") throw new Error("チャット書き出しの指定が不正です。");
+    const value = input as { slug?: unknown; format?: unknown };
+    if (typeof value.slug !== "string" || !/^[a-zA-Z0-9_]{1,25}$/.test(value.slug)) {
+      throw new Error("書き出すチャンネル名が不正です。");
+    }
+    if (value.format !== "csv" && value.format !== "jsonl") {
+      throw new Error("書き出し形式はCSVまたはJSONLを指定してください。");
+    }
+    if (!mainWindow) throw new Error("アプリ画面が利用できません。");
+    const slug = value.slug.toLowerCase();
+    const messages = chatReceiver.listMessages(slug, 5000, getRecordingOutputDirectory());
+    if (messages.length === 0) throw new Error(`${slug} の保存済みコメントがありません。`);
+    const extension = value.format;
+    const defaultPath = join(getRecordingOutputDirectory(), `${slug}_chat_export.${extension}`);
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: "チャットログを書き出す",
+      defaultPath,
+      buttonLabel: "書き出す",
+      filters: value.format === "csv"
+        ? [{ name: "CSVファイル", extensions: ["csv"] }]
+        : [{ name: "JSONLファイル", extensions: ["jsonl"] }]
+    });
+    if (result.canceled || !result.filePath) return { saved: false, count: messages.length };
+    const content = value.format === "jsonl"
+      ? messages.map(message => JSON.stringify(message)).join("\\n") + "\\n"
+      : [
+          ["messageId", "channel", "user", "timestamp", "receivedAt", "text", "badges"].map(escapeCsvCell).join(","),
+          ...messages.map(message => [
+            message.messageId,
+            message.slug,
+            message.user,
+            message.timestamp,
+            message.receivedAt,
+            message.text,
+            message.badges.join(" / ")
+          ].map(escapeCsvCell).join(","))
+        ].join("\\r\\n");
+    writeFileSync(result.filePath, value.format === "csv" ? "\\uFEFF" + content : content, "utf8");
+    return { saved: true, path: result.filePath, count: messages.length };
   });
 
   ipcMain.handle("articles:list", event => {
