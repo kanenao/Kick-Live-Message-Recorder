@@ -44,6 +44,8 @@ type RecordingEvent = {
   status: "starting" | "recording" | "stopped" | "error";
   filePath?: string;
   message?: string;
+  startedAt?: string;
+  endedAt?: string;
 };
 
 type KickCredentialsStatus = {
