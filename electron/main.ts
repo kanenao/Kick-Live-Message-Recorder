@@ -695,7 +695,7 @@ function writeState(input: unknown): { ok: boolean } {
 }
 
 function escapeCsvCell(value: unknown): string {
-  const text = String(value ?? "").replace(/\\r?\\n/g, " ");
+  const text = String(value ?? "").replace(/\r?\n/g, " ");
   return `"${text.replace(/"/g, `""`)}"`;
 }
 
@@ -873,7 +873,7 @@ function registerIpcHandlers(): void {
     });
     if (result.canceled || !result.filePath) return { saved: false, count: messages.length };
     const content = value.format === "jsonl"
-      ? messages.map(message => JSON.stringify(message)).join("\\n") + "\\n"
+      ? messages.map(message => JSON.stringify(message)).join("\n") + "\n"
       : [
           ["messageId", "channel", "user", "timestamp", "receivedAt", "text", "badges"].map(escapeCsvCell).join(","),
           ...messages.map(message => [
@@ -885,8 +885,8 @@ function registerIpcHandlers(): void {
             message.text,
             message.badges.join(" / ")
           ].map(escapeCsvCell).join(","))
-        ].join("\\r\\n");
-    writeFileSync(result.filePath, value.format === "csv" ? "\\uFEFF" + content : content, "utf8");
+        ].join("\r\n");
+    writeFileSync(result.filePath, value.format === "csv" ? "\uFEFF" + content : content, "utf8");
     return { saved: true, path: result.filePath, count: messages.length };
   });
 
