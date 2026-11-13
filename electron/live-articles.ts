@@ -480,7 +480,7 @@ export class LiveStreamArticleManager {
         session.article.commentCount > 0
           ? `コメントから抽出された主なキーワードは「${session.article.keywords.join("・") || "なし"}」です。AI分析は完了していないため、話題の解釈は行っていません。`
           : "コメントを取得できなかったため、視聴者の反応を分析できませんでした。",
-        "本記事はKickの公開チャットコメントと配信メタデータをもとに作成しました。配信映像・音声そのものの内容を示すものではありません。"
+        "本記事は利用できた配信メタデータ・映像・音声文字起こし・公開チャットの範囲で作成しました。分析できなかった情報源の内容は推測していません。"
       ];
     }
     this.persist(session);
@@ -668,7 +668,7 @@ export class LiveStreamArticleManager {
       article.paragraphs = result.paragraphs;
       article.highlights = result.highlights;
       article.keywords = result.keywords.length > 0 ? result.keywords : article.keywords;
-      if (audioBatch.length > 0 || article.audioAnalyzed) {
+      if (audioBatch.length > 0) {
         article.audioSummary = result.audioSummary;
         article.audioAnalyzedAt = new Date().toISOString();
       }
