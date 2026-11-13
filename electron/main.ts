@@ -22,6 +22,8 @@ import { KickVodChatDownloader } from "./vod-chat";
 import { KickCommentVideoGenerator, listCommentLogFiles, previewCommentVideo } from "./comment-video";
 import { deleteStreamArticle, generateStreamArticle, listStreamArticles } from "./articles";
 import { LiveStreamArticleManager } from "./live-articles";
+import { startLiveVideoFrameCapture, type LiveVideoFrameStatus } from "./live-video-frames";
+import type { VideoFrameSample } from "./video-frames";
 import { deleteRecordingFile, isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
 
 // Chromiumが提供する標準メニューやコンテキストメニューも日本語で表示する。
@@ -627,6 +629,74 @@ const vodChatDownloader = new KickVodChatDownloader(event => {
   mainWindow?.webContents.send("vod-chat:status", event);
 });
 
+type ArticleLiveMetadata = {
+  slug: string;
+  displayName: string;
+  streamTitle: string;
+  categoryName: string;
+  startedAt: string | null;
+  viewerCount: number;
+};
+type ManualArticleSession = {
+  metadata: ArticleLiveMetadata;
+  previousChatSlugs: string[];
+  ownsArticleSession: boolean;
+};
+const liveArticleFrameCaptures = new Map<string, { stop: () => void; frames: VideoFrameSample[] }>();
+let manualArticleSession: ManualArticleSession | null = null;
+
+function startArticleFrameCapture(slugInput: string): void {
+  const slug = slugInput.toLowerCase();
+  if (liveArticleFrameCaptures.has(slug)) return;
+  const frames: VideoFrameSample[] = [];
+  try {
+    const stop = startLiveVideoFrameCapture(slug, frame => {
+      frames.push(frame);
+      liveArticleManager.updateVideoFrames(slug, [...frames]);
+    }, status => {
+      mainWindow?.webContents.send("articles:live-capture-status", { slug, ...status });
+    });
+    liveArticleFrameCaptures.set(slug, { stop, frames });
+  } catch (error) {
+    const status: LiveVideoFrameStatus = {
+      status: "error", frameCount: 0,
+      message: error instanceof Error ? error.message : String(error)
+    };
+    mainWindow?.webContents.send("articles:live-capture-status", { slug, ...status });
+  }
+}
+
+function stopArticleFrameCapture(slugInput: string): void {
+  const slug = slugInput.toLowerCase();
+  const capture = liveArticleFrameCaptures.get(slug);
+  if (!capture) return;
+  liveArticleFrameCaptures.delete(slug);
+  capture.stop();
+}
+
+function parseArticleChannelSlug(input: unknown): string {
+  if (typeof input !== "string" || input.trim().length === 0 || input.length > 2048) {
+    throw new Error("Kickのチャンネル名または配信URLを入力してください。");
+  }
+  const value = input.trim();
+  let slug = value;
+  if (/^https?:\\/\\//i.test(value)) {
+    let url: URL;
+    try { url = new URL(value); } catch { throw new Error("Kickの配信URLが正しくありません。"); }
+    if (url.protocol !== "https:" || !["kick.com", "www.kick.com"].includes(url.hostname.toLowerCase())) {
+      throw new Error("https://kick.com/チャンネル名 の形式で入力してください。");
+    }
+    const match = url.pathname.match(/^\\/([a-zA-Z0-9_]{1,25})\\/?$/);
+    if (!match) throw new Error("チャンネルのトップページURLを入力してください。");
+    slug = match[1];
+  }
+  if (!/^[a-zA-Z0-9_]{1,25}$/.test(slug)) {
+    throw new Error("チャンネル名は半角英数字とアンダースコアで入力してください。");
+  }
+  return slug.toLowerCase();
+}
+
+
 function getRecordingOutputDirectory(): string {
   const configured = readState().settings.outputDirectory.trim();
   return configured || join(app.getPath("videos"), "Kick Live Message Recorder");
@@ -930,8 +1000,13 @@ async function runBackgroundMonitor(): Promise<void> {
         streamTitle: result.streamTitle, categoryName: result.categoryName,
         startedAt: result.startedAt, viewerCount: result.viewerCount
       };
-      if (live) liveArticleManager.startOrUpdate(articleMetadata);
-      else if (wasLive) void liveArticleManager.finishStream(articleMetadata);
+      if (live) {
+        liveArticleManager.startOrUpdate(articleMetadata);
+        if (liveArticleManager.hasSession(result.slug)) startArticleFrameCapture(result.slug);
+      } else if (wasLive) {
+        stopArticleFrameCapture(result.slug);
+        void liveArticleManager.finishStream(articleMetadata);
+      }
       if (!live || wasLive) continue;
 
       const normalChannel = state.channels.find(channel => channel.name.toLowerCase() === result.slug);
@@ -1244,6 +1319,73 @@ function registerIpcHandlers(): void {
   ipcMain.handle("recording:list", event => {
     assertTrustedSender(event);
     return listRecordingFiles(getRecordingOutputDirectory());
+  });
+
+  ipcMain.handle("articles:live:start", async (event, channelInput: unknown) => {
+    assertTrustedSender(event);
+    if (manualArticleSession) {
+      throw new Error(`すでに ${manualArticleSession.metadata.slug} の記事専用LIVEセッションが動作中です。`);
+    }
+    const slug = parseArticleChannelSlug(channelInput);
+    const results = await checkKickChannels([slug], false);
+    const channel = results.find(item => item.slug === slug);
+    if (!channel?.found) throw new Error("Kickチャンネルが見つかりません。URLとチャンネル名を確認してください。");
+    if (!channel.isLive) throw new Error("このチャンネルは現在LIVE配信中ではありません。生放送中のチャンネルを指定してください。");
+
+    const settings = readState().settings;
+    if (settings.aiArticleProvider === "ollama") {
+      await liveArticleManager.testConnection(settings.aiArticleModel);
+    } else if (!readOpenAiApiKey()) {
+      throw new Error("OpenAI APIキーが未設定です。AI設定でAPIキーを保存するか、Ollamaを選択してください。");
+    }
+    const metadata: ArticleLiveMetadata = {
+      slug,
+      displayName: channel.displayName || slug,
+      streamTitle: channel.streamTitle || `${channel.displayName || slug}のLIVE配信`,
+      categoryName: channel.categoryName || "",
+      startedAt: channel.startedAt,
+      viewerCount: channel.viewerCount
+    };
+    const previousChatSlugs = chatReceiver.getDesiredSlugs();
+    const ownsArticleSession = !liveArticleManager.hasSession(slug);
+    const article = liveArticleManager.startManualArticle(metadata);
+    try {
+      if (!previousChatSlugs.includes(slug)) {
+        const merged = [...new Set([...previousChatSlugs, slug])];
+        if (merged.length > 50) throw new Error("コメント受信は最大50チャンネルです。ほかの自動受信チャンネルを減らしてください。");
+        await chatReceiver.start(merged);
+      }
+      manualArticleSession = { metadata, previousChatSlugs, ownsArticleSession };
+      startArticleFrameCapture(slug);
+      return { ok: true as const, slug, article, chatStatus: chatReceiver.getStatus() };
+    } catch (error) {
+      if (ownsArticleSession) await liveArticleManager.finishStream(metadata);
+      const current = chatReceiver.getDesiredSlugs();
+      if (previousChatSlugs.length > 0 && current.join("|") !== previousChatSlugs.join("|")) {
+        await chatReceiver.start(previousChatSlugs).catch(() => undefined);
+      } else if (previousChatSlugs.length === 0) {
+        await chatReceiver.stop().catch(() => undefined);
+      }
+      throw error;
+    }
+  });
+
+  ipcMain.handle("articles:live:stop", async event => {
+    assertTrustedSender(event);
+    const session = manualArticleSession;
+    if (!session) throw new Error("記事専用LIVEセッションは開始されていません。");
+    manualArticleSession = null;
+    const slug = session.metadata.slug;
+    stopArticleFrameCapture(slug);
+    if (session.ownsArticleSession) await liveArticleManager.finishStream(session.metadata);
+
+    const currentSlugs = chatReceiver.getDesiredSlugs();
+    const restoreSlugs = currentSlugs.filter(current =>
+      current !== slug || session.previousChatSlugs.includes(current)
+    );
+    if (restoreSlugs.length === 0) await chatReceiver.stop();
+    else if (restoreSlugs.join("|") !== currentSlugs.join("|")) await chatReceiver.start(restoreSlugs);
+    return { ok: true as const, slug };
   });
 
   ipcMain.handle("articles:list", (event, slug?: unknown) => {
