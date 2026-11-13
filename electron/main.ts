@@ -1261,8 +1261,12 @@ function registerIpcHandlers(): void {
   ipcMain.handle("articles:generate", async (event, input: unknown) => {
     assertTrustedSender(event);
     const article = generateStreamArticle(input, getRecordingOutputDirectory());
+    if (recordingManager.isFileActive(article.sourceVideo)) {
+      throw new Error("録画中の動画は映像解析できません。録画終了後に記事を生成してください。");
+    }
     const settings = readState().settings;
-    if (settings.aiArticleEnabled && (settings.aiArticleProvider === "ollama" || readOpenAiApiKey())) {
+    // Manual archive generation can use AI even when automatic LIVE article generation is disabled.
+    if (settings.aiArticleProvider === "ollama" || readOpenAiApiKey()) {
       return liveArticleManager.enhanceArchivedArticle(article);
     }
     return article;
