@@ -23,6 +23,8 @@ type AppSettings = {
   notifyOnLive: boolean;
   showRecordingPreview: boolean;
   aiArticleEnabled: boolean;
+  aiArticleProvider: "ollama" | "openai";
+  aiArticleOllamaUrl: string;
   aiArticleModel: string;
   aiArticleIntervalSeconds: number;
 };
@@ -83,7 +85,7 @@ type CommentVideoPreviewResult = {
 };
 type AiArticleStatus = {
   configured: boolean; encryptionAvailable: boolean;
-  aiArticleEnabled: boolean; aiArticleModel: string; aiArticleIntervalSeconds: number;
+  aiArticleEnabled: boolean; aiArticleProvider: "ollama" | "openai"; aiArticleOllamaUrl: string; aiArticleModel: string; aiArticleIntervalSeconds: number;
 };
 type CommentVideoEvent = {
   status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string;
