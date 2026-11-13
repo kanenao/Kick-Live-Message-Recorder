@@ -675,7 +675,7 @@ function startArticleFrameCapture(slugInput: string): void {
         : undefined;
     })(), audioError => {
       liveArticleManager.onAudioCaptureError(slug, audioError);
-    });
+    }, liveArticleManager.getElapsedSeconds(slug));
     liveArticleFrameCaptures.set(slug, { stop, frames });
   } catch (error) {
     const status: LiveVideoFrameStatus = {
