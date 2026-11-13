@@ -21,7 +21,7 @@ export type MediaToolStatus = {
 
 export type LiveMediaAnalysis = {
   analyzedAt: string;
-  frameBase64: string;
+  frameBase64s: string[];
   transcript: string;
   warnings: string[];
 };
@@ -152,7 +152,7 @@ export async function analyzeLiveRecordingMedia(input: {
 }): Promise<LiveMediaAnalysis> {
   const result: LiveMediaAnalysis = {
     analyzedAt: new Date().toISOString(),
-    frameBase64: "",
+    frameBase64s: [],
     transcript: "",
     warnings: []
   };
@@ -174,29 +174,38 @@ export async function analyzeLiveRecordingMedia(input: {
   const tempDirectory = join(input.outputDirectory, "MediaAnalysis", ".work");
   mkdirSync(tempDirectory, { recursive: true });
   const suffix = Date.now().toString(36) + "-" + process.pid;
-  const framePath = join(tempDirectory, input.slug + "-" + suffix + ".jpg");
+  const framePaths = [-55, -30, -8].map((offset, index) =>
+    join(tempDirectory, input.slug + "-" + suffix + "-frame-" + index + ".jpg")
+  );
   const audioPath = join(tempDirectory, input.slug + "-" + suffix + ".wav");
   const transcriptPrefix = join(tempDirectory, input.slug + "-" + suffix);
   const transcriptPath = transcriptPrefix + ".txt";
 
   try {
-    try {
-      const frame = await runCommand(status.ffmpegPath, [
-        "-hide_banner", "-loglevel", "error",
-        "-sseof", "-8", "-i", input.videoPath,
-        "-frames:v", "1", "-vf", "scale=1280:-2",
-        "-q:v", "4", "-y", framePath
-      ], 25_000);
-      if (frame.code !== 0 && frame.stderr.trim()) {
-        result.warnings.push("映像フレーム抽出： " + frame.stderr.trim().slice(-500));
+    const frameResults = await Promise.all(framePaths.map(async (framePath, index) => {
+      try {
+        const frame = await runCommand(status.ffmpegPath, [
+          "-hide_banner", "-loglevel", "error",
+          "-sseof", String([-55, -30, -8][index]), "-i", input.videoPath,
+          "-frames:v", "1", "-vf", "scale=1280:-2",
+          "-q:v", "4", "-y", framePath
+        ], 25_000);
+        if (frame.code !== 0 && frame.stderr.trim()) {
+          result.warnings.push("映像フレーム抽出： " + frame.stderr.trim().slice(-300));
+        }
+        if (existsSync(framePath) && statSync(framePath).size > 1024) {
+          return readFileSync(framePath).toString("base64");
+        }
+      } catch (error) {
+        result.warnings.push("映像フレーム抽出に失敗しました：" + (error instanceof Error ? error.message : String(error)));
       }
-      if (existsSync(framePath) && statSync(framePath).size > 1024) {
-        result.frameBase64 = readFileSync(framePath).toString("base64");
-      } else {
-        result.warnings.push("録画中ファイルから映像フレームを取得できませんでした。録画が安定してから再試行します。");
-      }
-    } catch (error) {
-      result.warnings.push("映像フレーム抽出に失敗しました：" + (error instanceof Error ? error.message : String(error)));
+      return "";
+    }));
+    result.frameBase64s = frameResults.filter(Boolean);
+    if (result.frameBase64s.length === 0) {
+      result.warnings.push("録画中ファイルから映像フレームを取得できませんでした。録画が安定してから再試行します。");
+    } else if (result.frameBase64s.length < framePaths.length) {
+      result.warnings.push("映像フレームは一部のみ取得できました。取得できた画面だけを解析します。");
     }
 
     if (!status.whisperAvailable || !status.whisperModelAvailable) {
@@ -241,7 +250,7 @@ export async function analyzeLiveRecordingMedia(input: {
       }
     }
   } finally {
-    for (const path of [framePath, audioPath, transcriptPath]) {
+    for (const path of [...framePaths, audioPath, transcriptPath]) {
       try { if (existsSync(path)) unlinkSync(path); } catch { /* temporary data cleanup is best effort */ }
     }
   }
