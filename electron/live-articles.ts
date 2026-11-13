@@ -11,6 +11,7 @@ export type LiveArticle = {
   slug: string;
   displayName: string;
   headline: string;
+  streamTitle?: string;
   category: string;
   startedAt: string;
   durationSeconds: number;
@@ -180,7 +181,10 @@ export class LiveStreamArticleManager {
       if (forceAi) existing.forceAi = true;
       existing.article.viewerCount = Math.max(0, Math.floor(metadata.viewerCount));
       existing.article.peakViewerCount = Math.max(existing.article.peakViewerCount ?? 0, existing.article.viewerCount);
-      if (metadata.streamTitle && !existing.article.aiGenerated) existing.article.headline = metadata.streamTitle.slice(0, 160);
+      if (metadata.streamTitle) {
+        existing.article.streamTitle = metadata.streamTitle.slice(0, 160);
+        if (!existing.article.aiGenerated) existing.article.headline = metadata.streamTitle.slice(0, 160);
+      }
       if (metadata.categoryName) existing.article.category = metadata.categoryName.slice(0, 80);
       this.persist(existing);
       return;
@@ -206,6 +210,7 @@ export class LiveStreamArticleManager {
     const article: LiveArticle = previous ? {
       ...previous,
       displayName: metadata.displayName || previous.displayName || slug,
+      streamTitle: metadata.streamTitle || previous.streamTitle || previous.headline,
       category: metadata.categoryName || previous.category,
       status: "live",
       viewerCount: currentViewerCount,
@@ -214,7 +219,8 @@ export class LiveStreamArticleManager {
     } : {
       id, slug, displayName: metadata.displayName || slug,
       headline: metadata.streamTitle || `${metadata.displayName || slug}のLIVE配信`,
-      category: metadata.categoryName || "", startedAt: started.toISOString(),
+      streamTitle: metadata.streamTitle || "",
+      category: metadata.categoryName || "",
       durationSeconds: 0, commentCount: 0, uniqueCommenters: 0, keywords: [],
       paragraphs: ["LIVE配信が始まりました。映像・音声・コメントをそれぞれ分析し、確認できた情報をAIが統合して記事を随時更新します。", "映像は代表フレーム、音声はローカル音声認識、コメントはKickの公開チャットを情報源として扱います。認識できない内容は推測しません。"],
       sourceVideo: "", sourceLogs: [], createdAt: new Date().toISOString(),
@@ -577,7 +583,7 @@ export class LiveStreamArticleManager {
     this.persist(session);
     const userInput = {
       broadcaster: article.displayName,
-      streamTitle: article.headline,
+      streamTitle: article.streamTitle || article.headline,
       category: article.category,
       startedAt: article.startedAt,
       elapsedMinutes: Math.floor((Date.now() - Date.parse(article.startedAt)) / 60_000),
