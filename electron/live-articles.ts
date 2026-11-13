@@ -293,10 +293,11 @@ export class LiveStreamArticleManager {
             config.baseUrl || "http://127.0.0.1:11434",
             safeText(config.audioModel, 120) || "frozenlab/qwen3-asr:0.6b"
           );
-          session.article.audioSegmentCount = (session.article.audioSegmentCount ?? 0) + 1;
-          session.article.audioAnalyzed = true;
-          session.article.audioAnalyzedAt = new Date().toISOString();
+          session.article.audioError = "";
           if (text) {
+            session.article.audioSegmentCount = (session.article.audioSegmentCount ?? 0) + 1;
+            session.article.audioAnalyzed = true;
+            session.article.audioAnalyzedAt = new Date().toISOString();
             const segment: AudioTranscriptSegment = {
               startSeconds: chunk.timeSeconds,
               endSeconds: chunk.timeSeconds + 45,
