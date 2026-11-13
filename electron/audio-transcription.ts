@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { spawn, type ChildProcess } from "node:child_process";
 import { extname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -136,8 +136,12 @@ export async function transcribeVideoAudio(
   if (!isPathInsideDirectory(videoPath, root) || !VIDEO_EXTENSIONS.has(extname(videoPath).toLowerCase())) {
     throw new Error("音声解析には録画ライブラリ内の動画を選択してください。");
   }
-  const fileStats = statSync(videoPath);
-  if (!fileStats.isFile() || !fileStats.size) throw new Error("音声解析する録画動画が空か、通常ファイルではありません。");
+  let fileStats;
+  try { fileStats = lstatSync(videoPath); }
+  catch { throw new Error("音声解析する録画動画が見つかりません。"); }
+  if (!fileStats.isFile() || fileStats.isSymbolicLink() || !statSync(videoPath).size) {
+    throw new Error("音声解析する録画動画が空か、通常ファイルではありません。");
+  }
 
   const ffprobe = findTool(process.platform === "win32" ? "ffprobe.exe" : "ffprobe");
   const audioStream = await runTool(ffprobe, [
@@ -186,7 +190,7 @@ export async function transcribeVideoAudio(
   }
 }
 
-export function formatAudioTranscript(segments: AudioTranscriptSegment[], maxLength = 24_000): string {
+export function formatAudioTranscript(segments: AudioTranscriptSegment[], maxLength = 128_000): string {
   const lines = segments
     .filter(segment => Number.isFinite(segment.startSeconds) && typeof segment.text === "string" && segment.text.trim())
     .map(segment => {
