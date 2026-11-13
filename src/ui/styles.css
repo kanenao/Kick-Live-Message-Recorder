@@ -248,3 +248,5 @@
 .comment-video-preview-summary{margin:0 0 10px;padding:8px 10px;border:1px solid #334252;border-radius:6px;background:#151c26;color:#aebdce;font-size:10px;line-height:1.6}
 
 .article-search-row{display:flex;margin:12px 0 18px}.article-search{width:100%;min-width:0;border:1px solid #343944;border-radius:8px;background:#171a21;color:#eceef4;padding:11px 13px;font:inherit;font-size:13px;outline:none}.article-search:focus{border-color:#53df9b;box-shadow:0 0 0 2px #53df9b22}.article-card-actions{margin-top:12px;padding-top:10px;border-top:1px solid #292d36}.article-card-actions .remove:disabled{opacity:.45;cursor:not-allowed}
+
+.article-video-analysis{margin:14px 0;padding:13px 15px;border:1px solid #365044;border-left:3px solid #53df9b;border-radius:8px;background:#17221d;color:#d7e9de}.article-video-analysis>strong{display:block;color:#83e2ad;font-size:11px;margin-bottom:7px}.article-video-analysis p{margin:6px 0;color:#d2ddd5;font-size:12px;line-height:1.8}.article-video-analysis ul{margin:8px 0 0;padding-left:19px;color:#b8c9be;font-size:11px;line-height:1.8}.article-video-analysis li{margin:4px 0}
