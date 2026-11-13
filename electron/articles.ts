@@ -102,7 +102,7 @@ export function listStreamArticles(outputDirectory: string, slugInput?: unknown)
 export function deleteStreamArticle(outputDirectory: string, slugInput: unknown, idInput: unknown): { ok: true; id: string } {
   const slug = safeSlug(slugInput);
   if (typeof idInput !== "string" || !idInput.startsWith(slug + "_") ||
-      !/^(?:\\d{8}_\\d{6}|\\d{8}T\\d{6}Z)$/.test(idInput.slice(slug.length + 1))) {
+      !/^(?:[0-9]{8}_[0-9]{6}|[0-9]{8}T[0-9]{6}Z)$/.test(idInput.slice(slug.length + 1))) {
     throw new Error("削除する記事IDが不正です。");
   }
   const root = resolve(outputDirectory);
