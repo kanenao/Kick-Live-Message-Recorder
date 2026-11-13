@@ -93,6 +93,16 @@ type AiArticleStatus = {
   configured: boolean; encryptionAvailable: boolean;
   aiArticleEnabled: boolean; aiArticleProvider: "ollama" | "openai"; aiArticleOllamaUrl: string; aiArticleModel: string; aiArticleIntervalSeconds: number;
 };
+
+type AiModelPullStatus = {
+  model: string;
+  status: string;
+  percent: number | null;
+  completed?: number;
+  total?: number;
+  done: boolean;
+  error?: string;
+};
 type CommentVideoEvent = {
   status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string;
   outputPath?: string; generatedComments?: number; skippedComments?: number;
@@ -237,6 +247,13 @@ const api = {
   saveAiArticleKey: (apiKey: string): Promise<{ ok: true }> => ipcRenderer.invoke("ai-article:save-key", apiKey),
   clearAiArticleKey: (): Promise<{ ok: true }> => ipcRenderer.invoke("ai-article:clear-key"),
   testAiArticleConnection: (model: string): Promise<{ ok: true; message: string }> => ipcRenderer.invoke("ai-article:test", model),
+  pullAiArticleModel: (model: string): Promise<{ ok: true; model: string }> => ipcRenderer.invoke("ai-article:pull-model", model),
+  cancelAiArticleModelPull: (): Promise<{ ok: true; cancelled: boolean; model?: string }> => ipcRenderer.invoke("ai-article:cancel-model-pull"),
+  onAiArticleModelPullStatus: (callback: (status: AiModelPullStatus) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: AiModelPullStatus): void => callback(status);
+    ipcRenderer.on("ai-article:model-pull-status", listener);
+    return () => ipcRenderer.removeListener("ai-article:model-pull-status", listener);
+  },
   onStreamArticleUpdate: (callback: (article: StreamArticle) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, article: StreamArticle): void => callback(article);
     ipcRenderer.on("articles:updated", listener);
