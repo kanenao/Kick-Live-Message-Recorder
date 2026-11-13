@@ -202,6 +202,12 @@ export class LiveStreamArticleManager {
     this.persist(session);
   }
 
+  isArticleActive(slugInput: unknown, idInput: unknown): boolean {
+    if (typeof slugInput !== "string" || typeof idInput !== "string") return false;
+    const session = this.sessions.get(slugInput.toLowerCase());
+    return Boolean(session && session.article.id === idInput && !session.finishing);
+  }
+
   updateViewerCount(metadata: LiveMetadata): void {
     this.startOrUpdate(metadata);
   }
