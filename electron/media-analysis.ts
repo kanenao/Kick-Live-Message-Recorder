@@ -174,7 +174,8 @@ export async function analyzeLiveRecordingMedia(input: {
   const tempDirectory = join(input.outputDirectory, "MediaAnalysis", ".work");
   mkdirSync(tempDirectory, { recursive: true });
   const suffix = Date.now().toString(36) + "-" + process.pid;
-  const framePaths = [-55, -30, -8].map((offset, index) =>
+  const frameOffsets = [-55, -30, -8];
+  const framePaths = frameOffsets.map((_, index) =>
     join(tempDirectory, input.slug + "-" + suffix + "-frame-" + index + ".jpg")
   );
   const audioPath = join(tempDirectory, input.slug + "-" + suffix + ".wav");
@@ -186,7 +187,7 @@ export async function analyzeLiveRecordingMedia(input: {
       try {
         const frame = await runCommand(status.ffmpegPath, [
           "-hide_banner", "-loglevel", "error",
-          "-sseof", String([-55, -30, -8][index]), "-i", input.videoPath,
+          "-sseof", String(frameOffsets[index]), "-i", input.videoPath,
           "-frames:v", "1", "-vf", "scale=1280:-2",
           "-q:v", "4", "-y", framePath
         ], 25_000);
