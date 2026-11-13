@@ -20,12 +20,13 @@ function findTool(executable: "ffmpeg.exe" | "ffmpeg" | "yt-dlp.exe" | "yt-dlp")
   return candidates.find(candidate => existsSync(candidate)) ?? executable;
 }
 
-function resolveLiveStreamUrl(slug: string, isCancelled: () => boolean): Promise<string> {
+function resolveLiveStreamUrl(slug: string, isCancelled: () => boolean, onChild: (child: ChildProcess) => void): Promise<string> {
   return new Promise((resolvePromise, rejectPromise) => {
     const channelUrl = "https://kick.com/" + encodeURIComponent(slug);
     const child = spawn(findTool(process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp"), [
       "--no-warnings", "--no-playlist", "--format", "best", "--get-url", channelUrl
     ], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    onChild(child);
     let stdout = "";
     let stderr = "";
     let settled = false;
@@ -82,6 +83,7 @@ export function startLiveVideoFrameCapture(
   const slug = slugInput.toLowerCase();
   let cancelled = false;
   let finished = false;
+  let resolverChild: ChildProcess | null = null;
   let ffmpegChild: ChildProcess | null = null;
   const frames: VideoFrameSample[] = [];
   const publish = (status: LiveVideoFrameStatus["status"], message: string): void => {
@@ -90,6 +92,7 @@ export function startLiveVideoFrameCapture(
   const stop = (): void => {
     if (cancelled) return;
     cancelled = true;
+    resolverChild?.kill();
     ffmpegChild?.kill();
     if (!finished) publish("stopped", "LIVE映像の取得を停止しました。");
   };
@@ -97,7 +100,8 @@ export function startLiveVideoFrameCapture(
   publish("starting", "録画せずにLIVE映像の解析接続を準備しています。");
   void (async () => {
     try {
-      const streamUrl = await resolveLiveStreamUrl(slug, () => cancelled);
+      const streamUrl = await resolveLiveStreamUrl(slug, () => cancelled, child => { resolverChild = child; });
+      resolverChild = null;
       if (cancelled) return;
       const ffmpeg = findTool(process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
       const child = spawn(ffmpeg, [
