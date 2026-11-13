@@ -162,7 +162,7 @@ const VERSION_HISTORY = [
     title: "未登録チャンネルのLIVE記事専用モードを追加",
     changes: [
       "KickのURLまたはチャンネル名を入力するだけで、チャンネル登録・録画なしにLIVE記事を生成可能に",
-      "LIVEコメントを一時受信し、録画ファイルを作らず代表フレームを最大8枚抽出して映像もAI分析",
+      "LIVEコメントを一時受信し、録画ファイルを作らず25秒間隔で映像を継続解析（AIには直近8枚を使用）",
       "終了時に一時コメント受信を解除し、既存の自動受信チャンネル設定は維持"
     ]
   },
@@ -1867,7 +1867,7 @@ export default function App() {
               {manualLiveArticleSlug && <span className="comment-video-log-count">生成中：{manualLiveArticleSlug}</span>}
             </div>
             {manualLiveArticleSlug && liveArticleCaptureStatus?.slug === manualLiveArticleSlug && <div className={liveArticleCaptureStatus.status === "error" ? "comment-video-status error" : "comment-video-status"} role="status"><strong>{liveArticleCaptureStatus.message}</strong></div>}
-            <div className="notice">LIVE映像はFFmpegで最大8枚の代表フレームだけを抽出します。全編録画は行いません。この機能にはKick API Client ID／Secretの設定が必要です。コメントログの保存は基本設定の「コメントを保存する」に従います。LIVE終了後は「記事を保存して終了」を押してください。</div>
+            <div className="notice">LIVE映像はFFmpegで25秒間隔の代表フレームを継続抽出し、AI分析には直近8枚を使用します。全編録画は行いません。この機能にはKick API Client ID／Secretの設定が必要です。コメントログの保存は基本設定の「コメントを保存する」に従います。LIVE終了後は「記事を保存して終了」を押してください。</div>
           </div>
           <div className="settings-subsection ai-article-settings">
             <div className="settings-subheading"><h3>LIVE中のリアルタイムAI記事</h3><span className={settings.aiArticleProvider === "ollama" ? "api-state connected" : aiArticleStatus.configured ? "api-state connected" : "api-state"}>{settings.aiArticleProvider === "ollama" ? "無料ローカルAI" : aiArticleStatus.configured ? "APIキー設定済み" : "APIキー未設定"}</span></div>
