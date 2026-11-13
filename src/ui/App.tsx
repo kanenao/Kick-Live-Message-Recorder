@@ -129,7 +129,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string }>;
 };
 
-const APP_VERSION = "0.1.0-beta.45";
+const APP_VERSION = "0.1.0-beta.46";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ff4545", lane: 1, delay: 0.7 },
@@ -157,6 +157,15 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffe64a", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.1.0-beta.46",
+    title: "未登録チャンネルのLIVE記事専用モードを追加",
+    changes: [
+      "KickのURLまたはチャンネル名を入力するだけで、チャンネル登録・録画なしにLIVE記事を生成可能に",
+      "LIVEコメントを一時受信し、録画ファイルを作らず代表フレームを最大8枚抽出して映像もAI分析",
+      "終了時に一時コメント受信を解除し、既存の自動受信チャンネル設定は維持"
+    ]
+  },
   {
     version: "0.1.0-beta.45",
     title: "録画映像からの記事生成に対応",
@@ -548,6 +557,10 @@ export default function App() {
   const [articleBusy, setArticleBusy] = useState(false);
   const [deletingArticleId, setDeletingArticleId] = useState<string | null>(null);
   const [articleMessage, setArticleMessage] = useState("");
+  const [manualLiveArticleInput, setManualLiveArticleInput] = useState("");
+  const [manualLiveArticleBusy, setManualLiveArticleBusy] = useState(false);
+  const [manualLiveArticleSlug, setManualLiveArticleSlug] = useState("");
+  const [liveArticleCaptureStatus, setLiveArticleCaptureStatus] = useState<{ slug: string; status: "starting" | "capturing" | "completed" | "stopped" | "error"; frameCount: number; message: string } | null>(null);
   const [aiArticleApiKey, setAiArticleApiKey] = useState("");
   const [aiArticleStatus, setAiArticleStatus] = useState<AiArticleStatus>({
     configured: false, encryptionAvailable: false, aiArticleEnabled: false,
@@ -740,6 +753,11 @@ export default function App() {
     });
     return () => { active = false; };
   }, [tab, isDesktop, libraryRefreshKey, settings.outputDirectory]);
+
+  useEffect(() => {
+    if (!isDesktop || !window.kickRecorder) return;
+    return window.kickRecorder.onLiveArticleCaptureStatus(status => setLiveArticleCaptureStatus(status));
+  }, [isDesktop]);
 
   useEffect(() => {
     if (tab !== "articles" || !isDesktop || !window.kickRecorder) return;
@@ -1290,6 +1308,39 @@ export default function App() {
     } finally { setAiArticleBusy(false); }
   }
 
+  async function startManualLiveArticle() {
+    if (!window.kickRecorder || !manualLiveArticleInput.trim()) return;
+    setManualLiveArticleBusy(true);
+    setArticleMessage("");
+    try {
+      const result = await window.kickRecorder.startManualLiveArticle(manualLiveArticleInput.trim());
+      setManualLiveArticleSlug(result.slug);
+      setManualLiveArticleInput("");
+      setArticleMessage(`未登録チャンネル「${result.slug}」の記事専用LIVEを開始しました。録画は行いません。`);
+      setStreamArticles(await window.kickRecorder.listStreamArticles());
+    } catch (error) {
+      setArticleMessage(error instanceof Error ? error.message : "記事専用LIVEを開始できませんでした。");
+    } finally {
+      setManualLiveArticleBusy(false);
+    }
+  }
+
+  async function stopManualLiveArticle() {
+    if (!window.kickRecorder || !manualLiveArticleSlug) return;
+    setManualLiveArticleBusy(true);
+    setArticleMessage("");
+    try {
+      const result = await window.kickRecorder.stopManualLiveArticle();
+      setManualLiveArticleSlug("");
+      setArticleMessage(`「${result.slug}」の記事を保存し、記事専用LIVEを終了しました。`);
+      setStreamArticles(await window.kickRecorder.listStreamArticles());
+    } catch (error) {
+      setArticleMessage(error instanceof Error ? error.message : "記事専用LIVEを停止できませんでした。");
+    } finally {
+      setManualLiveArticleBusy(false);
+    }
+  }
+
   async function createStreamArticle() {
     if (!window.kickRecorder || !articleVideoPath || !articleSlug) return;
     setArticleBusy(true);
@@ -1804,6 +1855,20 @@ export default function App() {
         </div>
         {!isDesktop ? <div className="empty-state"><strong>Windowsデスクトップ版で利用できます</strong><span>録画ファイルとコメントログを読み込む必要があります。</span></div> : <>
           <div className="comment-video-intro">録画済み配信は、コメント・配信情報に加えて、録画動画から一定間隔で抽出した最大8枚の代表フレームもAI分析できます。映像から確認できた場面・画面内のテキスト・表示内容を記事へ反映します。AIは音声やフレーム間の動きを直接解析するものではないため、確認できない発言・出来事は推測しません。LIVE中の自動記事は従来どおりコメントと配信情報を使って更新します。</div>
+          <div className="settings-subsection manual-live-article-panel">
+            <div className="settings-subheading"><h3>登録不要：LIVE記事だけ生成</h3><span className="api-state connected">録画なし</span></div>
+            <p className="manual-live-article-description">チャンネル管理に登録していない配信者でも利用できます。Kickのチャンネル名またはURLを入力すると、LIVEコメントと映像の代表フレームを取得して記事を自動更新します。録画ファイルは作成せず、通常のチャンネル登録・自動録画設定も変更しません。</p>
+            <div className="comment-video-form-grid">
+              <label className="comment-video-field"><span>Kickチャンネル名／URL</span><input value={manualLiveArticleInput} onChange={event => setManualLiveArticleInput(event.target.value)} placeholder="例：streamer_name または https://kick.com/streamer_name" disabled={manualLiveArticleBusy || Boolean(manualLiveArticleSlug)} /></label>
+            </div>
+            <div className="comment-video-actions">
+              <button className="primary-small" onClick={() => void startManualLiveArticle()} disabled={manualLiveArticleBusy || Boolean(manualLiveArticleSlug) || !manualLiveArticleInput.trim()}>{manualLiveArticleBusy ? "LIVE情報を確認中..." : "登録せずにLIVE記事を開始"}</button>
+              {manualLiveArticleSlug && <button className="remove" onClick={() => void stopManualLiveArticle()} disabled={manualLiveArticleBusy}>記事を保存して終了</button>}
+              {manualLiveArticleSlug && <span className="comment-video-log-count">生成中：{manualLiveArticleSlug}</span>}
+            </div>
+            {manualLiveArticleSlug && liveArticleCaptureStatus?.slug === manualLiveArticleSlug && <div className={liveArticleCaptureStatus.status === "error" ? "comment-video-status error" : "comment-video-status"} role="status"><strong>{liveArticleCaptureStatus.message}</strong></div>}
+            <div className="notice">LIVE映像はFFmpegで最大8枚の代表フレームだけを抽出します。全編録画は行いません。コメント受信にはアプリのKick API認証設定が必要です。LIVE終了後は「記事を保存して終了」を押してください。</div>
+          </div>
           <div className="settings-subsection ai-article-settings">
             <div className="settings-subheading"><h3>LIVE中のリアルタイムAI記事</h3><span className={settings.aiArticleProvider === "ollama" ? "api-state connected" : aiArticleStatus.configured ? "api-state connected" : "api-state"}>{settings.aiArticleProvider === "ollama" ? "無料ローカルAI" : aiArticleStatus.configured ? "APIキー設定済み" : "APIキー未設定"}</span></div>
             <label className="comment-video-checkbox"><input type="checkbox" checked={settings.aiArticleEnabled} onChange={event => setSettings(previous => ({ ...previous, aiArticleEnabled: event.target.checked }))} disabled={settings.aiArticleProvider === "openai" && !aiArticleStatus.configured} /><span>登録配信者のLIVEを自動でAI記事化する</span></label>
