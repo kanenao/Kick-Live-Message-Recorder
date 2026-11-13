@@ -74,6 +74,7 @@ type LiveSession = {
   analysisInFlight: boolean;
   finishing: boolean;
   videoFrames?: VideoFrameSample[];
+  forceAi?: boolean;
 };
 
 const STOP_WORDS = new Set(["これ", "それ", "ここ", "こと", "もの", "さん", "する", "いる", "ある", "ない", "です", "ます", "www", "草", "ｗｗｗ"]);
@@ -153,12 +154,13 @@ export class LiveStreamArticleManager {
     private readonly onUpdated: (article: LiveArticle) => void
   ) {}
 
-  startOrUpdate(metadata: LiveMetadata): void {
+  startOrUpdate(metadata: LiveMetadata, forceAi = false): void {
     const config = this.getConfig();
     const apiKey = config.provider === "ollama" ? "local" : this.getApiKey();
     const slug = slugify(metadata.slug);
     const existing = this.sessions.get(slug);
     if (existing) {
+      if (forceAi) existing.forceAi = true;
       existing.article.viewerCount = Math.max(0, Math.floor(metadata.viewerCount));
       existing.article.peakViewerCount = Math.max(existing.article.peakViewerCount ?? 0, existing.article.viewerCount);
       if (metadata.streamTitle && !existing.article.aiGenerated) existing.article.headline = metadata.streamTitle.slice(0, 160);
@@ -182,7 +184,7 @@ export class LiveStreamArticleManager {
         if (stored && stored.id === id && stored.slug === slug && Array.isArray(stored.paragraphs)) previous = stored;
       } catch { /* Ignore an incomplete previous checkpoint and start a fresh article. */ }
     }
-    if (!previous && (!config.enabled || !apiKey)) return;
+    if (!previous && ((!config.enabled && !forceAi) || !apiKey)) return;
     const currentViewerCount = Math.max(0, Math.floor(metadata.viewerCount));
     const article: LiveArticle = previous ? {
       ...previous,
@@ -207,10 +209,33 @@ export class LiveStreamArticleManager {
       article, directory: articleRoot, commenters: new Set(),
       uniqueCommenterBaseline: previous?.uniqueCommenters ?? 0,
       keywordCounts: new Map((previous?.keywords ?? []).map(word => [word, 1])),
-      pendingComments: [], lastAnalysisAt: 0, analysisInFlight: false, finishing: false
+      pendingComments: [], lastAnalysisAt: 0, analysisInFlight: false, finishing: false, forceAi
     };
     this.sessions.set(slug, session);
     this.persist(session);
+  }
+
+  startManualArticle(metadata: LiveMetadata): LiveArticle {
+    this.startOrUpdate(metadata, true);
+    const slug = slugify(metadata.slug);
+    const session = this.sessions.get(slug);
+    if (!session) throw new Error("記事セッションを開始できませんでした。AI設定と接続を確認してください。");
+    session.forceAi = true;
+    return { ...session.article, paragraphs: [...session.article.paragraphs], keywords: [...session.article.keywords], highlights: [...(session.article.highlights ?? [])] };
+  }
+
+  hasSession(slugInput: unknown): boolean {
+    if (typeof slugInput !== "string") return false;
+    return this.sessions.has(slugInput.toLowerCase());
+  }
+
+  updateVideoFrames(slugInput: unknown, frames: VideoFrameSample[]): void {
+    if (typeof slugInput !== "string" || !Array.isArray(frames) || frames.length === 0) return;
+    const session = this.sessions.get(slugInput.toLowerCase());
+    if (!session || session.finishing) return;
+    session.videoFrames = frames.slice(-8);
+    const count = session.videoFrames.length;
+    if (count === 1 || count % 3 === 0 || count >= 8) void this.analyze(session, false, true);
   }
 
   isArticleActive(slugInput: unknown, idInput: unknown): boolean {
@@ -295,7 +320,7 @@ export class LiveStreamArticleManager {
     if (session.article.commentCount % 10 === 0) this.persist(session);
     const intervalMs = Math.max(30, Math.min(600, this.getConfig().intervalSeconds)) * 1000;
     if (session.pendingComments.length >= 12 && Date.now() - session.lastAnalysisAt >= intervalMs && !session.analysisInFlight) {
-      void this.analyze(session, false);
+      void this.analyze(session, false, session.forceAi === true);
     }
   }
 
@@ -370,7 +395,7 @@ export class LiveStreamArticleManager {
     if (session.analysisInFlight || (session.pendingComments.length === 0 && !session.videoFrames?.length)) return;
     const config = this.getConfig();
     const key = config.provider === "ollama" ? "local" : this.getApiKey();
-    if ((!config.enabled && !force) || !key) return;
+    if ((!config.enabled && !session.forceAi && !force) || !key) return;
     session.analysisInFlight = true;
     session.lastAnalysisAt = Date.now();
     const batch = session.pendingComments.splice(0, final ? 120 : 80);
