@@ -74,6 +74,7 @@ type LiveSession = {
   analysisInFlight: boolean;
   finishing: boolean;
   videoFrames?: VideoFrameSample[];
+  videoFrameTotalCount?: number;
   forceAi?: boolean;
 };
 
@@ -209,7 +210,8 @@ export class LiveStreamArticleManager {
       article, directory: articleRoot, commenters: new Set(),
       uniqueCommenterBaseline: previous?.uniqueCommenters ?? 0,
       keywordCounts: new Map((previous?.keywords ?? []).map(word => [word, 1])),
-      pendingComments: [], lastAnalysisAt: 0, analysisInFlight: false, finishing: false, forceAi
+      pendingComments: [], lastAnalysisAt: 0, analysisInFlight: false, finishing: false,
+      videoFrameTotalCount: previous?.videoFrameCount ?? 0, forceAi
     };
     this.sessions.set(slug, session);
     this.persist(session);
@@ -234,8 +236,9 @@ export class LiveStreamArticleManager {
     const session = this.sessions.get(slugInput.toLowerCase());
     if (!session || session.finishing) return;
     session.videoFrames = frames.slice(-8);
-    const count = session.videoFrames.length;
-    if (count === 1 || count % 3 === 0 || count >= 8) void this.analyze(session, false, true);
+    session.videoFrameTotalCount = (session.videoFrameTotalCount ?? 0) + 1;
+    const count = session.videoFrameTotalCount;
+    if (count === 1 || count % 3 === 0) void this.analyze(session, false, true);
   }
 
   isArticleActive(slugInput: unknown, idInput: unknown): boolean {
@@ -520,7 +523,7 @@ export class LiveStreamArticleManager {
       if (session.videoFrames?.length) {
         if (!result.videoSummary) throw new Error("映像の分析結果が返されませんでした。画像対応モデル（例：qwen2.5vl:3b）を選択してください。");
         article.videoAnalyzed = true;
-        article.videoFrameCount = session.videoFrames.length;
+        article.videoFrameCount = session.videoFrameTotalCount ?? session.videoFrames.length;
         article.videoSummary = result.videoSummary;
         article.videoScenes = result.videoScenes;
         article.videoAnalyzedAt = new Date().toISOString();
