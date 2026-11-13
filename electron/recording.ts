@@ -131,7 +131,7 @@ export class KickRecordingManager {
       }
     } catch { /* Resolve the active output by its timestamped filename below. */ }
 
-    const prefix = basename(session.filePath).replace(/\\.[^.]+$/, "");
+    const prefix = basename(session.filePath).replace(/\.[^.]+$/, "");
     try {
       const candidates = readdirSync(session.outputDirectory)
         .filter(name => name.startsWith(prefix) && supported.has(extname(name).toLowerCase()))
