@@ -79,7 +79,8 @@ export function startLiveVideoFrameCapture(
   slugInput: string,
   onFrame: (frame: VideoFrameSample) => void,
   onStatus: (status: LiveVideoFrameStatus) => void,
-  onAudioChunk?: (chunk: LiveAudioChunk) => void
+  onAudioChunk?: (chunk: LiveAudioChunk) => void,
+  onAudioError?: (message: string) => void
 ): () => Promise<void> {
   if (typeof slugInput !== "string" || !/^[a-zA-Z0-9_]{1,25}$/.test(slugInput)) {
     throw new Error("LIVE映像を解析するKickチャンネル名が不正です。");
@@ -139,8 +140,10 @@ export function startLiveVideoFrameCapture(
             "-segment_format", "wav", "-reset_timestamps", "1",
             "-segment_list", audioListPath, "-segment_list_type", "csv",
             join(audioDirectory, "audio-%05d.wav")
-          ], { windowsHide: true, stdio: ["ignore", "ignore", "ignore"] });
+          ], { windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });
           audioChild = audio;
+          let audioStderr = "";
+          let audioFinalized = false;
           const flushAudioSegments = (): void => {
             if (!audioDirectory || !existsSync(audioListPath)) return;
             let entries: string[];
@@ -166,22 +169,37 @@ export function startLiveVideoFrameCapture(
               } catch { /* A segment still being finalized will be picked up on the next poll. */ }
             }
           };
-          audioPollTimer = setInterval(flushAudioSegments, 2500);
-          audio.once("error", () => {
-            if (audioPollTimer) clearInterval(audioPollTimer);
-            audioPollTimer = null;
-            flushAudioSegments();
-            if (audioDirectory) rmSync(audioDirectory, { recursive: true, force: true });
-            audioDirectory = "";
-            finishAudioCapture();
+          audio.stderr?.on("data", chunk => {
+            audioStderr = (audioStderr + String(chunk)).slice(-3000);
           });
-          audio.once("close", () => {
+          const finalizeAudioCapture = (errorMessage?: string): void => {
+            if (audioFinalized) return;
+            audioFinalized = true;
             if (audioPollTimer) clearInterval(audioPollTimer);
             audioPollTimer = null;
             flushAudioSegments();
+            if (errorMessage && !cancelled) onAudioError?.(errorMessage.slice(0, 500));
             if (audioDirectory) rmSync(audioDirectory, { recursive: true, force: true });
             audioDirectory = "";
             finishAudioCapture();
+          };
+          audioPollTimer = setInterval(flushAudioSegments, 2500);
+          audio.once("error", error => {
+            finalizeAudioCapture("LIVE音声のFFmpegを起動できませんでした：" + error.message);
+          });
+          audio.once("close", code => {
+            if (cancelled) {
+              finalizeAudioCapture();
+              return;
+            }
+            if (code !== 0) {
+              finalizeAudioCapture("LIVE音声ストリームの取得に失敗しました。" +
+                (audioStderr ? " " + audioStderr.slice(-700) : " 終了コード：" + String(code ?? "不明")));
+              return;
+            }
+            finalizeAudioCapture(audioSegmentCount === 0
+              ? "LIVE配信から音声トラックを取得できませんでした。配信に音声がないか、音声形式がFFmpegに対応していない可能性があります。"
+              : undefined);
           });
         } catch {
           if (audioDirectory) rmSync(audioDirectory, { recursive: true, force: true });
