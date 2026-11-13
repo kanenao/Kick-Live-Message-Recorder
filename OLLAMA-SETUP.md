@@ -4,7 +4,7 @@ All AI inference runs on the user's Windows PC. No OpenAI API key, cloud model a
 
 ## 1. Install Ollama and models
 
-Install Ollama 0.7.0 or later from https://ollama.com/download. The official Ollama model page lists qwen2.5vl:3b as a 3.2GB vision model., then run in PowerShell:
+Install Ollama 0.7.0 or later from https://ollama.com/download. The official Ollama model page lists qwen2.5vl:3b as a 3.2GB vision model. Then run in PowerShell:
 
 ```powershell
 ollama pull qwen2.5:3b
@@ -27,11 +27,11 @@ The app remembers each selected path locally. The tools and model are not bundle
 ## 3. Enable live multimodal articles
 
 1. Register the Kick channel in the dashboard.
-2. Start automatic or manual recording. Live audio/video analysis requires an active local recording.
-3. Start chat receiving in Settings, register the displayed Webhook URL in Kick Developer, and subscribe to the channel's `chat.message.sent` event.
+2. Start automatic or manual recording. Live audio/video analysis requires an active local recording; the local recording itself is the live capture source.
+3. (Optional) Start chat receiving in Settings, register the displayed Webhook URL in Kick Developer, and subscribe to the channel's `chat.message.sent` event. Chat is optional for video/audio-only articles.
 4. Enable "配信中の記事を自動生成".
 
-While the stream is live and recording, the app samples up to three recent video frames and about 60 seconds of recent audio approximately every three minutes. Whisper.cpp transcribes the audio in Japanese. Ollama Vision summarizes what can be observed in the frame. The text model combines those observations with the saved Kick comments and stream metadata into a live article. A new article can be created even if no new chat message arrived during that cycle, as long as the recording remains active.
+While the stream is live and recording, the app samples up to three recent video frames and about 60 seconds of recent audio approximately every 60 seconds. The analysis timer starts when recording begins, and does not require the chat webhook server to be running. Whisper.cpp transcribes the audio in Japanese. Ollama Vision summarizes what can be observed in the frame. The text model combines those observations with the saved Kick comments and stream metadata into a live article. A new article can be created even if no new chat message arrived during that cycle, or if chat reception has not been configured, as long as the recording remains active.
 
 If recording is not active, the app can still make a comment-based article from saved chat messages, but it cannot analyze video or audio. If a tool or model is unavailable, the app reports a warning and can continue with whatever evidence is available.
 
@@ -41,7 +41,7 @@ If recording is not active, the app can still make a comment-based article from 
 - The temporary image/audio/transcript files used for a sampling cycle are removed after processing.
 - Article JSON files retain the generated text, evidence-source labels, visual summary, and transcript sample so the article can be reviewed later.
 - Speech recognition can mishear names, numbers, and overlapping speech. AI summaries may omit scene changes; review them against the original recording.
-- The three-minute sampling design is a periodic snapshot, not a full-frame-by-frame video understanding or a perfect full-stream transcript.
+- The 60-second sampling design is a periodic snapshot, not a full-frame-by-frame video understanding or a perfect full-stream transcript.
 
 ## Performance
 
