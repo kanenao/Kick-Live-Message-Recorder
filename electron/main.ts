@@ -58,6 +58,8 @@ type AppSettings = {
   aiArticleOllamaUrl: string;
   aiArticleModel: string;
   aiArticleIntervalSeconds: number;
+  aiArticleAudioEnabled: boolean;
+  aiArticleAudioModel: string;
 };
 
 type AppState = {
@@ -88,7 +90,9 @@ const DEFAULT_STATE: AppState = {
     aiArticleProvider: "ollama",
     aiArticleOllamaUrl: "http://127.0.0.1:11434",
     aiArticleModel: "qwen2.5vl:3b",
-    aiArticleIntervalSeconds: 120
+    aiArticleIntervalSeconds: 120,
+    aiArticleAudioEnabled: true,
+    aiArticleAudioModel: "frozenlab/qwen3-asr:0.6b"
   }
 };
 
@@ -600,7 +604,15 @@ const liveArticleManager = new LiveStreamArticleManager(
   getRecordingOutputDirectory,
   () => {
     const settings = readState().settings;
-    return { enabled: settings.aiArticleEnabled, provider: settings.aiArticleProvider, baseUrl: settings.aiArticleOllamaUrl, model: settings.aiArticleModel, intervalSeconds: settings.aiArticleIntervalSeconds };
+    return {
+      enabled: settings.aiArticleEnabled,
+      provider: settings.aiArticleProvider,
+      baseUrl: settings.aiArticleOllamaUrl,
+      model: settings.aiArticleModel,
+      intervalSeconds: settings.aiArticleIntervalSeconds,
+      audioEnabled: settings.aiArticleAudioEnabled,
+      audioModel: settings.aiArticleAudioModel
+    };
   },
   readOpenAiApiKey,
   article => mainWindow?.webContents.send("articles:updated", article)
@@ -773,7 +785,11 @@ function normalizeState(input: unknown): AppState {
         ? (settings.aiArticleProvider !== "openai" && settings.aiArticleModel === "qwen2.5:3b" ? "qwen2.5vl:3b" : settings.aiArticleModel)
         : (settings.aiArticleProvider === "openai" ? "gpt-6-luna" : "qwen2.5vl:3b"),
       aiArticleIntervalSeconds: typeof settings.aiArticleIntervalSeconds === "number" && Number.isFinite(settings.aiArticleIntervalSeconds)
-        ? Math.max(30, Math.min(600, Math.round(settings.aiArticleIntervalSeconds))) : 120
+        ? Math.max(30, Math.min(600, Math.round(settings.aiArticleIntervalSeconds))) : 120,
+      aiArticleAudioEnabled: settings.aiArticleAudioEnabled !== false,
+      aiArticleAudioModel: typeof settings.aiArticleAudioModel === "string" &&
+        /^[a-zA-Z0-9._:/-]{1,120}$/.test(settings.aiArticleAudioModel)
+        ? settings.aiArticleAudioModel : "frozenlab/qwen3-asr:0.6b"
     }
   };
 }
