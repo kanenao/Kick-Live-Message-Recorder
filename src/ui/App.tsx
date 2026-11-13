@@ -112,6 +112,7 @@ type StreamArticle = {
   paragraphs: string[]; sourceVideo: string; sourceLogs: string[]; createdAt: string;
   status?: "live" | "completed"; aiGenerated?: boolean; aiSummary?: string; highlights?: string[];
   lastAiUpdateAt?: string | null; viewerCount?: number; peakViewerCount?: number; aiError?: string;
+  videoAnalyzed?: boolean; videoFrameCount?: number; videoSummary?: string; videoScenes?: string[]; videoAnalyzedAt?: string | null;
 };
 type AiArticleStatus = {
   configured: boolean; encryptionAvailable: boolean;
@@ -128,7 +129,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string }>;
 };
 
-const APP_VERSION = "0.1.0-beta.44";
+const APP_VERSION = "0.1.0-beta.45";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ff4545", lane: 1, delay: 0.7 },
@@ -156,6 +157,15 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffe64a", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.1.0-beta.45",
+    title: "録画映像からの記事生成に対応",
+    changes: [
+      "録画動画から代表フレームを最大8枚抽出し、画像対応AIで映像の場面・画面表示を記事へ反映",
+      "コメントログがない配信でも映像解析だけで記事を生成可能に。コメント分析との併用にも対応",
+      "記事カードに映像要約・時刻付き場面説明・分析フレーム数を表示"
+    ]
+  },
   {
     version: "0.1.0-beta.44",
     title: "配信記事の管理・削除機能を強化",
@@ -335,7 +345,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   aiArticleEnabled: false,
   aiArticleProvider: "ollama",
   aiArticleOllamaUrl: "http://127.0.0.1:11434",
-  aiArticleModel: "qwen2.5:3b",
+  aiArticleModel: "qwen2.5vl:3b",
   aiArticleIntervalSeconds: 120
 };
 
@@ -408,7 +418,7 @@ function normalizeState(value: unknown): PersistedState {
       aiArticleProvider: settings.aiArticleProvider === "openai" ? "openai" : "ollama",
       aiArticleOllamaUrl: typeof settings.aiArticleOllamaUrl === "string" ? settings.aiArticleOllamaUrl.slice(0, 300) : "http://127.0.0.1:11434",
       aiArticleModel: typeof settings.aiArticleModel === "string" && /^[a-zA-Z0-9._:-]{1,100}$/.test(settings.aiArticleModel)
-        ? settings.aiArticleModel : (settings.aiArticleProvider === "openai" ? "gpt-6-luna" : "qwen2.5:3b"),
+        ? (settings.aiArticleProvider !== "openai" && settings.aiArticleModel === "qwen2.5:3b" ? "qwen2.5vl:3b" : settings.aiArticleModel) : (settings.aiArticleProvider === "openai" ? "gpt-6-luna" : "qwen2.5vl:3b"),
       aiArticleIntervalSeconds: typeof settings.aiArticleIntervalSeconds === "number"
         ? Math.max(30, Math.min(600, Math.round(settings.aiArticleIntervalSeconds))) : 120
     }
@@ -541,7 +551,7 @@ export default function App() {
   const [aiArticleApiKey, setAiArticleApiKey] = useState("");
   const [aiArticleStatus, setAiArticleStatus] = useState<AiArticleStatus>({
     configured: false, encryptionAvailable: false, aiArticleEnabled: false,
-    aiArticleProvider: "ollama", aiArticleOllamaUrl: "http://127.0.0.1:11434", aiArticleModel: "qwen2.5:3b", aiArticleIntervalSeconds: 120
+    aiArticleProvider: "ollama", aiArticleOllamaUrl: "http://127.0.0.1:11434", aiArticleModel: "qwen2.5vl:3b", aiArticleIntervalSeconds: 120
   });
   const [aiArticleBusy, setAiArticleBusy] = useState(false);
   const [aiArticleMessage, setAiArticleMessage] = useState("");
@@ -1297,7 +1307,7 @@ export default function App() {
       const updated = await window.kickRecorder.listStreamArticles();
       setStreamArticles(updated);
       setArticleMessage(article.aiGenerated
-        ? `AI記事「${article.headline}」を保存しました。コメント${article.commentCount.toLocaleString("ja-JP")}件を分析しました。`
+        ? `AI記事「${article.headline}」を保存しました。コメント${article.commentCount.toLocaleString("ja-JP")}件${article.videoAnalyzed ? `・映像フレーム${article.videoFrameCount ?? 0}枚` : ""}を分析しました。`
         : article.aiError ? `基本記事を保存しました。AI分析は未完了です：${article.aiError}`
         : `記事「${article.headline}」を保存しました。コメント${article.commentCount.toLocaleString("ja-JP")}件を集計しました。`);
       setArticleHeadline("");
@@ -1793,15 +1803,15 @@ export default function App() {
           <button className="small-action" onClick={() => setLibraryRefreshKey(value => value + 1)} disabled={!isDesktop || articleBusy}>一覧を更新</button>
         </div>
         {!isDesktop ? <div className="empty-state"><strong>Windowsデスクトップ版で利用できます</strong><span>録画ファイルとコメントログを読み込む必要があります。</span></div> : <>
-          <div className="comment-video-intro">録画済み配信は保存済みコメントログをAIで分析して記事を強化できます。AI記事をONにすると、LIVE中の配信も自動で記事化し、コメントの流れに合わせて随時更新します。AIは配信タイトル・カテゴリ・視聴者数・公開チャットコメントを分析します。映像・音声そのものを視聴する機能ではありません。</div>
+          <div className="comment-video-intro">録画済み配信は、コメント・配信情報に加えて、録画動画から一定間隔で抽出した最大8枚の代表フレームもAI分析できます。映像から確認できた場面・画面内のテキスト・表示内容を記事へ反映します。AIは音声やフレーム間の動きを直接解析するものではないため、確認できない発言・出来事は推測しません。LIVE中の自動記事は従来どおりコメントと配信情報を使って更新します。</div>
           <div className="settings-subsection ai-article-settings">
             <div className="settings-subheading"><h3>LIVE中のリアルタイムAI記事</h3><span className={settings.aiArticleProvider === "ollama" ? "api-state connected" : aiArticleStatus.configured ? "api-state connected" : "api-state"}>{settings.aiArticleProvider === "ollama" ? "無料ローカルAI" : aiArticleStatus.configured ? "APIキー設定済み" : "APIキー未設定"}</span></div>
             <label className="comment-video-checkbox"><input type="checkbox" checked={settings.aiArticleEnabled} onChange={event => setSettings(previous => ({ ...previous, aiArticleEnabled: event.target.checked }))} disabled={settings.aiArticleProvider === "openai" && !aiArticleStatus.configured} /><span>登録配信者のLIVEを自動でAI記事化する</span></label>
             <div className="comment-video-form-grid ai-article-form-grid">
-              <label className="comment-video-field"><span>AIエンジン</span><select value={settings.aiArticleProvider} onChange={event => setSettings(previous => ({ ...previous, aiArticleProvider: event.target.value as "ollama" | "openai", aiArticleModel: event.target.value === "ollama" ? "qwen2.5:3b" : "gpt-6-luna" }))} disabled={aiArticleBusy}><option value="ollama">Ollama（無料・ローカルAI）</option><option value="openai">OpenAI API（有料）</option></select></label>
+              <label className="comment-video-field"><span>AIエンジン</span><select value={settings.aiArticleProvider} onChange={event => setSettings(previous => ({ ...previous, aiArticleProvider: event.target.value as "ollama" | "openai", aiArticleModel: event.target.value === "ollama" ? "qwen2.5vl:3b" : "gpt-6-luna" }))} disabled={aiArticleBusy}><option value="ollama">Ollama（無料・ローカルAI）</option><option value="openai">OpenAI API（有料）</option></select></label>
               {settings.aiArticleProvider === "ollama" ? <>
                 <label className="comment-video-field"><span>Ollama接続URL</span><input type="url" value={settings.aiArticleOllamaUrl} onChange={event => setSettings(previous => ({ ...previous, aiArticleOllamaUrl: event.target.value }))} placeholder="http://127.0.0.1:11434" disabled={aiArticleBusy} /><small>通常はこの初期値のままで利用できます。</small></label>
-                <label className="comment-video-field"><span>Ollamaモデル名</span><input value={settings.aiArticleModel} onChange={event => setSettings(previous => ({ ...previous, aiArticleModel: event.target.value }))} placeholder="qwen2.5:3b" disabled={aiArticleBusy} /><small>例：qwen2.5:3b、llama3.2:3b</small></label>
+                <label className="comment-video-field"><span>Ollamaモデル名</span><input value={settings.aiArticleModel} onChange={event => setSettings(previous => ({ ...previous, aiArticleModel: event.target.value }))} placeholder="qwen2.5vl:3b" disabled={aiArticleBusy} /><small>映像解析対応モデル：qwen2.5vl:3b（初回は ollama pull qwen2.5vl:3b）。Qwen3-VLなども利用できます。</small></label>
               </> : <>
               <label className="comment-video-field"><span>OpenAI APIキー</span><input type="password" value={aiArticleApiKey} onChange={event => setAiArticleApiKey(event.target.value)} placeholder={aiArticleStatus.configured ? "保存済み（変更するときだけ入力）" : "sk-..."} autoComplete="new-password" disabled={aiArticleBusy || !aiArticleStatus.encryptionAvailable} /><small>キー自体は画面や設定ファイルへ保存せず、Windowsの暗号化ストレージへ保存します。</small></label>
               <label className="comment-video-field"><span>AIモデル</span><select value={settings.aiArticleModel} onChange={event => setSettings(previous => ({ ...previous, aiArticleModel: event.target.value }))} disabled={aiArticleBusy}><option value="gpt-6-luna">GPT-6 Luna（低コスト・推奨）</option><option value="gpt-6.1-terra">GPT-6.1 Terra</option><option value="gpt-6.1-sol">GPT-6.1 Sol</option></select></label>
@@ -1813,7 +1823,7 @@ export default function App() {
               <button className="small-action" onClick={() => void testAiArticleConnection()} disabled={aiArticleBusy}>{settings.aiArticleProvider === "ollama" ? "Ollama接続テスト" : "接続テスト"}</button>
             </div>
             {aiArticleMessage && <div className="api-message" role="status">{aiArticleMessage}</div>}
-            <div className="notice">AI記事を有効にすると、通常のコメント自動取得設定がOFFでも、登録した通常・録画専用チャンネルのコメントを記事作成用に受信します。12件程度の新着コメントをまとめて更新し、配信終了時に最終記事を作成します。{settings.aiArticleProvider === "ollama" ? "コメント・配信情報はPC内のOllamaへ送信され、外部AIサービスへは送信されません。Ollama本体とモデルのインストールが必要です。モデルの実行にはPCのメモリ・CPU/GPUを使用します。" : "コメント本文・配信者名・配信タイトル・カテゴリ・視聴者数などをOpenAI APIへ送信して分析します。公開コメントでも個人情報が含まれる可能性があるため、送信してよい配信だけを対象にしてください。API利用料はOpenAIアカウントへ発生します。"}</div>
+            <div className="notice">AI記事の自動更新をONにすると、通常のコメント自動取得設定がOFFでも記事用コメントを受信します。録画済み動画の手動記事生成は、自動LIVE記事のON／OFFとは独立してAI分析します。{settings.aiArticleProvider === "ollama" ? "映像フレーム・コメント・配信情報はPC内のOllamaへ送信され、外部AIサービスへは送信されません。映像解析には画像対応モデル（qwen2.5vl:3bなど）が必要です。モデルの実行にはPCのメモリ・CPU/GPUを使用します。" : "映像から抽出した代表フレーム、コメント、配信情報をOpenAI APIへ送信して分析します。API利用料が発生するほか、映像フレームも外部へ送信されるため、送信してよい録画だけを対象にしてください。"}</div>
           </div>
           <div className="comment-video-form-grid">
             <label className="comment-video-field"><span>登録配信者</span><select value={articleSlug} onChange={event => setArticleSlug(event.target.value)}>
@@ -1826,7 +1836,7 @@ export default function App() {
             </select></label>
             <label className="comment-video-field"><span>記事見出し（任意）</span><input value={articleHeadline} onChange={event => setArticleHeadline(event.target.value)} maxLength={160} placeholder="空欄なら配信者名から自動作成" /></label>
           </div>
-          <div className="comment-video-actions"><button className="primary-small" onClick={() => void createStreamArticle()} disabled={articleBusy || !articleSlug || !articleVideoPath}>{articleBusy ? "記事を作成中..." : settings.aiArticleEnabled && (settings.aiArticleProvider === "ollama" || aiArticleStatus.configured) ? "AI分析付き記事を生成" : "この配信の記事を生成"}</button><span className="comment-video-log-count">同じ配信者のコメントログ {commentLogFiles.filter(file => file.channelSlug.toLowerCase() === articleSlug.toLowerCase()).length}件を自動で参照</span></div>
+          <div className="comment-video-actions"><button className="primary-small" onClick={() => void createStreamArticle()} disabled={articleBusy || !articleSlug || !articleVideoPath}>{articleBusy ? "映像・コメントをAI分析中..." : settings.aiArticleProvider === "ollama" || aiArticleStatus.configured ? "映像・コメントAI分析付き記事を生成" : "この配信の記事を生成"}</button><span className="comment-video-log-count">同じ配信者のコメントログ {commentLogFiles.filter(file => file.channelSlug.toLowerCase() === articleSlug.toLowerCase()).length}件を自動で参照</span></div>
           {articleMessage && <div className="api-message" role="status">{articleMessage}</div>}
           <div className="article-list">
             <div className="settings-subheading article-list-heading"><h3>記事一覧</h3><span className="api-state connected">{filteredStreamArticles.length}件 / 全{streamArticles.length}件</span></div>
@@ -1836,6 +1846,7 @@ export default function App() {
               <h3>{article.headline}</h3>
               {article.category && <span className="live-stream-category">{article.category}</span>}
               {article.aiSummary && <p className="article-summary">{article.aiSummary}</p>}
+              {article.videoAnalyzed && <div className="article-video-analysis"><strong>映像分析済み（代表フレーム {article.videoFrameCount ?? article.videoScenes?.length ?? 0}枚）</strong><p>{article.videoSummary}</p>{Boolean(article.videoScenes?.length) && <ul>{article.videoScenes?.map((scene, index) => <li key={index}>{scene}</li>)}</ul>}</div>}
               {article.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
               {Boolean(article.highlights?.length) && <div className="article-highlights"><strong>注目ポイント</strong><ul>{article.highlights?.map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
               {article.aiError && <div className="storage-error article-error">AI更新エラー：{article.aiError}</div>}
