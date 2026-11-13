@@ -596,7 +596,7 @@ export class KickCommentVideoGenerator {
       fontSize: boundedNumber(values.fontSize, 48, 16, 80),
       displaySeconds: boundedNumber(values.displaySeconds, 6, 2, 15),
       speedPercent: boundedNumber(values.speedPercent, 100, 50, 200),
-      rowLimit: Math.round(boundedNumber(values.rowLimit, 12, 1, 20)),
+      rowLimit: Math.round(boundedNumber(values.rowLimit, 14, 1, 20)),
       collisionGap: boundedNumber(values.collisionGap, 24, 0, 200),
       opacity: boundedNumber(values.opacity, 100, 20, 100),
       quality: values.quality === "high" || values.quality === "compact" ? values.quality : "standard",
