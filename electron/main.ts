@@ -654,7 +654,7 @@ type ManualArticleSession = {
   previousChatSlugs: string[];
   ownsArticleSession: boolean;
 };
-const liveArticleFrameCaptures = new Map<string, { stop: () => void; frames: VideoFrameSample[] }>();
+const liveArticleFrameCaptures = new Map<string, { stop: () => Promise<void>; frames: VideoFrameSample[] }>();
 let manualArticleSession: ManualArticleSession | null = null;
 
 function startArticleFrameCapture(slugInput: string): void {
@@ -668,6 +668,8 @@ function startArticleFrameCapture(slugInput: string): void {
       liveArticleManager.updateVideoFrames(slug, [...frames]);
     }, status => {
       mainWindow?.webContents.send("articles:live-capture-status", { slug, ...status });
+    }, chunk => {
+      liveArticleManager.onAudioChunk(slug, chunk);
     });
     liveArticleFrameCaptures.set(slug, { stop, frames });
   } catch (error) {
@@ -679,12 +681,12 @@ function startArticleFrameCapture(slugInput: string): void {
   }
 }
 
-function stopArticleFrameCapture(slugInput: string): void {
+function stopArticleFrameCapture(slugInput: string): Promise<void> {
   const slug = slugInput.toLowerCase();
   const capture = liveArticleFrameCaptures.get(slug);
-  if (!capture) return;
+  if (!capture) return Promise.resolve();
   liveArticleFrameCaptures.delete(slug);
-  capture.stop();
+  return capture.stop();
 }
 
 function parseArticleChannelSlug(input: unknown): string {
@@ -1021,8 +1023,7 @@ async function runBackgroundMonitor(): Promise<void> {
         liveArticleManager.startOrUpdate(articleMetadata);
         if (liveArticleManager.hasSession(result.slug)) startArticleFrameCapture(result.slug);
       } else if (wasLive) {
-        stopArticleFrameCapture(result.slug);
-        void liveArticleManager.finishStream(articleMetadata);
+        void stopArticleFrameCapture(result.slug).finally(() => liveArticleManager.finishStream(articleMetadata));
       }
       if (!live || wasLive) continue;
 
@@ -1393,7 +1394,7 @@ function registerIpcHandlers(): void {
     if (!session) throw new Error("記事専用LIVEセッションは開始されていません。");
     manualArticleSession = null;
     const slug = session.metadata.slug;
-    stopArticleFrameCapture(slug);
+    await stopArticleFrameCapture(slug);
     if (session.ownsArticleSession) await liveArticleManager.finishStream(session.metadata);
 
     const currentSlugs = chatReceiver.getDesiredSlugs();
