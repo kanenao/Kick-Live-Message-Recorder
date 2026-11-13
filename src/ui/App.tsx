@@ -618,7 +618,7 @@ export default function App() {
       if (articleStatusFilter === "archive" && isLive) return false;
       if (!query) return true;
       return [
-        article.displayName, article.slug, article.headline, article.category, article.aiSummary ?? "",
+        article.displayName, article.slug, article.headline, article.streamTitle ?? "", article.category, article.aiSummary ?? "",
         ...(article.paragraphs ?? []), ...(article.keywords ?? []), ...(article.highlights ?? []),
         article.videoSummary ?? "", ...(article.videoScenes ?? []), article.audioSummary ?? "",
         article.audioTranscript ?? ""
@@ -2006,6 +2006,7 @@ export default function App() {
               {dayArticles.map(article => <article className="article-card" key={article.slug + ":" + article.id}>
               <div className="article-meta"><span className="article-byline">配信者・{article.displayName}</span> ・ {new Date(article.startedAt).toLocaleString("ja-JP")} <span className={article.status === "live" ? "article-status-live" : "article-status-done"}>{article.status === "live" ? "LIVE・更新中" : article.status === "completed" ? "配信終了" : "アーカイブ"}</span>{article.aiGenerated && <span className="article-ai-label">AI記事</span>}</div>
               <h3>{article.headline}</h3>
+              {article.streamTitle && article.streamTitle !== article.headline && <p className="article-original-stream-title"><strong>元配信タイトル</strong> {article.streamTitle}</p>}
               {article.category && <span className="live-stream-category">{article.category}</span>}
               {article.aiSummary && <p className="article-summary">{article.aiSummary}</p>}
               <div className="article-source-badges">
