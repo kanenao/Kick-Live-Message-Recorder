@@ -264,3 +264,35 @@
 .article-transcript-details{margin-top:10px;border-top:1px solid #344454;padding-top:9px}
 .article-transcript-details summary{cursor:pointer;color:#a9cbed;font-size:11px;outline:none}
 .article-transcript-details pre{max-height:320px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:9px 0 0;padding:10px 12px;border-radius:6px;background:#101820;color:#c8d6e4;font:11px/1.8 Consolas,"Yu Gothic UI",monospace}
+
+
+/* 配信AI新聞：日付単位の紙面構成と速報／アーカイブの絞り込み */
+.article-news-masthead{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin:30px 0 24px;padding:19px 4px 17px;border-top:3px double #89939f;border-bottom:3px double #89939f}
+.article-news-title{min-width:0}
+.article-news-kicker{display:block;color:#91a0ad;font-size:9px;font-weight:800;letter-spacing:.2em}
+.article-news-title h2{margin:7px 0 1px;color:#f0f3f6;font-family:Georgia,"Yu Mincho","游明朝",serif;font-size:clamp(25px,4vw,38px);font-weight:800;letter-spacing:.08em}
+.article-news-title p{margin:4px 0 0;color:#aab4c0;font-size:11px;letter-spacing:.04em}
+.article-news-issue{display:flex;flex-shrink:0;flex-direction:column;align-items:flex-end;gap:5px;color:#aab4c0;font-size:10px;text-align:right}
+.article-news-issue strong{color:#e4e9ee;font-size:11px}
+.article-list-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0 8px}
+.article-status-filters{display:flex;flex-wrap:wrap;gap:5px}
+.article-status-filters button{border:1px solid #39424e;border-radius:999px;background:#181e26;color:#aab5c2;padding:6px 12px;font-size:10px;font-weight:700;cursor:pointer}
+.article-status-filters button:hover{border-color:#5a6c7e;color:#e0e8f0}
+.article-status-filters button.selected{border-color:#54896a;background:#20362a;color:#a8e4bb}
+.article-list-count{color:#83909e;font-size:10px;font-variant-numeric:tabular-nums}
+.article-day-group{margin:19px 0 26px}
+.article-day-heading{display:flex;align-items:center;gap:12px;margin:0 0 10px;padding:0 2px 8px;border-bottom:1px solid #3b424c}
+.article-day-heading h4{margin:0;color:#e2e7ed;font-family:Georgia,"Yu Mincho","游明朝",serif;font-size:14px;font-weight:800;letter-spacing:.04em}
+.article-day-heading span{color:#8996a3;font-size:10px}
+.article-card{position:relative;margin:11px 0 15px;padding:20px 21px 17px;border:1px solid #343c47;border-radius:9px;background:linear-gradient(150deg,#171c24 0%,#13171e 100%)}
+.article-card h3{margin:9px 0 12px;color:#f1f3f6;font-family:Georgia,"Yu Mincho","游明朝",serif;font-size:clamp(17px,2vw,21px);line-height:1.65;letter-spacing:.025em}
+.article-byline{color:#d9e1e9;font-weight:800}
+.article-card>p:not(.article-summary){color:#c5ced8;font-family:"Yu Mincho","游明朝",serif;font-size:13px;line-height:2.05;letter-spacing:.012em}
+.article-card .article-stats{line-height:1.8;color:#9cb5a5}
+@media(max-width:760px){
+ .article-news-masthead{align-items:flex-start;flex-direction:column}
+ .article-news-issue{align-items:flex-start;text-align:left}
+ .article-list-toolbar{align-items:flex-start;flex-direction:column}
+ .article-card{padding:15px 14px}
+ .article-card h3{font-size:17px}
+}
