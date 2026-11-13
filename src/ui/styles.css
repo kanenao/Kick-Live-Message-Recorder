@@ -105,3 +105,7 @@
 .chat-subscription-row>small{font-size:9px;color:#74808e}
 .chat-subscription-panel>.settings-help{margin:10px 0 0}
 @media(max-width:700px){.chat-subscription-heading{align-items:flex-start;flex-direction:column;gap:4px}.chat-subscription-row{flex-wrap:wrap}.chat-subscription-row>strong{flex-basis:50%}.chat-subscription-row>small{flex-basis:100%}}
+
+.article-transcript{margin:12px 0;padding:10px 12px;background:#191e26;border:1px solid #303540;border-radius:6px;color:#bfc8d3}
+.article-transcript summary{font-size:10px;color:#8edbad;cursor:pointer}
+.article-transcript p{font-size:11px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere;margin:9px 0 0}
