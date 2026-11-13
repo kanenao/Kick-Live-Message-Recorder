@@ -1350,7 +1350,7 @@ function registerIpcHandlers(): void {
     const ownsArticleSession = !liveArticleManager.hasSession(slug);
     const article = liveArticleManager.startManualArticle(metadata);
     try {
-      if (!previousChatSlugs.includes(slug)) {
+      if (!previousChatSlugs.includes(slug) || !chatReceiver.getStatus().running) {
         const merged = [...new Set([...previousChatSlugs, slug])];
         if (merged.length > 50) throw new Error("コメント受信は最大50チャンネルです。ほかの自動受信チャンネルを減らしてください。");
         await chatReceiver.start(merged);
@@ -1680,6 +1680,9 @@ app.on("before-quit", () => {
   tray?.destroy();
   tray = null;
   recordingManager.stopAll();
+  for (const capture of liveArticleFrameCaptures.values()) capture.stop();
+  liveArticleFrameCaptures.clear();
+  manualArticleSession = null;
   void chatReceiver.stop();
   vodChatDownloader.stopAll();
   commentVideoGenerator.stopAll();
