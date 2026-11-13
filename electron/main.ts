@@ -697,8 +697,6 @@ function normalizeState(input: unknown): AppState {
       showRecordingPreview: settings.showRecordingPreview !== false,
       aiArticleEnabled: settings.aiArticleEnabled === true,
       aiArticleProvider: settings.aiArticleProvider === "openai" ? "openai" : "ollama",
-      aiArticleOllamaUrl: typeof settings.aiArticleOllamaUrl === "string" && /^https?:\\/\\//i.test(settings.aiArticleOllamaUrl) ? settings.aiArticleOllamaUrl.slice(0, 300) : "http://127.0.0.1:11434",
-      aiArticleProvider: settings.aiArticleProvider === "openai" ? "openai" : "ollama",
       aiArticleOllamaUrl: typeof settings.aiArticleOllamaUrl === "string" && /^https?:\/\//i.test(settings.aiArticleOllamaUrl) ? settings.aiArticleOllamaUrl.slice(0, 300) : "http://127.0.0.1:11434",
       aiArticleModel: typeof settings.aiArticleModel === "string" && /^[a-zA-Z0-9._:-]{1,100}$/.test(settings.aiArticleModel)
         ? settings.aiArticleModel : (settings.aiArticleProvider === "openai" ? "gpt-6-luna" : "qwen2.5:3b"),
