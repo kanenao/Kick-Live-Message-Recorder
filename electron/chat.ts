@@ -202,7 +202,7 @@ export class KickChatReceiver {
     const slugs = [...new Set(input
       .filter((value): value is string => typeof value === "string" && /^[a-zA-Z0-9_]{1,25}$/.test(value))
       .map(value => value.toLowerCase()))];
-    if (slugs.length === 0) throw new Error("先にダッシュボードでKickチャンネルを登録してください。");
+    if (slugs.length === 0) throw new Error("コメント受信するKickチャンネル名を指定してください。");
     if (slugs.length > 50) throw new Error("チャットの同時自動取得は最大50チャンネルです。受信するチャンネルを50件以内にしてください。");
 
     const generation = ++this.operationGeneration;
