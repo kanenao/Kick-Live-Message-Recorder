@@ -591,6 +591,7 @@ export default function App() {
   const [commentVideoOutputPath, setCommentVideoOutputPath] = useState("");
   const [streamArticles, setStreamArticles] = useState<StreamArticle[]>([]);
   const [articleSearch, setArticleSearch] = useState("");
+  const [articleStatusFilter, setArticleStatusFilter] = useState<"all" | "live" | "archive">("all");
   const [articleSlug, setArticleSlug] = useState("");
   const [articleVideoPath, setArticleVideoPath] = useState("");
   const [articleHeadline, setArticleHeadline] = useState("");
@@ -611,12 +612,33 @@ export default function App() {
 
   const filteredStreamArticles = useMemo(() => {
     const query = articleSearch.trim().toLocaleLowerCase("ja-JP");
-    if (!query) return streamArticles;
-    return streamArticles.filter(article => [
-      article.displayName, article.slug, article.headline, article.category,
-      ...(article.keywords ?? []), ...(article.highlights ?? []), article.videoSummary ?? "", ...(article.videoScenes ?? [])
-    ].join(" ").toLocaleLowerCase("ja-JP").includes(query));
-  }, [streamArticles, articleSearch]);
+    return streamArticles.filter(article => {
+      const isLive = article.status === "live";
+      if (articleStatusFilter === "live" && !isLive) return false;
+      if (articleStatusFilter === "archive" && isLive) return false;
+      if (!query) return true;
+      return [
+        article.displayName, article.slug, article.headline, article.category, article.aiSummary ?? "",
+        ...(article.paragraphs ?? []), ...(article.keywords ?? []), ...(article.highlights ?? []),
+        article.videoSummary ?? "", ...(article.videoScenes ?? []), article.audioSummary ?? "",
+        article.audioTranscript ?? ""
+      ].join(" ").toLocaleLowerCase("ja-JP").includes(query);
+    });
+  }, [streamArticles, articleSearch, articleStatusFilter]);
+
+  const articleDateGroups = useMemo(() => {
+    const groups = new Map<string, StreamArticle[]>();
+    for (const article of filteredStreamArticles) {
+      const date = new Date(article.startedAt);
+      const label = Number.isNaN(date.getTime())
+        ? "日付不明"
+        : date.toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "short" });
+      const items = groups.get(label) ?? [];
+      items.push(article);
+      groups.set(label, items);
+    }
+    return [...groups.entries()];
+  }, [filteredStreamArticles]);
 
   const activeCount = useMemo(() => [...channels, ...recordingOnlyChannels].filter(c => c.recording).length, [channels, recordingOnlyChannels]);
   const activeRecordingChannels = useMemo(() => {
