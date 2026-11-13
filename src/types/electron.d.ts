@@ -26,6 +26,8 @@ type KickRecorderAppState = {
     notifyOnLive: boolean;
     showRecordingPreview: boolean;
     aiArticleEnabled: boolean;
+    aiArticleProvider: "ollama" | "openai";
+    aiArticleOllamaUrl: string;
     aiArticleModel: string;
     aiArticleIntervalSeconds: number;
   };
@@ -64,7 +66,7 @@ type KickRecorderStreamArticle = {
 
 type KickRecorderAiArticleStatus = {
   configured: boolean; encryptionAvailable: boolean;
-  aiArticleEnabled: boolean; aiArticleModel: string; aiArticleIntervalSeconds: number;
+  aiArticleEnabled: boolean; aiArticleProvider: "ollama" | "openai"; aiArticleOllamaUrl: string; aiArticleModel: string; aiArticleIntervalSeconds: number;
 };
 
 type KickRecorderCommentVideoEvent = {
