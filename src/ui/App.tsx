@@ -1867,7 +1867,7 @@ export default function App() {
               {manualLiveArticleSlug && <span className="comment-video-log-count">生成中：{manualLiveArticleSlug}</span>}
             </div>
             {manualLiveArticleSlug && liveArticleCaptureStatus?.slug === manualLiveArticleSlug && <div className={liveArticleCaptureStatus.status === "error" ? "comment-video-status error" : "comment-video-status"} role="status"><strong>{liveArticleCaptureStatus.message}</strong></div>}
-            <div className="notice">LIVE映像はFFmpegで最大8枚の代表フレームだけを抽出します。全編録画は行いません。コメント受信にはアプリのKick API認証設定が必要です。LIVE終了後は「記事を保存して終了」を押してください。</div>
+            <div className="notice">LIVE映像はFFmpegで最大8枚の代表フレームだけを抽出します。全編録画は行いません。この機能にはKick API Client ID／Secretの設定が必要です。コメントログの保存は基本設定の「コメントを保存する」に従います。LIVE終了後は「記事を保存して終了」を押してください。</div>
           </div>
           <div className="settings-subsection ai-article-settings">
             <div className="settings-subheading"><h3>LIVE中のリアルタイムAI記事</h3><span className={settings.aiArticleProvider === "ollama" ? "api-state connected" : aiArticleStatus.configured ? "api-state connected" : "api-state"}>{settings.aiArticleProvider === "ollama" ? "無料ローカルAI" : aiArticleStatus.configured ? "APIキー設定済み" : "APIキー未設定"}</span></div>
