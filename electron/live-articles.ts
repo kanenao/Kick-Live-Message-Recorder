@@ -366,12 +366,33 @@ export class LiveStreamArticleManager {
     }
     let videoFrames: VideoFrameSample[] = [];
     let videoError = "";
+    let audioSegments: AudioTranscriptSegment[] = [];
+    let audioError = "";
     if (article.sourceVideo) {
       try { videoFrames = await extractVideoFrames(article.sourceVideo, root); }
       catch (error) { videoError = error instanceof Error ? error.message : String(error); }
+      if (config.provider === "ollama" && config.audioEnabled !== false) {
+        try {
+          audioSegments = await transcribeVideoAudio(
+            article.sourceVideo, root, config.baseUrl || "http://127.0.0.1:11434",
+            safeText(config.audioModel, 120) || "frozenlab/qwen3-asr:0.6b"
+          );
+        } catch (error) {
+          audioError = error instanceof Error ? error.message : String(error);
+        }
+      }
     }
-    if (comments.length === 0 && videoFrames.length === 0) {
-      article.aiError = videoError || "AI分析できるコメントログも、解析可能な録画動画もありません。";
+    if (audioSegments.length > 0) {
+      article.audioAnalyzed = true;
+      article.audioSegmentCount = audioSegments.length;
+      article.audioTranscriptSegments = audioSegments;
+      article.audioTranscript = formatAudioTranscript(audioSegments);
+      article.audioAnalyzedAt = new Date().toISOString();
+      article.audioError = "";
+    }
+    if (audioError) article.audioError = audioError.slice(0, 500);
+    if (comments.length === 0 && videoFrames.length === 0 && audioSegments.length === 0) {
+      article.aiError = videoError || audioError || "AI分析できるコメントログ・録画映像・音声がありません。";
       return article;
     }
     const directory = join(root, "Articles", slug);
@@ -379,14 +400,24 @@ export class LiveStreamArticleManager {
     const session: LiveSession = {
       article, directory, commenters: new Set(), uniqueCommenterBaseline: article.uniqueCommenters,
       keywordCounts: new Map((article.keywords ?? []).map(word => [word, 1])),
-      pendingComments: comments, lastAnalysisAt: 0, analysisInFlight: false, finishing: true, videoFrames
+      pendingComments: comments, pendingAudioSegments: audioSegments, audioQueue: [],
+      audioTranscriptionInFlight: false, lastAnalysisAt: 0, analysisInFlight: false,
+      finishing: true, videoFrames
     };
     await this.analyze(session, true, true);
     if (videoError) {
-      article.aiError = "映像分析はスキップしました（" + videoError + "）。コメント分析は続行しました。";
-      this.persist(session);
+      article.aiError = "映像分析はスキップしました（" + videoError + "）。利用できるほかの情報源で記事を生成しました。";
     }
-    return { ...article, paragraphs: [...article.paragraphs], keywords: [...article.keywords], highlights: [...(article.highlights ?? [])], videoScenes: [...(article.videoScenes ?? [])] };
+    if (audioError) article.audioError = audioError.slice(0, 500);
+    if (videoError || audioError) this.persist(session);
+    return {
+      ...article,
+      paragraphs: [...article.paragraphs],
+      keywords: [...article.keywords],
+      highlights: [...(article.highlights ?? [])],
+      videoScenes: [...(article.videoScenes ?? [])],
+      audioTranscriptSegments: [...(article.audioTranscriptSegments ?? [])]
+    };
   }
 
   onChatMessage(message: KickChatMessage): void {
