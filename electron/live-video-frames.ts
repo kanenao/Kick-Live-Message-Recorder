@@ -70,7 +70,7 @@ function resolveLiveStreamUrl(slug: string, isCancelled: () => boolean, onChild:
 
 /**
  * Decodes a live HLS stream without saving a full recording.
- * Only sampled JPEG frames are emitted; the stream process is stopped after eight frames or on cancel.
+ * Only sampled JPEG frames are emitted; callers keep a rolling window and stop the process with the returned callback.
  */
 export function startLiveVideoFrameCapture(
   slugInput: string,
@@ -85,9 +85,9 @@ export function startLiveVideoFrameCapture(
   let finished = false;
   let resolverChild: ChildProcess | null = null;
   let ffmpegChild: ChildProcess | null = null;
-  const frames: VideoFrameSample[] = [];
+  let frameCount = 0;
   const publish = (status: LiveVideoFrameStatus["status"], message: string): void => {
-    onStatus({ status, frameCount: frames.length, message });
+    onStatus({ status, frameCount, message });
   };
   const stop = (): void => {
     if (cancelled) return;
@@ -109,7 +109,7 @@ export function startLiveVideoFrameCapture(
         "-i", streamUrl,
         "-an", "-sn", "-dn",
         "-vf", "fps=1/25,scale=w='min(960,iw)':h=-2",
-        "-frames:v", "8", "-q:v", "6",
+        "-q:v", "6",
         "-f", "image2pipe", "-vcodec", "mjpeg", "pipe:1"
       ], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
       ffmpegChild = child;
@@ -122,13 +122,13 @@ export function startLiveVideoFrameCapture(
       let stderr = "";
       const startedCaptureAt = Date.now();
       child.stdout?.on("data", chunk => {
-        if (cancelled || frames.length >= 8) return;
+        if (cancelled) return;
         buffer = Buffer.concat([buffer, Buffer.from(chunk)]);
         if (buffer.length > 12_000_000 && !buffer.includes(Buffer.from([0xff, 0xd8]))) {
           buffer = Buffer.alloc(0);
           return;
         }
-        while (!cancelled && frames.length < 8) {
+        while (!cancelled) {
           const start = buffer.indexOf(Buffer.from([0xff, 0xd8]));
           if (start < 0) {
             buffer = buffer.subarray(Math.max(0, buffer.length - 1));
@@ -146,14 +146,9 @@ export function startLiveVideoFrameCapture(
             timeSeconds: Math.max(0, Math.round((Date.now() - startedCaptureAt) / 1000)),
             imageBase64: jpeg.toString("base64")
           };
-          frames.push(frame);
+          frameCount += 1;
           onFrame(frame);
-          publish("capturing", `LIVE映像の代表フレームを取得しました（${frames.length}/8枚）。`);
-          if (frames.length >= 8) {
-            finished = true;
-            child.kill();
-            publish("completed", "LIVE映像の代表フレーム8枚を取得しました。");
-          }
+          publish("capturing", `LIVE映像の代表フレームを継続取得中です（累計${frameCount}枚）。記事のAI分析には直近8枚を使用します。`);
         }
       });
       child.stderr?.on("data", chunk => {
@@ -167,8 +162,8 @@ export function startLiveVideoFrameCapture(
       child.once("close", code => {
         if (cancelled || finished) return;
         finished = true;
-        if (frames.length > 0) {
-          publish("completed", `LIVE映像から${frames.length}枚の代表フレームを取得しました。`);
+        if (frameCount > 0) {
+          publish("completed", `LIVE映像の取得が終了しました。代表フレーム累計${frameCount}枚を取得しました。`);
         } else {
           publish("error", "LIVE映像から画像を取得できませんでした。" + (stderr ? " " + stderr.slice(-800) : ` 終了コード：${code ?? "不明"}`));
         }
