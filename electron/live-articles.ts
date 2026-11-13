@@ -205,7 +205,7 @@ export class LiveStreamArticleManager {
   isArticleActive(slugInput: unknown, idInput: unknown): boolean {
     if (typeof slugInput !== "string" || typeof idInput !== "string") return false;
     const session = this.sessions.get(slugInput.toLowerCase());
-    return Boolean(session && session.article.id === idInput && !session.finishing);
+    return Boolean(session && session.article.id === idInput);
   }
 
   updateViewerCount(metadata: LiveMetadata): void {
