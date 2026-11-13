@@ -499,9 +499,20 @@ export class LiveStreamArticleManager {
       const payload = await response.json() as { models?: Array<{ name?: string }> };
       const models = Array.isArray(payload.models) ? payload.models.map(item => item.name || "").filter(Boolean) : [];
       if (!models.includes(model) && !models.some(name => name.split(":")[0] === model.split(":")[0])) {
-        throw new Error(`モデル「${model}」が見つかりません。PowerShellで ollama pull ${model} を実行してください。`);
+        throw new Error(`記事生成モデル「${model}」が見つかりません。PowerShellで ollama pull ${model} を実行してください。`);
       }
-      return { ok: true, message: `Ollamaに接続できました（モデル：${model}）。` };
+      const audioModel = safeText(config.audioModel, 120) || "frozenlab/qwen3-asr:0.6b";
+      if (config.audioEnabled !== false &&
+          !models.includes(audioModel) &&
+          !models.some(name => name.split(":")[0] === audioModel.split(":")[0])) {
+        throw new Error(`Ollama接続は成功しましたが、音声認識モデル「${audioModel}」がありません。PowerShellで ollama pull ${audioModel} を実行してください。音声認識を使わない場合は設定をOFFにしてください。`);
+      }
+      return {
+        ok: true,
+        message: config.audioEnabled === false
+          ? `Ollamaに接続できました（記事生成モデル：${model}）。音声認識はOFFです。`
+          : `Ollamaに接続できました（記事生成：${model}／音声認識：${audioModel}）。`
+      };
     }
     const key = this.getApiKey();
     if (!key) throw new Error("OpenAI APIキーを保存してください。");
