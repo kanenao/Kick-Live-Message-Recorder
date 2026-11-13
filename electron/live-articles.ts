@@ -555,7 +555,7 @@ export class LiveStreamArticleManager {
     if (session.analysisInFlight || (
       session.pendingComments.length === 0 &&
       session.pendingAudioSegments.length === 0 &&
-      !(videoFramesForAnalysis.length && !session.article.videoAnalyzed)
+      !(session.videoFrames?.length && !session.article.videoAnalyzed)
     )) return;
     const config = this.getConfig();
     const key = config.provider === "ollama" ? "local" : this.getApiKey();
@@ -565,7 +565,7 @@ export class LiveStreamArticleManager {
     const batch = session.pendingComments.splice(0, final ? 120 : 80);
     const audioBatch = session.pendingAudioSegments.splice(0, final ? 40 : 30);
     const article = session.article;
-    const videoFramesForAnalysis = videoFramesForAnalysis.length && !article.videoAnalyzed
+    const videoFramesForAnalysis = session.videoFrames?.length && !article.videoAnalyzed
       ? session.videoFrames
       : [];
     this.persist(session);
@@ -711,7 +711,7 @@ export class LiveStreamArticleManager {
       if (videoFramesForAnalysis.length) {
         if (!result.videoSummary) throw new Error("映像の分析結果が返されませんでした。画像対応モデル（例：qwen2.5vl:3b）を選択してください。");
         article.videoAnalyzed = true;
-        article.videoFrameCount = session.videoFrameTotalCount ?? session.videoFrames.length;
+        article.videoFrameCount = session.videoFrameTotalCount ?? videoFramesForAnalysis.length;
         article.videoSummary = result.videoSummary;
         article.videoScenes = result.videoScenes;
         article.videoAnalyzedAt = new Date().toISOString();
