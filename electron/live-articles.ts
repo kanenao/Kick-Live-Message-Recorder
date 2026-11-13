@@ -282,6 +282,14 @@ export class LiveStreamArticleManager {
     return this.sessions.has(slugInput.toLowerCase());
   }
 
+  getElapsedSeconds(slugInput: unknown): number {
+    if (typeof slugInput !== "string") return 0;
+    const session = this.sessions.get(slugInput.toLowerCase());
+    if (!session) return 0;
+    const startedAt = Date.parse(session.article.startedAt);
+    return Number.isFinite(startedAt) ? Math.max(0, (Date.now() - startedAt) / 1000) : 0;
+  }
+
   updateVideoFrames(slugInput: unknown, frames: VideoFrameSample[]): void {
     if (typeof slugInput !== "string" || !Array.isArray(frames) || frames.length === 0) return;
     const session = this.sessions.get(slugInput.toLowerCase());
