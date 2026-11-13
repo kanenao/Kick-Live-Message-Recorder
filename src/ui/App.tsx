@@ -869,7 +869,6 @@ export default function App() {
       if (!active) return;
       setAiModelPullStatus(status);
       if (status.done) {
-        setAiModelPullBusy(false);
         setAiArticleMessage(status.error || `モデル「${status.model}」のインストールが完了しました。`);
       }
     });
@@ -1997,14 +1996,14 @@ export default function App() {
             <div className="settings-subheading"><h3>LIVE中のリアルタイムAI記事</h3><span className={settings.aiArticleProvider === "ollama" ? "api-state connected" : aiArticleStatus.configured ? "api-state connected" : "api-state"}>{settings.aiArticleProvider === "ollama" ? "無料ローカルAI" : aiArticleStatus.configured ? "APIキー設定済み" : "APIキー未設定"}</span></div>
             <label className="comment-video-checkbox"><input type="checkbox" checked={settings.aiArticleEnabled} onChange={event => setSettings(previous => ({ ...previous, aiArticleEnabled: event.target.checked }))} disabled={settings.aiArticleProvider === "openai" && !aiArticleStatus.configured} /><span>登録配信者のLIVEを自動でAI記事化する</span></label>
             <div className="comment-video-form-grid ai-article-form-grid">
-              <label className="comment-video-field"><span>AIエンジン</span><select value={settings.aiArticleProvider} onChange={event => setSettings(previous => ({ ...previous, aiArticleProvider: event.target.value as "ollama" | "openai", aiArticleModel: event.target.value === "ollama" ? "qwen2.5vl:3b" : "gpt-6-luna" }))} disabled={aiArticleBusy}><option value="ollama">Ollama（無料・ローカルAI）</option><option value="openai">OpenAI API（有料）</option></select></label>
+              <label className="comment-video-field"><span>AIエンジン</span><select value={settings.aiArticleProvider} onChange={event => setSettings(previous => ({ ...previous, aiArticleProvider: event.target.value as "ollama" | "openai", aiArticleModel: event.target.value === "ollama" ? "qwen2.5vl:3b" : "gpt-6-luna" }))} disabled={aiArticleBusy || aiModelPullBusy}><option value="ollama">Ollama（無料・ローカルAI）</option><option value="openai">OpenAI API（有料）</option></select></label>
               {settings.aiArticleProvider === "ollama" ? <>
-                <label className="comment-video-field"><span>Ollama接続URL</span><input type="url" value={settings.aiArticleOllamaUrl} onChange={event => setSettings(previous => ({ ...previous, aiArticleOllamaUrl: event.target.value }))} placeholder="http://127.0.0.1:11434" disabled={aiArticleBusy} /><small>通常はこの初期値のままで利用できます。</small></label>
+                <label className="comment-video-field"><span>Ollama接続URL</span><input type="url" value={settings.aiArticleOllamaUrl} onChange={event => setSettings(previous => ({ ...previous, aiArticleOllamaUrl: event.target.value }))} placeholder="http://127.0.0.1:11434" disabled={aiArticleBusy || aiModelPullBusy} /><small>通常はこの初期値のままで利用できます。</small></label>
                 <div className="ai-model-install-field">
                   <label className="comment-video-field"><span>記事生成・映像解析モデル</span><input value={settings.aiArticleModel} onChange={event => setSettings(previous => ({ ...previous, aiArticleModel: event.target.value }))} placeholder="qwen2.5vl:3b" disabled={aiArticleBusy || aiModelPullBusy} /><small>初期値は qwen2.5vl:3b。画像入力に対応したOllama Visionモデルを指定してください。</small></label>
                   <button className="small-action" onClick={() => void pullAiArticleModel(settings.aiArticleModel)} disabled={aiArticleBusy || aiModelPullBusy || !settings.aiArticleModel.trim()}>記事・映像モデルをインストール</button>
                 </div>
-                <label className="comment-video-checkbox"><input type="checkbox" checked={settings.aiArticleAudioEnabled} onChange={event => setSettings(previous => ({ ...previous, aiArticleAudioEnabled: event.target.checked }))} disabled={aiArticleBusy} /><span>音声を文字起こしして記事へ反映する（無料・ローカル）</span></label>
+                <label className="comment-video-checkbox"><input type="checkbox" checked={settings.aiArticleAudioEnabled} onChange={event => setSettings(previous => ({ ...previous, aiArticleAudioEnabled: event.target.checked }))} disabled={aiArticleBusy || aiModelPullBusy} /><span>音声を文字起こしして記事へ反映する（無料・ローカル）</span></label>
                 <div className="ai-model-install-field">
                   <label className="comment-video-field"><span>音声認識モデル（Qwen3-ASR）</span><input value={settings.aiArticleAudioModel} onChange={event => setSettings(previous => ({ ...previous, aiArticleAudioModel: event.target.value }))} placeholder="frozenlab/qwen3-asr:0.6b" disabled={aiArticleBusy || aiModelPullBusy || !settings.aiArticleAudioEnabled} /><small>初期値は frozenlab/qwen3-asr:0.6b（約1GB）。日本語を含む音声を45秒単位で認識します。Qwen3-ASR対応の新しいOllamaが必要です。</small></label>
                   <button className="small-action" onClick={() => void pullAiArticleModel(settings.aiArticleAudioModel)} disabled={aiArticleBusy || aiModelPullBusy || !settings.aiArticleAudioEnabled || !settings.aiArticleAudioModel.trim()}>音声認識モデルをインストール</button>
@@ -2019,7 +2018,7 @@ export default function App() {
               {settings.aiArticleProvider === "openai" && <><button className="primary-small" onClick={() => void saveAiArticleApiKey()} disabled={aiArticleBusy || !aiArticleApiKey.trim() || !aiArticleStatus.encryptionAvailable}>APIキーを保存</button><button className="small-action" onClick={() => void clearAiArticleApiKey()} disabled={aiArticleBusy || !aiArticleStatus.configured}>APIキーを削除</button></>}
               <button className="small-action" onClick={() => void testAiArticleConnection()} disabled={aiArticleBusy || aiModelPullBusy}>{settings.aiArticleProvider === "ollama" ? "Ollama接続テスト" : "接続テスト"}</button>
             </div>
-            {aiModelPullStatus && <div className="ai-model-pull-status" role="status">
+            {settings.aiArticleProvider === "ollama" && aiModelPullStatus && <div className="ai-model-pull-status" role="status">
               <div className="ai-model-pull-heading"><strong>{aiModelPullStatus.model}</strong><span>{aiModelPullStatus.done ? "完了" : aiModelPullStatus.status}{aiModelPullStatus.percent !== null ? ` ・ ${aiModelPullStatus.percent}%` : ""}</span></div>
               {aiModelPullStatus.percent !== null && <div className="version-progress"><div style={{ width: `${aiModelPullStatus.percent}%` }} /></div>}
               {typeof aiModelPullStatus.completed === "number" && typeof aiModelPullStatus.total === "number" && <small>{(aiModelPullStatus.completed / 1_000_000).toFixed(1)} MB / {(aiModelPullStatus.total / 1_000_000).toFixed(1)} MB</small>}
