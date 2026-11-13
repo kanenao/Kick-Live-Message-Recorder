@@ -15,8 +15,9 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync,
 import { basename, extname, join } from "node:path";
 import { autoUpdater } from "electron-updater";
 import { isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
-import { getOllamaStatus, generateKickBroadcastArticle } from "./ollama";
+import { getOllamaStatus, generateKickBroadcastArticle, describeKickFrame } from "./ollama";
 import { KickChatReceiver, type SavedKickChatMessage } from "./chat";
+import { analyzeLiveRecordingMedia, getMediaToolStatus } from "./media-analysis";
 
 // Chromiumが提供する標準メニューやコンテキストメニューも日本語で表示する。
 app.commandLine.appendSwitch("lang", "ja-JP");
@@ -38,6 +39,9 @@ type AppSettings = {
   monitorIntervalSeconds: number;
   notifyOnLive: boolean;
   autoGenerateArticles: boolean;
+  ffmpegPath: string;
+  whisperCliPath: string;
+  whisperModelPath: string;
 };
 
 type AppState = {
@@ -54,7 +58,10 @@ const DEFAULT_STATE: AppState = {
     autoMonitorEnabled: true,
     monitorIntervalSeconds: 60,
     notifyOnLive: true,
-    autoGenerateArticles: true
+    autoGenerateArticles: true,
+    ffmpegPath: "",
+    whisperCliPath: "",
+    whisperModelPath: ""
   }
 };
 
@@ -559,6 +566,10 @@ type SavedKickArticle = {
   topics: string[];
   provider: string;
   model: string;
+  mediaSources?: string[];
+  visualSummary?: string;
+  transcript?: string;
+  analyzedAt?: string;
 };
 
 let articleTimer: NodeJS.Timeout | null = null;
@@ -595,7 +606,8 @@ async function createKickArticle(slugInput: unknown, metadata?: KickChannelCheck
     throw new Error("記事生成対象のチャンネル名が不正です。");
   }
   const slug = slugInput.toLowerCase();
-  const allMessages = chatReceiver.listMessages(slug, 5000, chatReceiver.getOutputDirectory() || getRecordingOutputDirectory());
+  const outputDirectory = chatReceiver.getOutputDirectory() || getRecordingOutputDirectory();
+  const allMessages = chatReceiver.listMessages(slug, 5000, outputDirectory);
   const streamStart = metadata?.startedAt ? Date.parse(metadata.startedAt) : Number.NaN;
   const messages = Number.isFinite(streamStart) && streamStart > Date.UTC(2000, 0, 1)
     ? allMessages.filter(message => {
@@ -603,7 +615,19 @@ async function createKickArticle(slugInput: unknown, metadata?: KickChannelCheck
         return !Number.isFinite(timestamp) || timestamp >= streamStart;
       })
     : allMessages;
-  if (messages.length === 0) throw new Error(`${slug} の今回の配信に該当する保存済みチャットがありません。`);
+
+  const state = readState();
+  const activeVideoPath = recordingManager.getActiveRecordingPath(slug);
+  const media = activeVideoPath
+    ? await analyzeLiveRecordingMedia({
+        slug,
+        videoPath: activeVideoPath,
+        outputDirectory: getArticleDirectory(),
+        tools: state.settings,
+        userDataDirectory: app.getPath("userData"),
+        resourcesDirectory: process.resourcesPath
+      })
+    : { analyzedAt: new Date().toISOString(), frameBase64: "", transcript: "", warnings: [] as string[] };
 
   const ollamaStatus = await getOllamaStatus();
   if (!ollamaStatus.connected) {
@@ -612,7 +636,34 @@ async function createKickArticle(slugInput: unknown, metadata?: KickChannelCheck
   if (ollamaStatus.models.length === 0) {
     throw new Error("Ollamaにモデルがありません。PowerShellで ollama pull qwen2.5:3b を実行してください。");
   }
+
+  let visualSummary = "";
+  const visionModel = ollamaStatus.models.find(model => /^qwen2\.5vl(?::3b)?$/i.test(model.name));
+  if (media.frameBase64 && visionModel) {
+    try {
+      visualSummary = await describeKickFrame({
+        model: visionModel.name,
+        title: metadata?.streamTitle || slug,
+        imageBase64: media.frameBase64
+      });
+    } catch (error) {
+      media.warnings.push("映像のAI解析に失敗しました：" + (error instanceof Error ? error.message : String(error)));
+    }
+  } else if (media.frameBase64 && !visionModel) {
+    media.warnings.push("映像フレームは取得しましたが、qwen2.5vl:3bが未導入のためAI解析をスキップしました。");
+  }
+
+  if (messages.length === 0 && !media.transcript && !visualSummary) {
+    const detail = media.warnings.length ? " " + media.warnings.join(" ") : "";
+    throw new Error(`${slug} の記事材料がありません。チャット受信または録画・メディア解析の設定を確認してください。${detail}`);
+  }
+
   const preferredModel = ollamaStatus.models.find(model => model.name === "qwen2.5:3b") ?? ollamaStatus.models[0];
+  const mediaSources = [
+    ...(messages.length ? ["Kickチャット"] : []),
+    ...(media.transcript ? ["音声文字起こし（Whisper.cpp）"] : []),
+    ...(visualSummary ? ["映像解析（Ollama Vision）"] : [])
+  ];
   const generated = await generateKickBroadcastArticle({
     model: preferredModel.name,
     title: metadata?.streamTitle || slug,
@@ -622,7 +673,10 @@ async function createKickArticle(slugInput: unknown, metadata?: KickChannelCheck
       user: message.user,
       text: message.text,
       timestamp: message.timestamp
-    }))
+    })),
+    audioTranscript: media.transcript,
+    visualSummary,
+    mediaSources
   });
 
   const generatedAt = new Date().toISOString();
@@ -636,6 +690,10 @@ async function createKickArticle(slugInput: unknown, metadata?: KickChannelCheck
     generatedAt,
     commentCount: messages.length,
     isFinal,
+    mediaSources,
+    visualSummary,
+    transcript: media.transcript,
+    analyzedAt: media.analyzedAt,
     ...generated
   };
   writeFileSync(join(getArticleDirectory(), `${id}.json`), JSON.stringify(article, null, 2), {
@@ -645,9 +703,14 @@ async function createKickArticle(slugInput: unknown, metadata?: KickChannelCheck
   const lastMessage = messages[messages.length - 1];
   if (lastMessage) lastArticleMessageIds.set(slug, lastMessage.messageId);
   mainWindow?.webContents.send("articles:new", article);
+  if (media.warnings.length) {
+    mainWindow?.webContents.send("articles:status", {
+      slug,
+      message: "記事を保存しました。メディア解析の注意： " + media.warnings.join(" ")
+    });
+  }
   return article;
 }
-
 async function runLiveArticleCycle(): Promise<void> {
   if (articleCycleRunning || !chatReceiver.getStatus().serverRunning) return;
   articleCycleRunning = true;
@@ -661,7 +724,9 @@ async function runLiveArticleCycle(): Promise<void> {
         liveArticleMetadata.set(result.slug, result);
         const messages = chatReceiver.listMessages(result.slug, 5000, chatReceiver.getOutputDirectory() || getRecordingOutputDirectory());
         const lastMessage = messages[messages.length - 1];
-        if (!lastMessage || lastArticleMessageIds.get(result.slug) === lastMessage.messageId) continue;
+        const activeVideoPath = recordingManager.getActiveRecordingPath(result.slug);
+        const commentsUnchanged = !lastMessage || lastArticleMessageIds.get(result.slug) === lastMessage.messageId;
+        if (commentsUnchanged && !activeVideoPath) continue;
         try {
           await createKickArticle(result.slug, result, false);
         } catch (error) {
@@ -765,7 +830,10 @@ function normalizeState(input: unknown): AppState {
         ? Math.max(30, Math.min(3600, Math.round(settings.monitorIntervalSeconds)))
         : 60,
       notifyOnLive: settings.notifyOnLive !== false,
-      autoGenerateArticles: settings.autoGenerateArticles !== false
+      autoGenerateArticles: settings.autoGenerateArticles !== false,
+      ffmpegPath: typeof settings.ffmpegPath === "string" ? settings.ffmpegPath.slice(0, 4096) : "",
+      whisperCliPath: typeof settings.whisperCliPath === "string" ? settings.whisperCliPath.slice(0, 4096) : "",
+      whisperModelPath: typeof settings.whisperModelPath === "string" ? settings.whisperModelPath.slice(0, 4096) : ""
     }
   };
 }
@@ -985,6 +1053,28 @@ function registerIpcHandlers(): void {
   ipcMain.handle("ollama:get-status", async event => {
     assertTrustedSender(event);
     return getOllamaStatus();
+  });
+
+  ipcMain.handle("media:get-status", event => {
+    assertTrustedSender(event);
+    return getMediaToolStatus(readState().settings, app.getPath("userData"), process.resourcesPath);
+  });
+
+  ipcMain.handle("media:select-tool", async (event, input: unknown) => {
+    assertTrustedSender(event);
+    if (!mainWindow) return null;
+    if (input !== "ffmpeg" && input !== "whisperCli" && input !== "whisperModel") {
+      throw new Error("選択するメディア解析ツールの種類が不正です。");
+    }
+    const isModel = input === "whisperModel";
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: isModel ? "Whisper.cppの日本語モデルを選択" : (input === "ffmpeg" ? "FFmpegを選択" : "Whisper.cpp CLIを選択"),
+      properties: ["openFile"],
+      filters: isModel
+        ? [{ name: "Whisperモデル", extensions: ["bin"] }, { name: "すべてのファイル", extensions: ["*"] }]
+        : [{ name: "Windows実行ファイル", extensions: ["exe"] }, { name: "すべてのファイル", extensions: ["*"] }]
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
   });
 
   ipcMain.handle("ollama:generate-article", async (event, input: unknown) => {
