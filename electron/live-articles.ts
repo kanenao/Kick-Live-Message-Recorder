@@ -221,6 +221,7 @@ export class LiveStreamArticleManager {
       headline: metadata.streamTitle || `${metadata.displayName || slug}のLIVE配信`,
       streamTitle: metadata.streamTitle || "",
       category: metadata.categoryName || "",
+      startedAt: started.toISOString(),
       durationSeconds: 0, commentCount: 0, uniqueCommenters: 0, keywords: [],
       paragraphs: ["LIVE配信が始まりました。映像・音声・コメントをそれぞれ分析し、確認できた情報をAIが統合して記事を随時更新します。", "映像は代表フレーム、音声はローカル音声認識、コメントはKickの公開チャットを情報源として扱います。認識できない内容は推測しません。"],
       sourceVideo: "", sourceLogs: [], createdAt: new Date().toISOString(),
