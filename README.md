@@ -11,7 +11,7 @@ Kickの配信を監視・録画し、公式Webhookでチャットを保存する
 
 - AI放送記事に録画映像のフレーム解析、音声文字起こし、Kickコメントの統合を追加
 - FFmpeg / Whisper.cpp / 日本語モデルのパスを設定画面から指定
-- Ollamaの qwen2.5vl:3b で映像を、qwen2.5:3b で記事をPC内生成
+- Ollamaの qwen2.5vl:3b（約3.2GB） で映像を、qwen2.5:3b で記事をPC内生成
 - 録画中はコメントの新着がない場合も約3分ごとにメディア解析・記事更新
 
 ## β15 更新内容
@@ -69,7 +69,7 @@ Webhook URLはCloudflare Quick Tunnelから毎回発行されます。アプリ�
 
 AIの処理はすべてPC内で行います。OpenAI APIキー、クラウドAI契約、従量課金は不要です。次のローカルツールを導入してください。
 
-1. [Ollama for Windows](https://ollama.com/download) をインストールし、PowerShellでテキスト記事モデルと映像モデルを取得します。
+1. [Ollama 0.7.0以降（Windows）](https://ollama.com/download) をインストールし、PowerShellでテキスト記事モデルと映像モデルを取得します。
 
 ```powershell
 ollama pull qwen2.5:3b
