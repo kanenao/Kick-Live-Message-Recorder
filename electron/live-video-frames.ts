@@ -96,6 +96,11 @@ export function startLiveVideoFrameCapture(
   let audioSegmentCount = 0;
   let audioFinishedResolve: (() => void) | null = null;
   let audioFinished: Promise<void> = Promise.resolve();
+  const finishAudioCapture = (): void => {
+    const resolver = audioFinishedResolve as (() => void) | null;
+    audioFinishedResolve = null;
+    if (resolver) resolver();
+  };
   const processedAudioFiles = new Set<string>();
   let frameCount = 0;
   const publish = (status: LiveVideoFrameStatus["status"], message: string): void => {
@@ -168,8 +173,7 @@ export function startLiveVideoFrameCapture(
             flushAudioSegments();
             if (audioDirectory) rmSync(audioDirectory, { recursive: true, force: true });
             audioDirectory = "";
-            audioFinishedResolve?.();
-            audioFinishedResolve = null;
+            finishAudioCapture();
           });
           audio.once("close", () => {
             if (audioPollTimer) clearInterval(audioPollTimer);
@@ -177,8 +181,7 @@ export function startLiveVideoFrameCapture(
             flushAudioSegments();
             if (audioDirectory) rmSync(audioDirectory, { recursive: true, force: true });
             audioDirectory = "";
-            audioFinishedResolve?.();
-            audioFinishedResolve = null;
+            finishAudioCapture();
           });
         } catch {
           if (audioDirectory) rmSync(audioDirectory, { recursive: true, force: true });
