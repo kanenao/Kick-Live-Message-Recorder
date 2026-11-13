@@ -1965,11 +1965,25 @@ export default function App() {
               <h3>{article.headline}</h3>
               {article.category && <span className="live-stream-category">{article.category}</span>}
               {article.aiSummary && <p className="article-summary">{article.aiSummary}</p>}
-              {article.videoAnalyzed && <div className="article-video-analysis"><strong>映像分析済み（代表フレーム {article.videoFrameCount ?? article.videoScenes?.length ?? 0}枚）</strong><p>{article.videoSummary}</p>{Boolean(article.videoScenes?.length) && <ul>{article.videoScenes?.map((scene, index) => <li key={index}>{scene}</li>)}</ul>}</div>}
+              <div className="article-source-badges">
+                <span className={article.videoAnalyzed ? "is-analyzed" : ""}>映像 {article.videoAnalyzed ? "分析済み" : "未解析"}</span>
+                <span className={article.audioAnalyzed ? "is-analyzed" : ""}>音声 {article.audioAnalyzed ? `文字起こし ${(article.audioSegmentCount ?? article.audioTranscriptSegments?.length ?? 0).toLocaleString("ja-JP")}区間` : "未解析"}</span>
+                <span className={article.commentCount > 0 ? "is-analyzed" : ""}>コメント {article.commentCount.toLocaleString("ja-JP")}件</span>
+              </div>
+              {article.videoAnalyzed && <div className="article-video-analysis"><strong>映像から確認した場面（代表フレーム {article.videoFrameCount ?? article.videoScenes?.length ?? 0}枚）</strong><p>{article.videoSummary}</p>{Boolean(article.videoScenes?.length) && <ul>{article.videoScenes?.map((scene, index) => <li key={index}>{scene}</li>)}</ul>}</div>}
+              {article.audioAnalyzed && <div className="article-audio-analysis">
+                <strong>音声から確認した内容</strong>
+                <p>{article.audioSummary || "音声は文字起こし済みです。発言内容の要約はまだ生成されていません。"}</p>
+                {article.audioTranscript && <details className="article-transcript-details">
+                  <summary>音声文字起こしを表示（{(article.audioSegmentCount ?? article.audioTranscriptSegments?.length ?? 0).toLocaleString("ja-JP")}区間）</summary>
+                  <pre>{article.audioTranscript}</pre>
+                </details>}
+              </div>}
+              {article.audioError && <div className="storage-error article-error">音声認識エラー：{article.audioError}</div>}
               {article.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
               {Boolean(article.highlights?.length) && <div className="article-highlights"><strong>注目ポイント</strong><ul>{article.highlights?.map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
               {article.aiError && <div className="storage-error article-error">AI更新エラー：{article.aiError}</div>}
-              <div className="article-stats">コメント {article.commentCount.toLocaleString("ja-JP")}件 ・ 投稿者 {article.uniqueCommenters.toLocaleString("ja-JP")}人 ・ 視聴者数 {article.viewerCount?.toLocaleString("ja-JP") ?? "—"}人（最大 {article.peakViewerCount?.toLocaleString("ja-JP") ?? "—"}人） ・ 分析キーワード {article.keywords.join("、") || "なし"}{article.lastAiUpdateAt ? ` ・ AI更新 ${new Date(article.lastAiUpdateAt).toLocaleTimeString("ja-JP")}` : ""}</div>
+              <div className="article-stats">配信時間 {Math.floor((article.durationSeconds ?? 0) / 60).toLocaleString("ja-JP")}分 ・ コメント {article.commentCount.toLocaleString("ja-JP")}件 ・ 投稿者 {article.uniqueCommenters.toLocaleString("ja-JP")}人 ・ 視聴者数 {article.viewerCount?.toLocaleString("ja-JP") ?? "—"}人（最大 {article.peakViewerCount?.toLocaleString("ja-JP") ?? "—"}人） ・ 分析キーワード {article.keywords.join("、") || "なし"}{article.lastAiUpdateAt ? ` ・ AI更新 ${new Date(article.lastAiUpdateAt).toLocaleTimeString("ja-JP")}` : ""}</div>
               {article.sourceVideo && <div className="comment-video-actions"><button className="small-action" onClick={() => void window.kickRecorder?.openRecording(article.sourceVideo)}>元動画を開く</button><button className="small-action" onClick={() => void window.kickRecorder?.revealRecording(article.sourceVideo)}>録画の保存先</button></div>}
               <div className="comment-video-actions article-card-actions">
                 <button className="remove" onClick={() => void deleteStreamArticle(article)} disabled={article.status === "live" || deletingArticleId !== null}>
