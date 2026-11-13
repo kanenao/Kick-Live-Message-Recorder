@@ -134,7 +134,7 @@ export function startLiveVideoFrameCapture(
             "-segment_format", "wav", "-reset_timestamps", "1",
             "-segment_list", audioListPath, "-segment_list_type", "csv",
             join(audioDirectory, "audio-%05d.wav")
-          ], { windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });
+          ], { windowsHide: true, stdio: ["ignore", "ignore", "ignore"] });
           audioChild = audio;
           const flushAudioSegments = (): void => {
             if (!audioDirectory || !existsSync(audioListPath)) return;
