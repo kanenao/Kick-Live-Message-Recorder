@@ -165,7 +165,7 @@ export function generateStreamArticle(input: unknown, outputDirectory: string): 
   const startedAt = extractStartDate(basename(values.videoPath), file.mtime);
   const id = `${slug}_${startedAt.getFullYear()}${String(startedAt.getMonth()+1).padStart(2,"0")}${String(startedAt.getDate()).padStart(2,"0")}_${String(startedAt.getHours()).padStart(2,"0")}${String(startedAt.getMinutes()).padStart(2,"0")}${String(startedAt.getSeconds()).padStart(2,"0")}`;
   const article: StreamArticle = {
-    id, slug, displayName, headline, streamTitle: headline, category, startedAt: startedAt.toISOString(),
+    id, slug, displayName, headline, category, startedAt: startedAt.toISOString(),
     durationSeconds: 0, commentCount, uniqueCommenters: commenters.size, keywords,
     paragraphs: makeParagraphs(displayName, category, commentCount, commenters.size, keywords, samples),
     sourceVideo: values.videoPath, sourceLogs: selected, createdAt: new Date().toISOString()
