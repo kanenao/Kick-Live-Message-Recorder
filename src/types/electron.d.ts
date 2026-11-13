@@ -30,6 +30,8 @@ type KickRecorderAppState = {
     aiArticleOllamaUrl: string;
     aiArticleModel: string;
     aiArticleIntervalSeconds: number;
+    aiArticleAudioEnabled: boolean;
+    aiArticleAudioModel: string;
   };
 };
 
@@ -63,6 +65,9 @@ type KickRecorderStreamArticle = {
   status?: "live" | "completed"; aiGenerated?: boolean; aiSummary?: string; highlights?: string[];
   lastAiUpdateAt?: string | null; viewerCount?: number; peakViewerCount?: number; aiError?: string;
   videoAnalyzed?: boolean; videoFrameCount?: number; videoSummary?: string; videoScenes?: string[]; videoAnalyzedAt?: string | null;
+  audioAnalyzed?: boolean; audioSegmentCount?: number; audioSummary?: string; audioTranscript?: string;
+  audioTranscriptSegments?: Array<{ startSeconds: number; endSeconds: number; text: string }>;
+  audioAnalyzedAt?: string | null; audioError?: string;
 };
 
 type KickRecorderAiArticleStatus = {
