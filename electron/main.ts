@@ -627,7 +627,7 @@ async function createKickArticle(slugInput: unknown, metadata?: KickChannelCheck
         userDataDirectory: app.getPath("userData"),
         resourcesDirectory: process.resourcesPath
       })
-    : { analyzedAt: new Date().toISOString(), frameBase64: "", transcript: "", warnings: [] as string[] };
+    : { analyzedAt: new Date().toISOString(), frameBase64s: [], transcript: "", warnings: [] as string[] };
 
   const ollamaStatus = await getOllamaStatus();
   if (!ollamaStatus.connected) {
@@ -639,17 +639,17 @@ async function createKickArticle(slugInput: unknown, metadata?: KickChannelCheck
 
   let visualSummary = "";
   const visionModel = ollamaStatus.models.find(model => /^qwen2\.5vl(?::3b)?$/i.test(model.name));
-  if (media.frameBase64 && visionModel) {
+  if (media.frameBase64s.length > 0 && visionModel) {
     try {
       visualSummary = await describeKickFrame({
         model: visionModel.name,
         title: metadata?.streamTitle || slug,
-        imageBase64: media.frameBase64
+        imageBase64: media.frameBase64s
       });
     } catch (error) {
       media.warnings.push("映像のAI解析に失敗しました：" + (error instanceof Error ? error.message : String(error)));
     }
-  } else if (media.frameBase64 && !visionModel) {
+  } else if (media.frameBase64s.length > 0 && !visionModel) {
     media.warnings.push("映像フレームは取得しましたが、qwen2.5vl:3bが未導入のためAI解析をスキップしました。");
   }
 
