@@ -680,13 +680,13 @@ function parseArticleChannelSlug(input: unknown): string {
   }
   const value = input.trim();
   let slug = value;
-  if (/^https?:\\/\\//i.test(value)) {
+  if (/^https?:\/\//i.test(value)) {
     let url: URL;
     try { url = new URL(value); } catch { throw new Error("Kickの配信URLが正しくありません。"); }
     if (url.protocol !== "https:" || !["kick.com", "www.kick.com"].includes(url.hostname.toLowerCase())) {
       throw new Error("https://kick.com/チャンネル名 の形式で入力してください。");
     }
-    const match = url.pathname.match(/^\\/([a-zA-Z0-9_]{1,25})\\/?$/);
+    const match = url.pathname.match(/^\/([a-zA-Z0-9_]{1,25})\/?$/);
     if (!match) throw new Error("チャンネルのトップページURLを入力してください。");
     slug = match[1];
   }
