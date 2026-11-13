@@ -258,6 +258,7 @@ export class LiveStreamArticleManager {
     session.videoFrames = frames.slice(-8);
     session.videoFrameTotalCount = (session.videoFrameTotalCount ?? 0) + 1;
     const count = session.videoFrameTotalCount;
+    if (count > (session.article.videoFrameCount ?? 0)) session.article.videoAnalyzed = false;
     if (count === 1 || count % 3 === 0) void this.analyze(session, false, true);
   }
 
@@ -404,7 +405,17 @@ export class LiveStreamArticleManager {
       audioTranscriptionInFlight: false, lastAnalysisAt: 0, analysisInFlight: false,
       finishing: true, videoFrames
     };
-    await this.analyze(session, true, true);
+    for (let pass = 0; pass < 8; pass += 1) {
+      const beforeComments = session.pendingComments.length;
+      const beforeAudio = session.pendingAudioSegments.length;
+      const beforeVideoAnalyzed = session.article.videoAnalyzed === true;
+      await this.analyze(session, true, true);
+      if (session.pendingComments.length === 0 && session.pendingAudioSegments.length === 0 &&
+          (!session.videoFrames?.length || session.article.videoAnalyzed)) break;
+      if (session.pendingComments.length === beforeComments &&
+          session.pendingAudioSegments.length === beforeAudio &&
+          (session.article.videoAnalyzed === true) === beforeVideoAnalyzed) break;
+    }
     if (videoError) {
       article.aiError = "映像分析はスキップしました（" + videoError + "）。利用できるほかの情報源で記事を生成しました。";
     }
@@ -464,13 +475,24 @@ export class LiveStreamArticleManager {
       await new Promise(resolve => setTimeout(resolve, 250));
     }
     const hasFinalAnalysisInput = (): boolean =>
-      session.pendingComments.length > 0 || session.pendingAudioSegments.length > 0 || Boolean(session.videoFrames?.length);
-    if (hasFinalAnalysisInput() && !session.analysisInFlight) {
+      session.pendingComments.length > 0 ||
+      session.pendingAudioSegments.length > 0 ||
+      Boolean(session.videoFrames?.length && !session.article.videoAnalyzed);
+    for (let pass = 0; pass < 8 && hasFinalAnalysisInput(); pass += 1) {
+      if (session.analysisInFlight) {
+        const deadline = Date.now() + 180_000;
+        while (session.analysisInFlight && Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, 250));
+        }
+        if (session.analysisInFlight) break;
+      }
+      const beforeComments = session.pendingComments.length;
+      const beforeAudio = session.pendingAudioSegments.length;
+      const beforeVideoAnalyzed = session.article.videoAnalyzed === true;
       await this.analyze(session, true, session.forceAi === true);
-    } else if (session.analysisInFlight) {
-      const deadline = Date.now() + 180_000;
-      while (session.analysisInFlight && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 250));
-      if (hasFinalAnalysisInput()) await this.analyze(session, true, session.forceAi === true);
+      if (session.pendingComments.length === beforeComments &&
+          session.pendingAudioSegments.length === beforeAudio &&
+          (session.article.videoAnalyzed === true) === beforeVideoAnalyzed) break;
     }
     session.article.status = "completed";
     session.article.durationSeconds = Math.max(0, Math.floor((Date.now() - Date.parse(session.article.startedAt)) / 1000));
@@ -533,7 +555,7 @@ export class LiveStreamArticleManager {
     if (session.analysisInFlight || (
       session.pendingComments.length === 0 &&
       session.pendingAudioSegments.length === 0 &&
-      !session.videoFrames?.length
+      !(videoFramesForAnalysis.length && !session.article.videoAnalyzed)
     )) return;
     const config = this.getConfig();
     const key = config.provider === "ollama" ? "local" : this.getApiKey();
@@ -541,8 +563,11 @@ export class LiveStreamArticleManager {
     session.analysisInFlight = true;
     session.lastAnalysisAt = Date.now();
     const batch = session.pendingComments.splice(0, final ? 120 : 80);
-    const audioBatch = session.pendingAudioSegments.splice(0, final ? 80 : 30);
+    const audioBatch = session.pendingAudioSegments.splice(0, final ? 40 : 30);
     const article = session.article;
+    const videoFramesForAnalysis = videoFramesForAnalysis.length && !article.videoAnalyzed
+      ? session.videoFrames
+      : [];
     this.persist(session);
     const userInput = {
       broadcaster: article.displayName,
@@ -565,7 +590,7 @@ export class LiveStreamArticleManager {
       })),
       audioSegmentCount: article.audioSegmentCount ?? 0,
       keywords: article.keywords,
-      videoFrames: (session.videoFrames ?? []).map(frame => ({ timeSeconds: frame.timeSeconds }))
+      videoFrames: (videoFramesForAnalysis).map(frame => ({ timeSeconds: frame.timeSeconds }))
     };
 
     try {
@@ -582,7 +607,7 @@ export class LiveStreamArticleManager {
             messages: [
               { role: "system", content: [
                 "あなたは配信内容を新聞記事として編集する日本語ニュース編集者です。映像・音声・コメント・配信メタデータを別々の情報源として扱い、相互に照合して記事へ統合してください。",
-                session.videoFrames?.length
+                videoFramesForAnalysis.length
                   ? "添付画像は動画から抽出した時刻付き静止画です。画像で確認できる場面や画面表示だけを記載し、画像の間に起きた動き・会話・発言は推測しないでください。videoSummaryとvideoScenesに映像の確認結果を記載してください。"
                   : "映像フレームがない場合は映像を見たと書かず、videoSummaryは空文字、videoScenesは空配列にしてください。",
                 audioBatch.length
@@ -594,15 +619,15 @@ export class LiveStreamArticleManager {
                 "注目ポイントは可能な限り時刻を付け、キーワードは実際に確認できた話題を優先してください。個人名・ユーザー名・個人情報・侮辱や個人攻撃は再掲せず、事実を創作しないでください。",
                 "headline, summary, paragraphs, highlights, keywords, videoSummary, videoScenes, audioSummaryを含むJSONだけを返してください。情報源がない場合は該当する要約を空文字、リストを空配列にしてください。"
               ].join("\n") },
-              { role: "user", content: JSON.stringify(userInput), ...(session.videoFrames?.length ? { images: session.videoFrames.map(frame => frame.imageBase64) } : {}) }
+              { role: "user", content: JSON.stringify(userInput), ...(videoFramesForAnalysis.length ? { images: videoFramesForAnalysis.map(frame => frame.imageBase64) } : {}) }
             ],
-            options: { temperature: 0.2, num_ctx: session.videoFrames?.length || audioBatch.length ? 24576 : 8192 }
+            options: { temperature: 0.2, num_ctx: videoFramesForAnalysis.length || audioBatch.length ? 24576 : 8192 }
           }),
-          signal: AbortSignal.timeout(session.videoFrames?.length ? 240_000 : 120_000)
+          signal: AbortSignal.timeout(videoFramesForAnalysis.length ? 240_000 : 120_000)
         });
         if (!response.ok) {
           const detail = await response.text().catch(() => "");
-          if (session.videoFrames?.length && /image|vision|not support|does not support/i.test(detail)) {
+          if (videoFramesForAnalysis.length && /image|vision|not support|does not support/i.test(detail)) {
             throw new Error("現在のOllamaモデルは画像入力に対応していません。モデル名を qwen2.5vl:3b などのVision対応モデルへ変更してください。");
           }
           throw new Error(`Ollama APIエラー（HTTP ${response.status}）：${detail.slice(0, 300)}`);
@@ -617,10 +642,10 @@ export class LiveStreamArticleManager {
         body: JSON.stringify({
           model: safeText(config.model, 100) || "gpt-6-luna",
           store: false,
-          max_output_tokens: session.videoFrames?.length || audioBatch.length ? 2800 : 1800,
+          max_output_tokens: videoFramesForAnalysis.length || audioBatch.length ? 2800 : 1800,
           instructions: [
             "あなたは配信内容を新聞記事として編集する日本語ニュース編集者です。映像・音声・コメント・配信メタデータを別々の情報源として確認し、相互に照合して記事へ統合してください。",
-            session.videoFrames?.length
+            videoFramesForAnalysis.length
               ? "添付画像は動画から抽出した静止画です。実際に見える場面・画面表示だけを記載し、画像の間の動きや音声は推測しないでください。videoSummaryとvideoScenesに映像の確認結果を記載してください。"
               : "映像フレームがない場合は映像を見たと書かず、videoSummaryは空文字、videoScenesは空配列にしてください。",
             audioBatch.length
@@ -631,11 +656,11 @@ export class LiveStreamArticleManager {
             "新聞風の見出し・要約・3〜5段落に整理し、概要、主な展開、確認できた発言や映像、コメントの反応、締めくくりを重複なく構成してください。注目ポイントは可能な限り時刻を付けてください。",
             "個人名・ユーザー名・個人情報・侮辱や個人攻撃は再掲せず、事実を創作しないでください。情報が少ない場合は確認できた範囲だけを簡潔にまとめてください。"
           ].join("\n"),
-          input: session.videoFrames?.length ? [{
+          input: videoFramesForAnalysis.length ? [{
             role: "user",
             content: [
               { type: "input_text", text: JSON.stringify(userInput) },
-              ...session.videoFrames.map(frame => ({
+              ...videoFramesForAnalysis.map(frame => ({
                 type: "input_image",
                 image_url: "data:image/jpeg;base64," + frame.imageBase64,
                 detail: "low"
@@ -665,7 +690,7 @@ export class LiveStreamArticleManager {
             }
           }
         }),
-        signal: AbortSignal.timeout(session.videoFrames?.length ? 120_000 : 60_000)
+        signal: AbortSignal.timeout(videoFramesForAnalysis.length ? 120_000 : 60_000)
       });
       if (!response.ok) {
         const detail = await response.text().catch(() => "");
@@ -683,7 +708,7 @@ export class LiveStreamArticleManager {
         article.audioSummary = result.audioSummary;
         article.audioAnalyzedAt = new Date().toISOString();
       }
-      if (session.videoFrames?.length) {
+      if (videoFramesForAnalysis.length) {
         if (!result.videoSummary) throw new Error("映像の分析結果が返されませんでした。画像対応モデル（例：qwen2.5vl:3b）を選択してください。");
         article.videoAnalyzed = true;
         article.videoFrameCount = session.videoFrameTotalCount ?? session.videoFrames.length;
