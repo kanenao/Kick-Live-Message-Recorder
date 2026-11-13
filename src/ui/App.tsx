@@ -1854,7 +1854,7 @@ export default function App() {
           <button className="small-action" onClick={() => setLibraryRefreshKey(value => value + 1)} disabled={!isDesktop || articleBusy}>一覧を更新</button>
         </div>
         {!isDesktop ? <div className="empty-state"><strong>Windowsデスクトップ版で利用できます</strong><span>録画ファイルとコメントログを読み込む必要があります。</span></div> : <>
-          <div className="comment-video-intro">録画済み配信は、コメント・配信情報に加えて、録画動画から一定間隔で抽出した最大8枚の代表フレームもAI分析できます。映像から確認できた場面・画面内のテキスト・表示内容を記事へ反映します。AIは音声やフレーム間の動きを直接解析するものではないため、確認できない発言・出来事は推測しません。LIVE中の自動記事は従来どおりコメントと配信情報を使って更新します。</div>
+          <div className="comment-video-intro">録画済み配信は、コメント・配信情報に加えて、録画動画から一定間隔で抽出した最大8枚の代表フレームもAI分析できます。映像から確認できた場面・画面内のテキスト・表示内容を記事へ反映します。AIは音声やフレーム間の動きを直接解析するものではないため、確認できない発言・出来事は推測しません。登録済み配信者のLIVE自動記事でも代表フレームを抽出し、コメント・配信情報・映像を組み合わせて更新します。登録不要のチャンネルは下の「LIVE記事だけ生成」から単発で開始できます。</div>
           <div className="settings-subsection manual-live-article-panel">
             <div className="settings-subheading"><h3>登録不要：LIVE記事だけ生成</h3><span className="api-state connected">録画なし</span></div>
             <p className="manual-live-article-description">チャンネル管理に登録していない配信者でも利用できます。Kickのチャンネル名またはURLを入力すると、LIVEコメントと映像の代表フレームを取得して記事を自動更新します。録画ファイルは作成せず、通常のチャンネル登録・自動録画設定も変更しません。</p>
