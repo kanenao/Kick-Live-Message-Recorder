@@ -207,8 +207,19 @@ function parseAnalysis(payload: Record<string, unknown>): AnalysisResult {
   return result;
 }
 
+export type OllamaModelPullStatus = {
+  model: string;
+  status: string;
+  percent: number | null;
+  completed?: number;
+  total?: number;
+  done: boolean;
+  error?: string;
+};
+
 export class LiveStreamArticleManager {
   private readonly sessions = new Map<string, LiveSession>();
+  private activeModelPull: { model: string; controller: AbortController } | null = null;
 
   constructor(
     private readonly getOutputDirectory: () => string,
@@ -605,6 +616,129 @@ export class LiveStreamArticleManager {
     }
     this.persist(session);
     this.sessions.delete(slug);
+  }
+
+  async pullOllamaModel(
+    modelInput: unknown,
+    onProgress: (status: OllamaModelPullStatus) => void
+  ): Promise<{ ok: true; model: string }> {
+    const config = this.getConfig();
+    if (config.provider !== "ollama") {
+      throw new Error("モデルのインストールはOllama選択時に利用できます。");
+    }
+    const model = safeText(modelInput, 120);
+    if (!/^[a-zA-Z0-9._:/-]{1,120}$/.test(model)) {
+      throw new Error("Ollamaモデル名が正しくありません。");
+    }
+    if (this.activeModelPull) {
+      throw new Error("別のOllamaモデルをインストール中です。完了またはキャンセル後に再試行してください。");
+    }
+
+    const controller = new AbortController();
+    const activePull = { model, controller };
+    this.activeModelPull = activePull;
+    const baseUrl = (config.baseUrl || "http://127.0.0.1:11434").replace(/\\/+$/, "");
+    let lastPercent = 0;
+    let receivedSuccess = false;
+    const publish = (status: string, completed?: number, total?: number, done = false, error?: string): void => {
+      const validTotal = typeof total === "number" && Number.isFinite(total) && total > 0 ? total : undefined;
+      const validCompleted = typeof completed === "number" && Number.isFinite(completed) && completed >= 0 ? completed : undefined;
+      const percent = validTotal && validCompleted !== undefined
+        ? Math.max(0, Math.min(100, Math.round(validCompleted / validTotal * 100)))
+        : done ? 100 : null;
+      if (percent !== null) lastPercent = percent;
+      onProgress({
+        model, status, percent: percent ?? (lastPercent > 0 ? lastPercent : null),
+        ...(validCompleted !== undefined ? { completed: validCompleted } : {}),
+        ...(validTotal !== undefined ? { total: validTotal } : {}),
+        done, ...(error ? { error: error.slice(0, 500) } : {})
+      });
+    };
+
+    try {
+      publish("Ollamaへ接続中", undefined, undefined, false);
+      let response: Response;
+      try {
+        response = await fetch(`${baseUrl}/api/pull`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model, stream: true }),
+          signal: controller.signal
+        });
+      } catch (error) {
+        if (controller.signal.aborted) throw new Error("モデルのインストールをキャンセルしました。");
+        throw new Error("Ollamaへ接続できません。Ollamaの起動と接続URLを確認してください。" +
+          (error instanceof Error ? " " + error.message : ""));
+      }
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        throw new Error(`Ollamaモデルの取得に失敗しました（HTTP ${response.status}）。${detail.slice(0, 350)}`);
+      }
+      if (!response.body) throw new Error("Ollamaからダウンロード進捗を受信できませんでした。");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      const consumeLine = (line: string): void => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        let payload: Record<string, unknown>;
+        try {
+          const parsed = JSON.parse(trimmed) as unknown;
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
+          payload = parsed as Record<string, unknown>;
+        } catch {
+          throw new Error("Ollamaのモデル取得応答を読み取れませんでした。");
+        }
+        if (typeof payload.error === "string" && payload.error.trim()) {
+          throw new Error(payload.error.trim().slice(0, 500));
+        }
+        const status = typeof payload.status === "string" ? payload.status : "ダウンロード中";
+        const completed = typeof payload.completed === "number" ? payload.completed : undefined;
+        const total = typeof payload.total === "number" ? payload.total : undefined;
+        const done = status.toLowerCase() === "success";
+        if (done) receivedSuccess = true;
+        publish(done ? "インストール完了" : status, completed, total, done);
+      };
+
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (value) buffer += decoder.decode(value, { stream: !done });
+          if (done) buffer += decoder.decode();
+          let newline = buffer.indexOf("\n");
+          while (newline >= 0) {
+            const line = buffer.slice(0, newline);
+            buffer = buffer.slice(newline + 1);
+            consumeLine(line);
+            newline = buffer.indexOf("\n");
+          }
+          if (done) break;
+          if (controller.signal.aborted) throw new Error("モデルのインストールをキャンセルしました。");
+        }
+        if (buffer.trim()) consumeLine(buffer);
+      } finally {
+        try { reader.releaseLock(); } catch { /* no-op */ }
+      }
+      if (controller.signal.aborted) throw new Error("モデルのインストールをキャンセルしました。");
+      if (!receivedSuccess) throw new Error("Ollamaからインストール完了の応答がありませんでした。");
+      return { ok: true, model };
+    } catch (error) {
+      const message = controller.signal.aborted
+        ? "モデルのインストールをキャンセルしました。"
+        : error instanceof Error ? error.message : String(error);
+      publish(controller.signal.aborted ? "キャンセルしました" : "エラー", undefined, undefined, true, message);
+      throw new Error(message);
+    } finally {
+      if (this.activeModelPull === activePull) this.activeModelPull = null;
+    }
+  }
+
+  cancelOllamaModelPull(): { ok: true; cancelled: boolean; model?: string } {
+    const activePull = this.activeModelPull;
+    if (!activePull) return { ok: true, cancelled: false };
+    activePull.controller.abort();
+    return { ok: true, cancelled: true, model: activePull.model };
   }
 
   async testConnection(modelInput: unknown): Promise<{ ok: true; message: string }> {
