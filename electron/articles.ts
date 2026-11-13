@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 import { isPathInsideDirectory } from "./recording";
+import { getVideoDurationSeconds } from "./video-frames";
 
 export type StreamArticle = {
   id: string;
@@ -35,6 +36,7 @@ type ChatLine = {
   username?: unknown;
   createdAt?: unknown;
   timeInSeconds?: unknown;
+  created_at?: unknown;
 };
 
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mkv", ".ts", ".webm", ".m4v", ".mov"]);
@@ -121,7 +123,7 @@ export function deleteStreamArticle(outputDirectory: string, slugInput: unknown,
   unlinkSync(filePath);
   return { ok: true, id: idInput };
 }
-export function generateStreamArticle(input: unknown, outputDirectory: string): StreamArticle {
+export async function generateStreamArticle(input: unknown, outputDirectory: string): Promise<StreamArticle> {
   if (!input || typeof input !== "object") throw new Error("記事の生成情報が不正です。");
   const values = input as { videoPath?: unknown; slug?: unknown; displayName?: unknown; category?: unknown; headline?: unknown; chatPaths?: unknown };
   const root = resolve(outputDirectory);
@@ -139,36 +141,65 @@ export function generateStreamArticle(input: unknown, outputDirectory: string): 
   const chatRoot = join(root, "Chat", slug);
   const selected = chatPaths.filter((path): path is string =>
     typeof path === "string" && isPathInsideDirectory(path, chatRoot) && extname(path).toLowerCase() === ".jsonl" && existsSync(path));
+  const videoStats = statSync(values.videoPath);
+  let durationSeconds = 0;
+  try {
+    durationSeconds = Math.floor(await getVideoDurationSeconds(values.videoPath, root));
+  } catch {
+    // Basic metadata and timestamp filtering still work when ffprobe cannot read duration.
+  }
+  const startedAt = extractStartDate(
+    basename(values.videoPath),
+    new Date(videoStats.mtimeMs - durationSeconds * 1000)
+  );
+  const startMs = startedAt.getTime();
+  const maximumWindowSeconds = durationSeconds > 0 ? durationSeconds : 6 * 60 * 60;
+  const timePaddingSeconds = 120;
+  const isInSelectedVideoWindow = (item: ChatLine): boolean => {
+    if (typeof item.timeInSeconds === "number" && Number.isFinite(item.timeInSeconds)) {
+      return item.timeInSeconds >= -timePaddingSeconds &&
+        item.timeInSeconds <= maximumWindowSeconds + timePaddingSeconds;
+    }
+    const createdAt = typeof item.createdAt === "string" ? item.createdAt
+      : typeof item.created_at === "string" ? item.created_at : "";
+    const createdMs = createdAt ? Date.parse(createdAt) : Number.NaN;
+    if (!Number.isFinite(createdMs)) return false;
+    return createdMs >= startMs - timePaddingSeconds * 1000 &&
+      createdMs <= startMs + (maximumWindowSeconds + timePaddingSeconds) * 1000;
+  };
+  const matchedLogs: string[] = [];
   let commentCount = 0;
   const commenters = new Set<string>();
   const counts = new Map<string, number>();
   const samples: string[] = [];
   for (const path of selected) {
+    let matchedInFile = false;
     const lines = readFileSync(path, "utf8").split(/\r?\n/);
     for (const line of lines) {
       if (!line.trim() || commentCount >= 250000) continue;
       let item: ChatLine;
       try { item = JSON.parse(line) as ChatLine; } catch { continue; }
+      if (!isInSelectedVideoWindow(item)) continue;
       const body = typeof item.content === "string" ? item.content : typeof item.message === "string" ? item.message : "";
       const text = body.trim().slice(0, 1000);
       if (!text) continue;
+      matchedInFile = true;
       commentCount += 1;
       const username = typeof item.senderUsername === "string" ? item.senderUsername : typeof item.username === "string" ? item.username : "";
       if (username) commenters.add(username);
       for (const token of tokenize(text)) counts.set(token, (counts.get(token) ?? 0) + 1);
       if (samples.length < 3 && text.length >= 8 && !/^https?:\/\//i.test(text)) samples.push(text);
     }
+    if (matchedInFile) matchedLogs.push(path);
   }
   const keywords = [...counts.entries()].filter(([, count]) => count >= 2)
     .sort((a, b) => b[1] - a[1]).slice(0, 8).map(([word]) => word);
-  const file = statSync(values.videoPath);
-  const startedAt = extractStartDate(basename(values.videoPath), file.mtime);
   const id = `${slug}_${startedAt.getFullYear()}${String(startedAt.getMonth()+1).padStart(2,"0")}${String(startedAt.getDate()).padStart(2,"0")}_${String(startedAt.getHours()).padStart(2,"0")}${String(startedAt.getMinutes()).padStart(2,"0")}${String(startedAt.getSeconds()).padStart(2,"0")}`;
   const article: StreamArticle = {
     id, slug, displayName, headline, category, startedAt: startedAt.toISOString(),
-    durationSeconds: 0, commentCount, uniqueCommenters: commenters.size, keywords,
+    durationSeconds, commentCount, uniqueCommenters: commenters.size, keywords,
     paragraphs: makeParagraphs(displayName, category, commentCount, commenters.size, keywords, samples),
-    sourceVideo: values.videoPath, sourceLogs: selected, createdAt: new Date().toISOString()
+    sourceVideo: values.videoPath, sourceLogs: matchedLogs, createdAt: new Date().toISOString()
   };
   const directory = join(root, "Articles", slug);
   mkdirSync(directory, { recursive: true });
