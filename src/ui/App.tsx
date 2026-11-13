@@ -1787,7 +1787,7 @@ export default function App() {
             </select></label>
             <label className="comment-video-field"><span>記事見出し（任意）</span><input value={articleHeadline} onChange={event => setArticleHeadline(event.target.value)} maxLength={160} placeholder="空欄なら配信者名から自動作成" /></label>
           </div>
-          <div className="comment-video-actions"><button className="primary-small" onClick={() => void createStreamArticle()} disabled={articleBusy || !articleSlug || !articleVideoPath}>{articleBusy ? "記事を作成中..." : settings.aiArticleEnabled && aiArticleStatus.configured ? "AI分析付き記事を生成" : "この配信の記事を生成"}</button><span className="comment-video-log-count">同じ配信者のコメントログ {commentLogFiles.filter(file => file.channelSlug.toLowerCase() === articleSlug.toLowerCase()).length}件を自動で参照</span></div>
+          <div className="comment-video-actions"><button className="primary-small" onClick={() => void createStreamArticle()} disabled={articleBusy || !articleSlug || !articleVideoPath}>{articleBusy ? "記事を作成中..." : settings.aiArticleEnabled && (settings.aiArticleProvider === "ollama" || aiArticleStatus.configured) ? "AI分析付き記事を生成" : "この配信の記事を生成"}</button><span className="comment-video-log-count">同じ配信者のコメントログ {commentLogFiles.filter(file => file.channelSlug.toLowerCase() === articleSlug.toLowerCase()).length}件を自動で参照</span></div>
           {articleMessage && <div className="api-message" role="status">{articleMessage}</div>}
           <div className="article-list">
             <div className="settings-subheading"><h3>記事一覧</h3><span className="api-state connected">{streamArticles.length}件</span></div>
