@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import { isPathInsideDirectory } from "./recording";
-import { extractVideoFrames, type VideoFrameSample } from "./video-frames";
+import { extractVideoFrames, getVideoDurationSeconds, type VideoFrameSample } from "./video-frames";
 import { formatAudioTranscript, transcribeVideoAudio, transcribeWavBase64, type AudioTranscriptSegment } from "./audio-transcription";
 import type { LiveAudioChunk } from "./live-video-frames";
 import type { KickChatMessage } from "./chat";
@@ -374,8 +374,10 @@ export class LiveStreamArticleManager {
     let audioSegments: AudioTranscriptSegment[] = [];
     let audioError = "";
     if (article.sourceVideo) {
-      try { videoFrames = await extractVideoFrames(article.sourceVideo, root); }
-      catch (error) { videoError = error instanceof Error ? error.message : String(error); }
+      try {
+        article.durationSeconds = Math.floor(await getVideoDurationSeconds(article.sourceVideo, root));
+        videoFrames = await extractVideoFrames(article.sourceVideo, root);
+      } catch (error) { videoError = error instanceof Error ? error.message : String(error); }
       if (config.provider === "ollama" && config.audioEnabled !== false) {
         try {
           audioSegments = await transcribeVideoAudio(
