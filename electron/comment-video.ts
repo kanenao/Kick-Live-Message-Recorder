@@ -33,7 +33,8 @@ export type CommentLogFile = {
 };
 
 export type CommentVideoFontFamily = "ms-pgothic" | "meiryo" | "yu-gothic" | "arial";
-export type CommentVideoPosition = "scroll" | "top" | "bottom";
+export type CommentVideoPosition = "scroll" | "top" | "bottom" | "command";
+type ResolvedCommentPosition = "scroll" | "top" | "bottom";
 
 export type CommentVideoOptions = {
   videoPath: string;
@@ -65,6 +66,7 @@ type ParsedComment = {
   seconds: number;
   text: string;
   color: string;
+  position?: ResolvedCommentPosition;
 };
 
 type LaneState = {
@@ -88,7 +90,51 @@ function normalizeFontFamily(value: unknown): CommentVideoFontFamily {
 }
 
 function normalizeCommentVideoPosition(value: unknown): CommentVideoPosition {
-  return value === "top" || value === "bottom" ? value : "scroll";
+  return value === "top" || value === "bottom" || value === "command" ? value : "scroll";
+}
+
+function normalizePositionCommand(value: unknown): ResolvedCommentPosition | undefined {
+  if (typeof value !== "string") return undefined;
+  const token = value.trim().toLowerCase().replace(/^[\[\]@/#]+|[\[\]]+$/g, "");
+  if (token === "ue" || token === "top") return "top";
+  if (token === "shita" || token === "bottom") return "bottom";
+  if (token === "naka" || token === "scroll") return "scroll";
+  return undefined;
+}
+
+/**
+ * ニコニコ由来の mail/commands メタデータ、またはログを手動編集した際の
+ * 先頭 @ue・/shita・[naka] 指定を解釈する。普通の本文は変更しない。
+ */
+function resolveCommentPosition(
+  raw: Record<string, unknown>,
+  content: string
+): { text: string; position?: ResolvedCommentPosition } {
+  const metadataValues = [
+    raw.position,
+    raw.commentPosition,
+    raw.command,
+    raw.commands,
+    raw.mail,
+    raw.nicoCommands
+  ];
+  for (const value of metadataValues) {
+    const candidates = Array.isArray(value) ? value : [value];
+    for (const candidate of candidates) {
+      if (typeof candidate !== "string") continue;
+      for (const token of candidate.split(/[\s,]+/)) {
+        const position = normalizePositionCommand(token);
+        if (position) return { text: content, position };
+      }
+    }
+  }
+
+  const prefix = content.match(/^\s*(?:@|\/|\[)(ue|naka|shita)(?:\])?\s+/i);
+  if (!prefix) return { text: content };
+  const position = normalizePositionCommand(prefix[1]);
+  return position
+    ? { text: content.slice(prefix[0].length).trim(), position }
+    : { text: content };
 }
 
 type VideoInfo = {
@@ -324,7 +370,7 @@ export type CommentVideoPreviewResult = {
   totalComments: number;
   malformedLines: number;
   outsideVideoCount: number;
-  comments: Array<{ seconds: number; content: string; username: string; color: string }>;
+  comments: Array<{ seconds: number; content: string; username: string; color: string; position?: ResolvedCommentPosition }>;
 };
 
 /**
@@ -403,7 +449,7 @@ export async function previewCommentVideo(
     ? filenameStartMs
     : videoStats.mtimeMs - info.duration * 1000;
   const delaySeconds = boundedNumber(values.delaySeconds, 0, -300, 300);
-  const previewCandidates: Array<{ seconds: number; content: string; username: string; color: string }> = [];
+  const previewCandidates: Array<{ seconds: number; content: string; username: string; color: string; position?: ResolvedCommentPosition }> = [];
   let malformedLines = 0;
   let outsideVideoCount = 0;
   let readCount = 0;
@@ -446,18 +492,20 @@ export async function previewCommentVideo(
     }
 
     const username = readString(raw.senderUsername) ?? readString(raw.username) ?? "";
-    const cleanContent = content
+    const cleanRawContent = content
       .replace(/\[emote:\d+:([^\]]+)\]/g, "$1")
       .replace(/[\r\n\t]+/g, " ")
       .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "")
       .trim()
       .slice(0, 500);
-    if (!cleanContent) continue;
+    const resolved = resolveCommentPosition(raw, cleanRawContent);
+    if (!resolved.text) continue;
     previewCandidates.push({
       seconds,
-      content: cleanContent,
+      content: resolved.text,
       username: username.slice(0, 80),
-      color: readString(raw.messageColor) ?? readString(raw.commentColor) ?? "#ffffff"
+      color: readString(raw.messageColor) ?? readString(raw.commentColor) ?? "#ffffff",
+      position: resolved.position
     });
   }
 
@@ -678,12 +726,21 @@ export class KickCommentVideoGenerator {
         if (!Number.isFinite(seconds) || seconds < 0 || seconds > info.duration) continue;
 
         const username = readString(raw.senderUsername) ?? readString(raw.username) ?? "";
-        const text = escapeAssText(options.showUsername && username ? username + " : " + content : content);
+        const cleanContent = content
+          .replace(/\[emote:\d+:([^\]]+)\]/g, "$1")
+          .replace(/[\r\n\t]+/g, " ")
+          .trim();
+        const resolved = resolveCommentPosition(raw, cleanContent);
+        const displayContent = options.showUsername && username
+          ? username + " : " + resolved.text
+          : resolved.text;
+        const text = escapeAssText(displayContent);
         if (!text) continue;
         comments.push({
           seconds,
           text,
-          color: readString(raw.messageColor) ?? readString(raw.commentColor) ?? "#ffffff"
+          color: "#ffffff",
+          position: resolved.position
         });
 
         if (readCount % 10_000 === 0) {
@@ -740,7 +797,10 @@ export class KickCommentVideoGenerator {
         options.rowLimit,
         Math.floor((fixedAreaHeight + options.collisionGap) / Math.max(1, fixedLaneStep))
       ));
-      const fixedLaneEnds: Array<number | null> = Array.from({ length: fixedLaneCount }, () => null);
+      const fixedLaneEnds: Record<"top" | "bottom", Array<number | null>> = {
+        top: Array.from({ length: fixedLaneCount }, () => null),
+        bottom: Array.from({ length: fixedLaneCount }, () => null)
+      };
 
       // 同じコメント群を再生成しても配置が安定する、再現可能な疑似乱数。
       let laneRandomState = 0x12345678;
@@ -759,7 +819,10 @@ export class KickCommentVideoGenerator {
         if (signal.aborted) throw new Error("生成を停止しました。");
         const width = estimateTextWidth(comment.text, options.fontSize) + 32;
         let laneIndex = -1;
-        const isScrolling = options.position === "scroll";
+        const commentPosition: ResolvedCommentPosition = options.position === "command"
+          ? comment.position ?? "scroll"
+          : options.position;
+        const isScrolling = commentPosition === "scroll";
         const start = comment.seconds;
         // 文字が長いコメントは、画面を出切るまでの時間だけ長くする。
         const commentMoveDuration = isScrolling
@@ -794,15 +857,16 @@ export class KickCommentVideoGenerator {
           }
         } else {
           // 上・下固定は同一行の表示終了時刻を管理。空いている行を優先する。
-          for (let index = 0; index < fixedLaneEnds.length; index += 1) {
-            const previousEnd = fixedLaneEnds[index];
+          const fixedEnds = commentPosition === "top" ? fixedLaneEnds.top : fixedLaneEnds.bottom;
+          for (let index = 0; index < fixedEnds.length; index += 1) {
+            const previousEnd = fixedEnds[index];
             if (previousEnd === null || start >= previousEnd) {
               laneIndex = index;
               break;
             }
           }
           if (laneIndex >= 0) {
-            fixedLaneEnds[laneIndex] = Math.min(info.duration, start + options.displaySeconds);
+            fixedEnds[laneIndex] = Math.min(info.duration, start + options.displaySeconds);
           }
         }
 
@@ -823,10 +887,10 @@ export class KickCommentVideoGenerator {
             "\\fn" + COMMENT_FONT_FAMILIES[options.fontFamily] + "\\b1\\1c" + color +
             "\\alpha&H" + alpha + "&\\bord3.2\\shad1}";
         } else {
-          const y = options.position === "top"
+          const y = commentPosition === "top"
             ? topMargin + laneIndex * fixedLaneStep
             : info.height - topMargin - laneIndex * fixedLaneStep;
-          const alignment = options.position === "top" ? "\\an8" : "\\an2";
+          const alignment = commentPosition === "top" ? "\\an8" : "\\an2";
           // 固定表示でも長文が左右にはみ出さないよう、横幅に合わせて縮小する。
           const maxPinnedWidth = info.width * 0.88;
           const horizontalScale = Math.max(5, Math.min(100, Math.floor(maxPinnedWidth / Math.max(1, width) * 100)));
