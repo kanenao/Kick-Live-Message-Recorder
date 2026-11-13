@@ -1806,10 +1806,10 @@ export default function App() {
                     const visibleRows = Math.max(1, Math.floor((1080 - 26 - fontSize) / lineHeight) + 1);
                     const gap = Math.max(0, Math.min(200, commentVideoGap));
                     const fixedRows = Math.max(1, Math.min(20, commentVideoRows, Math.floor((1080 * 0.28 + gap) / Math.max(1, lineHeight + gap))));
-                    const allowedRows = commentVideoPosition === "scroll"
+                    const position = item.position ?? (commentVideoPosition === "command" ? "scroll" : commentVideoPosition);
+                    const allowedRows = position === "scroll"
                       ? Math.max(1, Math.min(20, commentVideoRows, visibleRows))
                       : fixedRows;
-                    const position = item.position ?? (commentVideoPosition === "command" ? "scroll" : commentVideoPosition);
                     return position === "scroll" ? item.lane < allowedRows : index < allowedRows;
                   })
                   .map((item, index) => {
