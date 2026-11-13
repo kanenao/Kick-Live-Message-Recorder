@@ -338,12 +338,13 @@ export class LiveStreamArticleManager {
     session.finishing = true;
     session.article.durationSeconds = Math.max(0, Math.floor((Date.now() - Date.parse(session.article.startedAt)) / 1000));
     session.article.viewerCount = 0;
-    if (session.pendingComments.length > 0 && !session.analysisInFlight) {
-      await this.analyze(session, true);
+    const hasFinalAnalysisInput = (): boolean => session.pendingComments.length > 0 || Boolean(session.videoFrames?.length);
+    if (hasFinalAnalysisInput() && !session.analysisInFlight) {
+      await this.analyze(session, true, session.forceAi === true);
     } else if (session.analysisInFlight) {
-      const deadline = Date.now() + 90_000;
+      const deadline = Date.now() + 180_000;
       while (session.analysisInFlight && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 250));
-      if (session.pendingComments.length > 0) await this.analyze(session, true);
+      if (hasFinalAnalysisInput()) await this.analyze(session, true, session.forceAi === true);
     }
     session.article.status = "completed";
     session.article.durationSeconds = Math.max(0, Math.floor((Date.now() - Date.parse(session.article.startedAt)) / 1000));
