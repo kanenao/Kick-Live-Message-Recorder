@@ -85,7 +85,7 @@ const DEFAULT_STATE: AppState = {
     aiArticleEnabled: false,
     aiArticleProvider: "ollama",
     aiArticleOllamaUrl: "http://127.0.0.1:11434",
-    aiArticleModel: "qwen2.5:3b",
+    aiArticleModel: "qwen2.5vl:3b",
     aiArticleIntervalSeconds: 120
   }
 };
@@ -699,7 +699,8 @@ function normalizeState(input: unknown): AppState {
       aiArticleProvider: settings.aiArticleProvider === "openai" ? "openai" : "ollama",
       aiArticleOllamaUrl: typeof settings.aiArticleOllamaUrl === "string" && /^https?:\/\//i.test(settings.aiArticleOllamaUrl) ? settings.aiArticleOllamaUrl.slice(0, 300) : "http://127.0.0.1:11434",
       aiArticleModel: typeof settings.aiArticleModel === "string" && /^[a-zA-Z0-9._:-]{1,100}$/.test(settings.aiArticleModel)
-        ? settings.aiArticleModel : (settings.aiArticleProvider === "openai" ? "gpt-6-luna" : "qwen2.5:3b"),
+        ? (settings.aiArticleProvider !== "openai" && settings.aiArticleModel === "qwen2.5:3b" ? "qwen2.5vl:3b" : settings.aiArticleModel)
+        : (settings.aiArticleProvider === "openai" ? "gpt-6-luna" : "qwen2.5vl:3b"),
       aiArticleIntervalSeconds: typeof settings.aiArticleIntervalSeconds === "number" && Number.isFinite(settings.aiArticleIntervalSeconds)
         ? Math.max(30, Math.min(600, Math.round(settings.aiArticleIntervalSeconds))) : 120
     }
