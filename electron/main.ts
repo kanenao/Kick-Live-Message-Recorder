@@ -723,8 +723,37 @@ async function runLiveArticleCycle(): Promise<void> {
   try {
     const state = readState();
     if (!state.settings.autoGenerateArticles || state.channels.length === 0) return;
-    const results = await checkKickChannels(state.channels.map(channel => channel.name));
-    for (const result of results) {
+    const activeRecordingChannels = state.channels.filter(channel => recordingManager.isRecording(channel.name));
+    let results: KickChannelCheck[];
+    try {
+      results = await checkKickChannels(state.channels.map(channel => channel.name));
+    } catch (error) {
+      if (activeRecordingChannels.length === 0) throw error;
+      // 録画プロセスが継続している場合は、その状態を生放送中の根拠として使用する。
+      // Kick APIが一時的に停止していても、ローカル録画の映像・音声解析を止めない。
+      results = activeRecordingChannels.map(channel => {
+        const slug = channel.name.toLowerCase();
+        return liveArticleMetadata.get(slug) ?? {
+          slug,
+          broadcasterUserId: null,
+          found: true,
+          isLive: true,
+          streamTitle: channel.name,
+          viewerCount: 0,
+          startedAt: null
+        };
+      });
+      mainWindow?.webContents.send("articles:status", {
+        slug: "",
+        message: "Kick APIに接続できないため、録画中チャンネルはローカル録画の状態でAI記事を継続します。"
+      });
+    }
+    const liveResults = results.map(result =>
+      recordingManager.isRecording(result.slug) && !result.isLive
+        ? { ...result, found: true, isLive: true }
+        : result
+    );
+    for (const result of liveResults) {
       if (result.isLive) {
         liveArticleChannels.add(result.slug);
         liveArticleMetadata.set(result.slug, result);
