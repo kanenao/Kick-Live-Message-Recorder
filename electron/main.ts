@@ -673,7 +673,9 @@ function startArticleFrameCapture(slugInput: string): void {
       return captureSettings.aiArticleProvider === "ollama" && captureSettings.aiArticleAudioEnabled
         ? (chunk: { timeSeconds: number; wavBase64: string }) => liveArticleManager.onAudioChunk(slug, chunk)
         : undefined;
-    })());
+    })(), audioError => {
+      liveArticleManager.onAudioCaptureError(slug, audioError);
+    });
     liveArticleFrameCaptures.set(slug, { stop, frames });
   } catch (error) {
     const status: LiveVideoFrameStatus = {
