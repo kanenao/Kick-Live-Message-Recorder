@@ -1246,6 +1246,20 @@ function registerIpcHandlers(): void {
     return liveArticleManager.testConnection(model);
   });
 
+  ipcMain.handle("ai-article:pull-model", async (event, model: unknown) => {
+    assertTrustedSender(event);
+    return liveArticleManager.pullOllamaModel(model, status => {
+      if (mainWindow && !mainWindow.webContents.isDestroyed()) {
+        mainWindow.webContents.send("ai-article:model-pull-status", status);
+      }
+    });
+  });
+
+  ipcMain.handle("ai-article:cancel-model-pull", event => {
+    assertTrustedSender(event);
+    return liveArticleManager.cancelOllamaModelPull();
+  });
+
   ipcMain.handle("kick:get-credentials-status", event => {
     assertTrustedSender(event);
     return getKickCredentialsStatus();
