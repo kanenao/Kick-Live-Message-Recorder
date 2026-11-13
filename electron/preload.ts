@@ -69,7 +69,7 @@ type CommentVideoOptions = {
   quality?: "high" | "standard" | "compact"; position?: "scroll" | "top" | "bottom"; showUsername?: boolean;
 };
 type StreamArticle = {
-  id: string; slug: string; displayName: string; headline: string; category: string; startedAt: string;
+  id: string; slug: string; displayName: string; headline: string; streamTitle?: string; category: string; startedAt: string;
   durationSeconds: number; commentCount: number; uniqueCommenters: number; keywords: string[];
   paragraphs: string[]; sourceVideo: string; sourceLogs: string[]; createdAt: string;
   status?: "live" | "completed"; aiGenerated?: boolean; aiSummary?: string; highlights?: string[];
