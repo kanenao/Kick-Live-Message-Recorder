@@ -645,9 +645,10 @@ export class LiveStreamArticleManager {
                   highlights: { type: "array", items: { type: "string" } },
                   keywords: { type: "array", items: { type: "string" } },
                   videoSummary: { type: "string" },
-                  videoScenes: { type: "array", items: { type: "string" } }
+                  videoScenes: { type: "array", items: { type: "string" } },
+                  audioSummary: { type: "string" }
                 },
-                required: ["headline", "summary", "paragraphs", "highlights", "keywords", "videoSummary", "videoScenes"],
+                required: ["headline", "summary", "paragraphs", "highlights", "keywords", "videoSummary", "videoScenes", "audioSummary"],
                 additionalProperties: false
               }
             }
@@ -667,6 +668,10 @@ export class LiveStreamArticleManager {
       article.paragraphs = result.paragraphs;
       article.highlights = result.highlights;
       article.keywords = result.keywords.length > 0 ? result.keywords : article.keywords;
+      if (audioBatch.length > 0 || article.audioAnalyzed) {
+        article.audioSummary = result.audioSummary;
+        article.audioAnalyzedAt = new Date().toISOString();
+      }
       if (session.videoFrames?.length) {
         if (!result.videoSummary) throw new Error("映像の分析結果が返されませんでした。画像対応モデル（例：qwen2.5vl:3b）を選択してください。");
         article.videoAnalyzed = true;
@@ -680,12 +685,19 @@ export class LiveStreamArticleManager {
       article.lastAiUpdateAt = new Date().toISOString();
     } catch (error) {
       session.pendingComments.unshift(...batch);
+      session.pendingAudioSegments.unshift(...audioBatch);
       article.aiError = error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500);
     } finally {
       session.analysisInFlight = false;
       this.persist(session);
-      if (final && session.pendingComments.length > 0 && !article.aiGenerated) {
+      if (final && (session.pendingComments.length > 0 || session.pendingAudioSegments.length > 0) && !article.aiGenerated) {
         article.aiError = article.aiError || "AI最終分析を完了できませんでした。";
+      }
+      const intervalMs = Math.max(30, Math.min(600, this.getConfig().intervalSeconds)) * 1000;
+      if (!session.finishing && !final && !session.analysisInFlight &&
+          (session.pendingAudioSegments.length > 0 || session.pendingComments.length >= 12) &&
+          Date.now() - session.lastAnalysisAt >= intervalMs) {
+        void this.analyze(session, false, session.forceAi === true);
       }
     }
   }
