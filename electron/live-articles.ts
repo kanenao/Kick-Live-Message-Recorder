@@ -143,6 +143,27 @@ function sampleCommentsAcrossDuration(
   });
 }
 
+function isCommentWithinArticleWindow(
+  item: Record<string, unknown>,
+  article: LiveArticle
+): boolean {
+  const paddingSeconds = 120;
+  const durationSeconds = Number.isFinite(article.durationSeconds) && article.durationSeconds > 0
+    ? article.durationSeconds
+    : 6 * 60 * 60;
+  if (typeof item.timeInSeconds === "number" && Number.isFinite(item.timeInSeconds)) {
+    return item.timeInSeconds >= -paddingSeconds &&
+      item.timeInSeconds <= durationSeconds + paddingSeconds;
+  }
+  const createdAt = typeof item.createdAt === "string" ? item.createdAt
+    : typeof item.created_at === "string" ? item.created_at : "";
+  const createdMs = createdAt ? Date.parse(createdAt) : Number.NaN;
+  const startedMs = Date.parse(article.startedAt);
+  if (!Number.isFinite(createdMs) || !Number.isFinite(startedMs)) return false;
+  return createdMs >= startedMs - paddingSeconds * 1000 &&
+    createdMs <= startedMs + (durationSeconds + paddingSeconds) * 1000;
+}
+
 function extractResponseText(payload: Record<string, unknown>): string {
   if (typeof payload.output_text === "string") return payload.output_text;
   if (!Array.isArray(payload.output)) return "";
@@ -418,6 +439,7 @@ export class LiveStreamArticleManager {
         if (!line.trim()) continue;
         let item: Record<string, unknown>;
         try { item = JSON.parse(line) as Record<string, unknown>; } catch { continue; }
+        if (!isCommentWithinArticleWindow(item, article)) continue;
         const content = typeof item.content === "string" ? item.content : typeof item.message === "string" ? item.message : "";
         const text = content.normalize("NFKC").replace(/\s+/g, " ").trim().slice(0, 500);
         if (!text) continue;
