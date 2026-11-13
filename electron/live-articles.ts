@@ -368,7 +368,7 @@ export class LiveStreamArticleManager {
     try {
       let result: AnalysisResult;
       if (config.provider === "ollama") {
-        const baseUrl = (config.baseUrl || "http://127.0.0.1:11434").replace(/\\/+$/, "");
+        const baseUrl = (config.baseUrl || "http://127.0.0.1:11434").replace(/\/+$/, "");
         const response = await fetch(`${baseUrl}/api/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
