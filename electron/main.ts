@@ -20,7 +20,7 @@ import { autoUpdater } from "electron-updater";
 import { KickChatReceiver } from "./chat";
 import { KickVodChatDownloader } from "./vod-chat";
 import { KickCommentVideoGenerator, listCommentLogFiles, previewCommentVideo } from "./comment-video";
-import { generateStreamArticle, listStreamArticles } from "./articles";
+import { deleteStreamArticle, generateStreamArticle, listStreamArticles } from "./articles";
 import { LiveStreamArticleManager } from "./live-articles";
 import { deleteRecordingFile, isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
 
@@ -1248,6 +1248,14 @@ function registerIpcHandlers(): void {
   ipcMain.handle("articles:list", (event, slug?: unknown) => {
     assertTrustedSender(event);
     return listStreamArticles(getRecordingOutputDirectory(), slug);
+  });
+
+  ipcMain.handle("articles:delete", (event, slug: unknown, id: unknown) => {
+    assertTrustedSender(event);
+    if (liveArticleManager.isArticleActive(slug, id)) {
+      throw new Error("LIVE更新中の記事は削除できません。配信終了後にもう一度お試しください。");
+    }
+    return deleteStreamArticle(getRecordingOutputDirectory(), slug, id);
   });
 
   ipcMain.handle("articles:generate", async (event, input: unknown) => {
