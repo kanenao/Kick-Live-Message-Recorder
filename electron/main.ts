@@ -668,9 +668,12 @@ function startArticleFrameCapture(slugInput: string): void {
       liveArticleManager.updateVideoFrames(slug, [...frames]);
     }, status => {
       mainWindow?.webContents.send("articles:live-capture-status", { slug, ...status });
-    }, chunk => {
-      liveArticleManager.onAudioChunk(slug, chunk);
-    });
+    }, (() => {
+      const captureSettings = readState().settings;
+      return captureSettings.aiArticleProvider === "ollama" && captureSettings.aiArticleAudioEnabled
+        ? (chunk: { timeSeconds: number; wavBase64: string }) => liveArticleManager.onAudioChunk(slug, chunk)
+        : undefined;
+    })());
     liveArticleFrameCaptures.set(slug, { stop, frames });
   } catch (error) {
     const status: LiveVideoFrameStatus = {
