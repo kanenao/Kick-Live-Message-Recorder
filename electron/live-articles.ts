@@ -502,16 +502,16 @@ export class LiveStreamArticleManager {
         throw new Error(`記事生成モデル「${model}」が見つかりません。PowerShellで ollama pull ${model} を実行してください。`);
       }
       const audioModel = safeText(config.audioModel, 120) || "frozenlab/qwen3-asr:0.6b";
-      if (config.audioEnabled !== false &&
-          !models.includes(audioModel) &&
-          !models.some(name => name.split(":")[0] === audioModel.split(":")[0])) {
-        throw new Error(`Ollama接続は成功しましたが、音声認識モデル「${audioModel}」がありません。PowerShellで ollama pull ${audioModel} を実行してください。音声認識を使わない場合は設定をOFFにしてください。`);
-      }
+      const audioModelMissing = config.audioEnabled !== false &&
+        !models.includes(audioModel) &&
+        !models.some(name => name.split(":")[0] === audioModel.split(":")[0]);
       return {
         ok: true,
         message: config.audioEnabled === false
           ? `Ollamaに接続できました（記事生成モデル：${model}）。音声認識はOFFです。`
-          : `Ollamaに接続できました（記事生成：${model}／音声認識：${audioModel}）。`
+          : audioModelMissing
+            ? `記事生成モデル「${model}」は利用可能です。音声認識モデル「${audioModel}」は未導入です。音声を使う場合は PowerShell で ollama pull ${audioModel} を実行してください。モデル未導入でも映像・コメントの記事生成は利用できます。`
+            : `Ollamaに接続できました（記事生成：${model}／音声認識：${audioModel}）。`
       };
     }
     const key = this.getApiKey();
