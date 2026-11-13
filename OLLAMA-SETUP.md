@@ -4,7 +4,7 @@ All AI inference runs on the user's Windows PC. No OpenAI API key, cloud model a
 
 ## 1. Install Ollama and models
 
-Install Ollama from https://ollama.com/download, then run in PowerShell:
+Install Ollama 0.7.0 or later from https://ollama.com/download. The official Ollama model page lists qwen2.5vl:3b as a 3.2GB vision model., then run in PowerShell:
 
 ```powershell
 ollama pull qwen2.5:3b
