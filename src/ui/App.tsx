@@ -68,7 +68,7 @@ type RecordingEvent = {
   endedAt?: string;
 };
 
-const APP_VERSION = "0.1.0-beta.16";
+const APP_VERSION = "0.1.0-beta.17";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -976,7 +976,7 @@ export default function App() {
           <span className={ollamaStatus.connected ? "api-state connected" : "api-state"}>{ollamaStatus.connected ? "Ollama接続済み" : "Ollama未接続"}</span>
         </div>
         <div className="article-toolbar">
-          <span className="settings-help">録画中の映像フレーム・音声の文字起こし・Kick公式WebhookコメントをPC内で統合します。録画とチャット受信が有効な間は約3分ごとに記事を更新し、配信終了検出時に最終記事を作成します。録画していない場合は保存済みコメントのみで記事を生成します。</span>
+          <span className="settings-help">録画中の映像フレーム・音声の文字起こし・Kick公式WebhookコメントをPC内で統合します。録画中はチャット受信サーバーを起動していなくても約60秒ごとに映像・音声を解析して記事を更新します。チャット受信が有効なら視聴者コメントも統合し、配信終了時に最終記事を作成します。</span>
           <div className="update-actions">
             {channels.map(channel => <button key={channel.id} className="small-action" onClick={() => void generateArticleNow(channel.name)} disabled={!isDesktop || !ollamaStatus.connected || Boolean(articleBusySlug)}>
               {articleBusySlug === channel.name ? "生成中..." : `${channel.name} の記事を生成`}
@@ -1020,7 +1020,7 @@ export default function App() {
           {ollamaStatus.connected
             ? <p className="settings-help">検出したモデル：{ollamaStatus.models.length ? ollamaStatus.models.map(model => model.name).join("、") : "なし"}</p>
             : <div className="notice">{ollamaStatus.message || "Ollamaを起動してから接続確認してください。"}<br />モデルの導入コマンド：ollama pull qwen2.5:3b</div>}
-          <div className="notice">配信記事タブから手動生成できるほか、チャット受信中は約3分ごとにライブ記事を自動保存します。映像・音声のAI解析には、録画中であることに加え、下記のFFmpegとWhisper.cpp、およびOllamaのVisionモデルが必要です。</div>
+          <div className="notice">配信中は録画開始を検知して約60秒ごとのAI記事生成を自動開始します。チャット受信サーバーは映像・音声の記事生成には不要で、起動していればコメントも記事へ追加します。映像・音声解析には下記ツールが必要です。</div>
         </div>
 
         <div className="settings-subsection">
@@ -1030,7 +1030,7 @@ export default function App() {
               {mediaToolStatus.ffmpegAvailable && mediaToolStatus.whisperAvailable && mediaToolStatus.whisperModelAvailable && ollamaStatus.models.some(model => model.name.toLowerCase().startsWith("qwen2.5vl")) && ollamaStatus.models.some(model => model.name.toLowerCase().startsWith("qwen2.5:3b")) ? "音声・映像ツール準備完了" : "セットアップが必要"}
             </span>
           </div>
-          <p className="settings-help">FFmpegで録画中ファイルから直近の映像1枚と音声約60秒を抽出し、Whisper.cppで文字起こしします。映像はOllamaの qwen2.5vl:3b、記事本文は qwen2.5:3b で解析します。処理はPC内で完結します。</p>
+          <p className="settings-help">FFmpegで録画中ファイルから時系列の映像フレームを最大3枚と直近約60秒の音声を抽出し、Whisper.cppで文字起こしします。映像はOllamaの qwen2.5vl:3b、記事本文は qwen2.5:3b で解析します。処理はPC内で完結します。</p>
           <div className="setting-row">
             <div><strong>FFmpeg</strong><small>{mediaToolStatus.ffmpegAvailable ? mediaToolStatus.ffmpegPath : "未設定：ffmpeg.exeを選択してください"}</small></div>
             <button className="small-action" onClick={() => void chooseMediaTool("ffmpeg")} disabled={!isDesktop}>ffmpeg.exeを選択</button>
@@ -1049,7 +1049,7 @@ export default function App() {
           {mediaToolStatus.setupNotes.map(note => <p className="settings-help" key={note}>{note}</p>)}
         </div>
         <div className="setting-row">
-          <div><strong>配信中の記事を自動生成</strong><small>チャット受信中、約3分ごとに新しいコメントから記事を生成し、配信終了時に最終記事を保存します</small></div>
+          <div><strong>配信中の記事を自動生成</strong><small>録画中は約60秒ごとに映像・音声を使って記事を更新します。コメント受信は任意で、受信中ならコメントも統合します</small></div>
           <label className="setting-control"><input type="checkbox" checked={settings.autoGenerateArticles} onChange={e => setSettings(prev => ({ ...prev, autoGenerateArticles: e.target.checked }))} /><span>{settings.autoGenerateArticles ? "有効" : "無効"}</span></label>
         </div>
         <div className="setting-row">
