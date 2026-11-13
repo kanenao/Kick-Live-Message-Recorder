@@ -1979,11 +1979,32 @@ export default function App() {
           </div>
           <div className="comment-video-actions"><button className="primary-small" onClick={() => void createStreamArticle()} disabled={articleBusy || !articleSlug || !articleVideoPath}>{articleBusy ? "映像・音声・コメントをAI分析中..." : settings.aiArticleProvider === "ollama" || aiArticleStatus.configured ? "3つの情報源からAI記事を生成" : "この配信の記事を生成"}</button><span className="comment-video-log-count">同じ配信者のコメントログ {commentLogFiles.filter(file => file.channelSlug.toLowerCase() === articleSlug.toLowerCase()).length}件を自動で参照</span></div>
           {articleMessage && <div className="api-message" role="status">{articleMessage}</div>}
+          <div className="article-news-masthead">
+            <div className="article-news-title">
+              <span className="article-news-kicker">KICK LIVE JOURNAL / AI BROADCAST EDITION</span>
+              <h2>配信AI新聞</h2>
+              <p>映像・音声・コメントから読み解く、生放送の記録</p>
+            </div>
+            <div className="article-news-issue">
+              <strong>{new Date().toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "long" })}</strong>
+              <span>保存記事 {streamArticles.length.toLocaleString("ja-JP")}本</span>
+            </div>
+          </div>
           <div className="article-list">
-            <div className="settings-subheading article-list-heading"><h3>記事一覧</h3><span className="api-state connected">{filteredStreamArticles.length}件 / 全{streamArticles.length}件</span></div>
-            <div className="article-search-row"><input className="article-search" value={articleSearch} onChange={event => setArticleSearch(event.target.value)} placeholder="記事を検索（配信者・見出し・カテゴリ・キーワード）" aria-label="配信記事を検索" /></div>
-            {streamArticles.length === 0 ? <div className="empty-state"><strong>まだ記事がありません</strong><span>登録配信者の録画を選んで記事を生成してください。</span></div> : filteredStreamArticles.length === 0 ? <div className="empty-state"><strong>一致する記事がありません</strong><span>検索語を変更してください。</span></div> : filteredStreamArticles.map(article => <article className="article-card" key={article.slug + ":" + article.id}>
-              <div className="article-meta">{article.displayName} ・ {new Date(article.startedAt).toLocaleString("ja-JP")} <span className={article.status === "live" ? "article-status-live" : "article-status-done"}>{article.status === "live" ? "LIVE・更新中" : article.status === "completed" ? "配信終了" : "アーカイブ"}</span>{article.aiGenerated && <span className="article-ai-label">AI記事</span>}</div>
+            <div className="settings-subheading article-list-heading"><h3>放送記事一覧</h3><span className="api-state connected">{filteredStreamArticles.length}件 / 全{streamArticles.length}件</span></div>
+            <div className="article-list-toolbar">
+              <div className="article-status-filters" role="group" aria-label="記事の種類">
+                <button className={articleStatusFilter === "all" ? "selected" : ""} onClick={() => setArticleStatusFilter("all")}>すべて</button>
+                <button className={articleStatusFilter === "live" ? "selected" : ""} onClick={() => setArticleStatusFilter("live")}>LIVE速報</button>
+                <button className={articleStatusFilter === "archive" ? "selected" : ""} onClick={() => setArticleStatusFilter("archive")}>アーカイブ</button>
+              </div>
+              <span className="article-list-count">{filteredStreamArticles.length.toLocaleString("ja-JP")}記事</span>
+            </div>
+            <div className="article-search-row"><input className="article-search" value={articleSearch} onChange={event => setArticleSearch(event.target.value)} placeholder="記事を検索（配信者・見出し・本文・音声文字起こし・キーワード）" aria-label="配信記事を検索" /></div>
+            {streamArticles.length === 0 ? <div className="empty-state"><strong>まだ記事がありません</strong><span>登録配信者の録画を選んで記事を生成してください。</span></div> : filteredStreamArticles.length === 0 ? <div className="empty-state"><strong>一致する記事がありません</strong><span>検索語を変更してください。</span></div> : articleDateGroups.map(([dateLabel, dayArticles]) => <section className="article-day-group" key={dateLabel}>
+              <div className="article-day-heading"><h4>{dateLabel}</h4><span>{dayArticles.length.toLocaleString("ja-JP")}本</span></div>
+              {dayArticles.map(article => <article className="article-card" key={article.slug + ":" + article.id}>
+              <div className="article-meta"><span className="article-byline">配信者・{article.displayName}</span> ・ {new Date(article.startedAt).toLocaleString("ja-JP")} <span className={article.status === "live" ? "article-status-live" : "article-status-done"}>{article.status === "live" ? "LIVE・更新中" : article.status === "completed" ? "配信終了" : "アーカイブ"}</span>{article.aiGenerated && <span className="article-ai-label">AI記事</span>}</div>
               <h3>{article.headline}</h3>
               {article.category && <span className="live-stream-category">{article.category}</span>}
               {article.aiSummary && <p className="article-summary">{article.aiSummary}</p>}
@@ -2012,7 +2033,8 @@ export default function App() {
                   {article.status === "live" ? "LIVE更新中は削除不可" : deletingArticleId === article.id ? "削除中..." : "この記事を削除"}
                 </button>
               </div>
-            </article>)}
+              </article>)}
+            </section>)}
           </div>
         </>}
       </section>}
