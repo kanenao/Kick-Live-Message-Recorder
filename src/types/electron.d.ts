@@ -62,6 +62,7 @@ type KickRecorderStreamArticle = {
   paragraphs: string[]; sourceVideo: string; sourceLogs: string[]; createdAt: string;
   status?: "live" | "completed"; aiGenerated?: boolean; aiSummary?: string; highlights?: string[];
   lastAiUpdateAt?: string | null; viewerCount?: number; peakViewerCount?: number; aiError?: string;
+  videoAnalyzed?: boolean; videoFrameCount?: number; videoSummary?: string; videoScenes?: string[]; videoAnalyzedAt?: string | null;
 };
 
 type KickRecorderAiArticleStatus = {
