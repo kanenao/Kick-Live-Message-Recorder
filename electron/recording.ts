@@ -117,6 +117,37 @@ export class KickRecordingManager {
     return this.active.has(slug.toLowerCase());
   }
 
+  getActiveRecordingPath(inputSlug: unknown): string | null {
+    if (typeof inputSlug !== "string" || !/^[a-zA-Z0-9_]{1,25}$/.test(inputSlug)) return null;
+    const slug = inputSlug.toLowerCase();
+    const session = this.active.get(slug);
+    if (!session) return null;
+
+    const supported = new Set([".mp4", ".mkv", ".ts", ".webm", ".m4v", ".mov"]);
+    const preferred = resolve(session.filePath);
+    try {
+      if (existsSync(preferred) && statSync(preferred).isFile() && supported.has(extname(preferred).toLowerCase()) && statSync(preferred).size > 16_000) {
+        return preferred;
+      }
+    } catch { /* Resolve the active output by its timestamped filename below. */ }
+
+    const prefix = basename(session.filePath).replace(/\\.[^.]+$/, "");
+    try {
+      const candidates = readdirSync(session.outputDirectory)
+        .filter(name => name.startsWith(prefix) && supported.has(extname(name).toLowerCase()))
+        .map(name => join(session.outputDirectory, name))
+        .filter(path => {
+          try { return statSync(path).isFile() && statSync(path).size > 16_000; } catch { return false; }
+        })
+        .sort((a, b) => {
+          try { return statSync(b).mtimeMs - statSync(a).mtimeMs; } catch { return 0; }
+        });
+      return candidates[0] ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   start(inputSlug: unknown, inputDirectory: unknown): { ok: true; outputDirectory: string } {
     const slug = validateSlug(inputSlug);
     if (this.active.has(slug)) {
