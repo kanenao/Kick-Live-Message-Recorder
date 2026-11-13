@@ -237,6 +237,7 @@ const api = {
     return () => ipcRenderer.removeListener("articles:updated", listener);
   },
   listStreamArticles: (slug?: string): Promise<StreamArticle[]> => ipcRenderer.invoke("articles:list", slug),
+  deleteStreamArticle: (slug: string, id: string): Promise<{ ok: true; id: string }> => ipcRenderer.invoke("articles:delete", slug, id),
   generateStreamArticle: (input: { videoPath: string; slug: string; displayName?: string; category?: string; headline?: string; chatPaths?: string[] }): Promise<StreamArticle> =>
     ipcRenderer.invoke("articles:generate", input),
   listCommentLogFiles: (): Promise<CommentLogFile[]> => ipcRenderer.invoke("comment-video:list-logs"),
