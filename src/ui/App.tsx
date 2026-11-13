@@ -972,7 +972,7 @@ export default function App() {
 
       {tab === "articles" && <section className="panel">
         <div className="panel-heading">
-          <div><h2>AI配信記事</h2><p>保存されたKickチャットをOllamaで日本語記事にします</p></div>
+          <div><h2>AI配信記事</h2><p>配信映像・音声・KickコメントをPC内AIでまとめて記事化</p></div>
           <span className={ollamaStatus.connected ? "api-state connected" : "api-state"}>{ollamaStatus.connected ? "Ollama接続済み" : "Ollama未接続"}</span>
         </div>
         <div className="article-toolbar">
@@ -1026,8 +1026,8 @@ export default function App() {
         <div className="settings-subsection">
           <div className="settings-subheading">
             <h3>ライブ映像・音声のローカル解析</h3>
-            <span className={mediaToolStatus.ffmpegAvailable && mediaToolStatus.whisperAvailable && mediaToolStatus.whisperModelAvailable && ollamaStatus.models.some(model => model.name.toLowerCase().startsWith("qwen2.5vl")) ? "api-state connected" : "api-state"}>
-              {mediaToolStatus.ffmpegAvailable && mediaToolStatus.whisperAvailable && mediaToolStatus.whisperModelAvailable && ollamaStatus.models.some(model => model.name.toLowerCase().startsWith("qwen2.5vl")) ? "音声・映像ツール準備完了" : "セットアップが必要"}
+            <span className={mediaToolStatus.ffmpegAvailable && mediaToolStatus.whisperAvailable && mediaToolStatus.whisperModelAvailable && ollamaStatus.models.some(model => model.name.toLowerCase().startsWith("qwen2.5vl")) && ollamaStatus.models.some(model => model.name.toLowerCase().startsWith("qwen2.5:3b")) ? "api-state connected" : "api-state"}>
+              {mediaToolStatus.ffmpegAvailable && mediaToolStatus.whisperAvailable && mediaToolStatus.whisperModelAvailable && ollamaStatus.models.some(model => model.name.toLowerCase().startsWith("qwen2.5vl")) && ollamaStatus.models.some(model => model.name.toLowerCase().startsWith("qwen2.5:3b")) ? "音声・映像ツール準備完了" : "セットアップが必要"}
             </span>
           </div>
           <p className="settings-help">FFmpegで録画中ファイルから直近の映像1枚と音声約60秒を抽出し、Whisper.cppで文字起こしします。映像はOllamaの qwen2.5vl:3b、記事本文は qwen2.5:3b で解析します。処理はPC内で完結します。</p>
