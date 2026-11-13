@@ -141,10 +141,13 @@ export async function describeKickFrame(input: {
   baseUrl?: string;
   model?: string;
   title?: string;
-  imageBase64: string;
+  imageBase64: string | string[];
 }): Promise<string> {
-  const imageBase64 = String(input.imageBase64 || "").replace(/^data:image\/[^;]+;base64,/i, "");
-  if (!imageBase64 || imageBase64.length > 18_000_000) {
+  const images = (Array.isArray(input.imageBase64) ? input.imageBase64 : [input.imageBase64])
+    .map(value => String(value || "").replace(/^data:image\/[^;]+;base64,/i, ""))
+    .filter(value => value.length > 0 && value.length <= 18_000_000)
+    .slice(0, 3);
+  if (images.length === 0) {
     throw new Error("映像フレームのデータが空、または大きすぎます。");
   }
   const model = String(input.model || "qwen2.5vl:3b").trim();
@@ -157,14 +160,14 @@ export async function describeKickFrame(input: {
       messages: [{
         role: "user",
         content: [
-          "これはKickライブ配信の途中で取得した1枚の映像フレームです。",
+          "これはKickライブ配信から時系列順（古い画面から新しい画面）に取得した映像フレームです。複数枚ある場合は、連続した画面の変化として扱ってください。",
           "画面上で実際に確認できる人物・物・ゲーム画面・字幕・場面の変化だけを日本語で簡潔に説明してください。",
           "見えない発言や前後の出来事、人物の氏名、意図、感情、ゲームタイトルを推測しないでください。",
           "テキストが読めない場合は読めないと記載してください。",
           "配信タイトル: " + String(input.title || "不明"),
           "観察結果は最大5文、約500文字以内にしてください。"
         ].join("\n"),
-        images: [imageBase64]
+        images
       }],
       options: { temperature: 0.1, num_ctx: 4096 }
     })
