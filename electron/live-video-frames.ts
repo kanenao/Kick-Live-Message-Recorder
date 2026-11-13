@@ -205,9 +205,13 @@ export function startLiveVideoFrameCapture(
               ? "LIVE配信から音声トラックを取得できませんでした。配信に音声がないか、音声形式がFFmpegに対応していない可能性があります。"
               : undefined);
           });
-        } catch {
+        } catch (error) {
           if (audioDirectory) rmSync(audioDirectory, { recursive: true, force: true });
           audioDirectory = "";
+          if (!cancelled) {
+            onAudioError?.("LIVE音声の取得を開始できませんでした：" +
+              (error instanceof Error ? error.message : String(error)).slice(0, 400));
+          }
           finishAudioCapture();
         }
       }
