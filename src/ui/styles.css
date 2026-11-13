@@ -296,3 +296,6 @@
  .article-card{padding:15px 14px}
  .article-card h3{font-size:17px}
 }
+
+.article-original-stream-title{margin:0 0 10px!important;color:#9ba8b6!important;font-size:10px!important;line-height:1.65!important;font-family:inherit!important}
+.article-original-stream-title strong{display:inline-block;margin-right:5px;color:#7f8d9b;font-size:9px;letter-spacing:.04em}
