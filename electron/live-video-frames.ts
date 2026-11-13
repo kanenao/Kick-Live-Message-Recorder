@@ -82,17 +82,14 @@ export function startLiveVideoFrameCapture(
   const slug = slugInput.toLowerCase();
   let cancelled = false;
   let finished = false;
-  let resolverChild: ChildProcess | null = null;
   let ffmpegChild: ChildProcess | null = null;
   const frames: VideoFrameSample[] = [];
-  const startedAt = Date.now();
   const publish = (status: LiveVideoFrameStatus["status"], message: string): void => {
     onStatus({ status, frameCount: frames.length, message });
   };
   const stop = (): void => {
     if (cancelled) return;
     cancelled = true;
-    resolverChild?.kill();
     ffmpegChild?.kill();
     if (!finished) publish("stopped", "LIVE映像の取得を停止しました。");
   };
