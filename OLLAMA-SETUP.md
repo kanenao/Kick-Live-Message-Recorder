@@ -31,7 +31,7 @@ The app remembers each selected path locally. The tools and model are not bundle
 3. Start chat receiving in Settings, register the displayed Webhook URL in Kick Developer, and subscribe to the channel's `chat.message.sent` event.
 4. Enable "配信中の記事を自動生成".
 
-While the stream is live and recording, the app samples one recent video frame and about 60 seconds of recent audio approximately every three minutes. Whisper.cpp transcribes the audio in Japanese. Ollama Vision summarizes what can be observed in the frame. The text model combines those observations with the saved Kick comments and stream metadata into a live article. A new article can be created even if no new chat message arrived during that cycle, as long as the recording remains active.
+While the stream is live and recording, the app samples up to three recent video frames and about 60 seconds of recent audio approximately every three minutes. Whisper.cpp transcribes the audio in Japanese. Ollama Vision summarizes what can be observed in the frame. The text model combines those observations with the saved Kick comments and stream metadata into a live article. A new article can be created even if no new chat message arrived during that cycle, as long as the recording remains active.
 
 If recording is not active, the app can still make a comment-based article from saved chat messages, but it cannot analyze video or audio. If a tool or model is unavailable, the app reports a warning and can continue with whatever evidence is available.
 
