@@ -25,6 +25,8 @@ type AppSettings = {
   notifyOnLive: boolean;
   showRecordingPreview: boolean;
   aiArticleEnabled: boolean;
+  aiArticleProvider: "ollama" | "openai";
+  aiArticleOllamaUrl: string;
   aiArticleModel: string;
   aiArticleIntervalSeconds: number;
 };
@@ -113,7 +115,7 @@ type StreamArticle = {
 };
 type AiArticleStatus = {
   configured: boolean; encryptionAvailable: boolean;
-  aiArticleEnabled: boolean; aiArticleModel: string; aiArticleIntervalSeconds: number;
+  aiArticleEnabled: boolean; aiArticleProvider: "ollama" | "openai"; aiArticleOllamaUrl: string; aiArticleModel: string; aiArticleIntervalSeconds: number;
 };
 type CommentVideoEvent = { status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string; outputPath?: string; generatedComments?: number; skippedComments?: number };
 type CommentVideoPreviewData = {
@@ -313,7 +315,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   notifyOnLive: true,
   showRecordingPreview: true,
   aiArticleEnabled: false,
-  aiArticleModel: "gpt-6-luna",
+  aiArticleProvider: "ollama",
+  aiArticleOllamaUrl: "http://127.0.0.1:11434",
+  aiArticleModel: "qwen2.5:3b",
   aiArticleIntervalSeconds: 120
 };
 
@@ -383,8 +387,10 @@ function normalizeState(value: unknown): PersistedState {
       notifyOnLive: settings.notifyOnLive !== false,
       showRecordingPreview: settings.showRecordingPreview !== false,
       aiArticleEnabled: settings.aiArticleEnabled === true,
-      aiArticleModel: typeof settings.aiArticleModel === "string" && /^[a-zA-Z0-9._-]{1,100}$/.test(settings.aiArticleModel)
-        ? settings.aiArticleModel : "gpt-6-luna",
+      aiArticleProvider: settings.aiArticleProvider === "openai" ? "openai" : "ollama",
+      aiArticleOllamaUrl: typeof settings.aiArticleOllamaUrl === "string" ? settings.aiArticleOllamaUrl.slice(0, 300) : "http://127.0.0.1:11434",
+      aiArticleModel: typeof settings.aiArticleModel === "string" && /^[a-zA-Z0-9._:-]{1,100}$/.test(settings.aiArticleModel)
+        ? settings.aiArticleModel : (settings.aiArticleProvider === "openai" ? "gpt-6-luna" : "qwen2.5:3b"),
       aiArticleIntervalSeconds: typeof settings.aiArticleIntervalSeconds === "number"
         ? Math.max(30, Math.min(600, Math.round(settings.aiArticleIntervalSeconds))) : 120
     }
@@ -515,7 +521,7 @@ export default function App() {
   const [aiArticleApiKey, setAiArticleApiKey] = useState("");
   const [aiArticleStatus, setAiArticleStatus] = useState<AiArticleStatus>({
     configured: false, encryptionAvailable: false, aiArticleEnabled: false,
-    aiArticleModel: "gpt-6-luna", aiArticleIntervalSeconds: 120
+    aiArticleProvider: "ollama", aiArticleOllamaUrl: "http://127.0.0.1:11434", aiArticleModel: "qwen2.5:3b", aiArticleIntervalSeconds: 120
   });
   const [aiArticleBusy, setAiArticleBusy] = useState(false);
   const [aiArticleMessage, setAiArticleMessage] = useState("");
@@ -1741,20 +1747,25 @@ export default function App() {
         {!isDesktop ? <div className="empty-state"><strong>Windowsデスクトップ版で利用できます</strong><span>録画ファイルとコメントログを読み込む必要があります。</span></div> : <>
           <div className="comment-video-intro">録画済み配信は保存済みコメントログをAIで分析して記事を強化できます。AI記事をONにすると、LIVE中の配信も自動で記事化し、コメントの流れに合わせて随時更新します。AIは配信タイトル・カテゴリ・視聴者数・公開チャットコメントを分析します。映像・音声そのものを視聴する機能ではありません。</div>
           <div className="settings-subsection ai-article-settings">
-            <div className="settings-subheading"><h3>LIVE中のリアルタイムAI記事</h3><span className={aiArticleStatus.configured ? "api-state connected" : "api-state"}>{aiArticleStatus.configured ? "APIキー設定済み" : "APIキー未設定"}</span></div>
+            <div className="settings-subheading"><h3>LIVE中のリアルタイムAI記事</h3><span className={settings.aiArticleProvider === "ollama" ? "api-state connected" : aiArticleStatus.configured ? "api-state connected" : "api-state"}>{settings.aiArticleProvider === "ollama" ? "無料ローカルAI" : aiArticleStatus.configured ? "APIキー設定済み" : "APIキー未設定"}</span></div>
             <label className="comment-video-checkbox"><input type="checkbox" checked={settings.aiArticleEnabled} onChange={event => setSettings(previous => ({ ...previous, aiArticleEnabled: event.target.checked }))} disabled={!aiArticleStatus.configured} /><span>登録配信者のLIVEを自動でAI記事化する</span></label>
             <div className="comment-video-form-grid ai-article-form-grid">
+              <label className="comment-video-field"><span>AIエンジン</span><select value={settings.aiArticleProvider} onChange={event => setSettings(previous => ({ ...previous, aiArticleProvider: event.target.value as "ollama" | "openai", aiArticleModel: event.target.value === "ollama" ? "qwen2.5:3b" : "gpt-6-luna" }))} disabled={aiArticleBusy}><option value="ollama">Ollama（無料・ローカルAI）</option><option value="openai">OpenAI API（有料）</option></select></label>
+              {settings.aiArticleProvider === "ollama" ? <>
+                <label className="comment-video-field"><span>Ollama接続URL</span><input type="url" value={settings.aiArticleOllamaUrl} onChange={event => setSettings(previous => ({ ...previous, aiArticleOllamaUrl: event.target.value }))} placeholder="http://127.0.0.1:11434" disabled={aiArticleBusy} /><small>通常はこの初期値のままで利用できます。</small></label>
+                <label className="comment-video-field"><span>Ollamaモデル名</span><input value={settings.aiArticleModel} onChange={event => setSettings(previous => ({ ...previous, aiArticleModel: event.target.value }))} placeholder="qwen2.5:3b" disabled={aiArticleBusy} /><small>例：qwen2.5:3b、llama3.2:3b</small></label>
+              </> : <>
               <label className="comment-video-field"><span>OpenAI APIキー</span><input type="password" value={aiArticleApiKey} onChange={event => setAiArticleApiKey(event.target.value)} placeholder={aiArticleStatus.configured ? "保存済み（変更するときだけ入力）" : "sk-..."} autoComplete="new-password" disabled={aiArticleBusy || !aiArticleStatus.encryptionAvailable} /><small>キー自体は画面や設定ファイルへ保存せず、Windowsの暗号化ストレージへ保存します。</small></label>
               <label className="comment-video-field"><span>AIモデル</span><select value={settings.aiArticleModel} onChange={event => setSettings(previous => ({ ...previous, aiArticleModel: event.target.value }))} disabled={aiArticleBusy}><option value="gpt-6-luna">GPT-6 Luna（低コスト・推奨）</option><option value="gpt-6.1-terra">GPT-6.1 Terra</option><option value="gpt-6.1-sol">GPT-6.1 Sol</option></select></label>
+              </>}
               <label className="comment-video-field"><span>AI記事の更新間隔</span><select value={settings.aiArticleIntervalSeconds} onChange={event => setSettings(previous => ({ ...previous, aiArticleIntervalSeconds: Number(event.target.value) }))}><option value={30}>30秒</option><option value={60}>1分</option><option value={120}>2分（推奨）</option><option value={300}>5分</option><option value={600}>10分</option></select></label>
             </div>
             <div className="comment-video-actions">
-              <button className="primary-small" onClick={() => void saveAiArticleApiKey()} disabled={aiArticleBusy || !aiArticleApiKey.trim() || !aiArticleStatus.encryptionAvailable}>APIキーを保存</button>
-              <button className="small-action" onClick={() => void testAiArticleConnection()} disabled={aiArticleBusy || !aiArticleStatus.configured}>接続テスト</button>
-              <button className="small-action" onClick={() => void clearAiArticleApiKey()} disabled={aiArticleBusy || !aiArticleStatus.configured}>APIキーを削除</button>
+              {settings.aiArticleProvider === "openai" && <><button className="primary-small" onClick={() => void saveAiArticleApiKey()} disabled={aiArticleBusy || !aiArticleApiKey.trim() || !aiArticleStatus.encryptionAvailable}>APIキーを保存</button><button className="small-action" onClick={() => void clearAiArticleApiKey()} disabled={aiArticleBusy || !aiArticleStatus.configured}>APIキーを削除</button></>}
+              <button className="small-action" onClick={() => void testAiArticleConnection()} disabled={aiArticleBusy}>{settings.aiArticleProvider === "ollama" ? "Ollama接続テスト" : "接続テスト"}</button>
             </div>
             {aiArticleMessage && <div className="api-message" role="status">{aiArticleMessage}</div>}
-            <div className="notice">AI記事を有効にすると、通常のコメント自動取得設定がOFFでも、登録した通常・録画専用チャンネルのコメントを記事作成用に受信します。12件程度の新着コメントをまとめて更新し、配信終了時に最終記事を作成します。コメント本文・配信者名・配信タイトル・カテゴリ・視聴者数などをOpenAI APIへ送信して分析します。公開コメントでも個人情報が含まれる可能性があるため、送信してよい配信だけを対象にしてください。API利用料はOpenAIアカウントへ発生します。料金上限をOpenAI側で設定してから利用してください。</div>
+            <div className="notice">AI記事を有効にすると、通常のコメント自動取得設定がOFFでも、登録した通常・録画専用チャンネルのコメントを記事作成用に受信します。12件程度の新着コメントをまとめて更新し、配信終了時に最終記事を作成します。{settings.aiArticleProvider === "ollama" ? "コメント・配信情報はPC内のOllamaへ送信され、外部AIサービスへは送信されません。Ollama本体とモデルのインストールが必要です。モデルの実行にはPCのメモリ・CPU/GPUを使用します。" : "コメント本文・配信者名・配信タイトル・カテゴリ・視聴者数などをOpenAI APIへ送信して分析します。公開コメントでも個人情報が含まれる可能性があるため、送信してよい配信だけを対象にしてください。API利用料はOpenAIアカウントへ発生します。"}</div>
           </div>
           <div className="comment-video-form-grid">
             <label className="comment-video-field"><span>登録配信者</span><select value={articleSlug} onChange={event => setArticleSlug(event.target.value)}>
