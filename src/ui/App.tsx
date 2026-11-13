@@ -128,7 +128,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string }>;
 };
 
-const APP_VERSION = "0.1.0-beta.43";
+const APP_VERSION = "0.1.0-beta.44";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ff4545", lane: 1, delay: 0.7 },
@@ -156,6 +156,15 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffe64a", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.1.0-beta.44",
+    title: "配信記事の管理・削除機能を強化",
+    changes: [
+      "保存済み配信記事を記事カードから個別削除できるようにし、削除前に確認を表示",
+      "LIVE更新中の記事は誤削除や再生成を防ぐため削除不可にし、配信終了後に削除可能",
+      "記事ファイルのみを削除し、元動画・コメントログは保持"
+    ]
+  },
   {
     version: "0.1.0-beta.43",
     title: "無料ローカルAI（Ollama）で配信記事を生成",
@@ -526,6 +535,7 @@ export default function App() {
   const [articleVideoPath, setArticleVideoPath] = useState("");
   const [articleHeadline, setArticleHeadline] = useState("");
   const [articleBusy, setArticleBusy] = useState(false);
+  const [deletingArticleId, setDeletingArticleId] = useState<string | null>(null);
   const [articleMessage, setArticleMessage] = useState("");
   const [aiArticleApiKey, setAiArticleApiKey] = useState("");
   const [aiArticleStatus, setAiArticleStatus] = useState<AiArticleStatus>({
@@ -1288,6 +1298,25 @@ export default function App() {
     }
   }
 
+  async function deleteStreamArticle(article: StreamArticle) {
+    if (!window.kickRecorder || article.status === "live" || deletingArticleId) return;
+    const confirmed = window.confirm(
+      `「${article.headline}」を削除しますか？\\n\\n記事データのみ削除します。元動画とコメントログは削除されません。`
+    );
+    if (!confirmed) return;
+    setDeletingArticleId(article.id);
+    setArticleMessage("");
+    try {
+      await window.kickRecorder.deleteStreamArticle(article.slug, article.id);
+      setStreamArticles(current => current.filter(item => item.id !== article.id || item.slug !== article.slug));
+      setArticleMessage(`記事「${article.headline}」を削除しました。元動画とコメントログは保持されています。`);
+    } catch (error) {
+      setArticleMessage(error instanceof Error ? error.message : "記事を削除できませんでした。");
+    } finally {
+      setDeletingArticleId(null);
+    }
+  }
+
   async function chooseOutputDirectory() {
     if (!window.kickRecorder) return;
     try {
@@ -1801,6 +1830,11 @@ export default function App() {
               {article.aiError && <div className="storage-error article-error">AI更新エラー：{article.aiError}</div>}
               <div className="article-stats">コメント {article.commentCount.toLocaleString("ja-JP")}件 ・ 投稿者 {article.uniqueCommenters.toLocaleString("ja-JP")}人 ・ 視聴者数 {article.viewerCount?.toLocaleString("ja-JP") ?? "—"}人（最大 {article.peakViewerCount?.toLocaleString("ja-JP") ?? "—"}人） ・ 分析キーワード {article.keywords.join("、") || "なし"}{article.lastAiUpdateAt ? ` ・ AI更新 ${new Date(article.lastAiUpdateAt).toLocaleTimeString("ja-JP")}` : ""}</div>
               {article.sourceVideo && <div className="comment-video-actions"><button className="small-action" onClick={() => void window.kickRecorder?.openRecording(article.sourceVideo)}>元動画を開く</button><button className="small-action" onClick={() => void window.kickRecorder?.revealRecording(article.sourceVideo)}>録画の保存先</button></div>}
+              <div className="comment-video-actions article-card-actions">
+                <button className="remove" onClick={() => void deleteStreamArticle(article)} disabled={article.status === "live" || deletingArticleId !== null}>
+                  {article.status === "live" ? "LIVE更新中は削除不可" : deletingArticleId === article.id ? "削除中..." : "この記事を削除"}
+                </button>
+              </div>
             </article>)}
           </div>
         </>}
