@@ -1423,7 +1423,7 @@ export default function App() {
       const updated = await window.kickRecorder.listStreamArticles();
       setStreamArticles(updated);
       setArticleMessage(article.aiGenerated
-        ? `AI記事「${article.headline}」を保存しました。コメント${article.commentCount.toLocaleString("ja-JP")}件${article.videoAnalyzed ? `・映像フレーム${article.videoFrameCount ?? 0}枚` : ""}を分析しました。`
+        ? `AI記事「${article.headline}」を保存しました。コメント${article.commentCount.toLocaleString("ja-JP")}件${article.videoAnalyzed ? `・映像フレーム${article.videoFrameCount ?? 0}枚` : ""}${article.audioAnalyzed ? `・音声${(article.audioSegmentCount ?? article.audioTranscriptSegments?.length ?? 0).toLocaleString("ja-JP")}区間` : ""}を分析しました。`
         : article.aiError ? `基本記事を保存しました。AI分析は未完了です：${article.aiError}`
         : `記事「${article.headline}」を保存しました。コメント${article.commentCount.toLocaleString("ja-JP")}件を集計しました。`);
       setArticleHeadline("");
