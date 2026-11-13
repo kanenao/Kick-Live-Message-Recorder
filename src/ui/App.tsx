@@ -1800,7 +1800,7 @@ export default function App() {
                       };
                     })
                   : COMMENT_VIDEO_PREVIEW_ITEMS)
-                  .filter((item, index) => {
+                  .filter((item, index, items) => {
                     const fontSize = Math.max(16, Math.min(80, commentVideoFontSize));
                     const lineHeight = Math.max(fontSize + 12, fontSize * 1.55);
                     const visibleRows = Math.max(1, Math.floor((1080 - 26 - fontSize) / lineHeight) + 1);
