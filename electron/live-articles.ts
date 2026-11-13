@@ -39,6 +39,8 @@ type LiveMetadata = {
 
 type AiConfig = {
   enabled: boolean;
+  provider?: "ollama" | "openai";
+  baseUrl?: string;
   model: string;
   intervalSeconds: number;
 };
@@ -142,7 +144,7 @@ export class LiveStreamArticleManager {
 
   startOrUpdate(metadata: LiveMetadata): void {
     const config = this.getConfig();
-    const apiKey = this.getApiKey();
+    const apiKey = config.provider === "ollama" ? "local" : this.getApiKey();
     const slug = slugify(metadata.slug);
     const existing = this.sessions.get(slug);
     if (existing) {
@@ -205,8 +207,8 @@ export class LiveStreamArticleManager {
   }
 
   async enhanceArchivedArticle(article: LiveArticle): Promise<LiveArticle> {
-    const key = this.getApiKey();
     const config = this.getConfig();
+    const key = config.provider === "ollama" ? "local" : this.getApiKey();
     if (!config.enabled || !key) return article;
     const slug = slugify(article.slug);
     const root = resolve(this.getOutputDirectory());
@@ -307,9 +309,23 @@ export class LiveStreamArticleManager {
   }
 
   async testConnection(modelInput: unknown): Promise<{ ok: true; message: string }> {
+    const config = this.getConfig();
+    const model = safeText(modelInput, 100) || (config.provider === "ollama" ? "qwen2.5:3b" : "gpt-6-luna");
+    if (config.provider === "ollama") {
+      const baseUrl = (config.baseUrl || "http://127.0.0.1:11434").replace(/\/+$/, "");
+      let response: Response;
+      try { response = await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(5000) }); }
+      catch { throw new Error("Ollamaに接続できません。Ollamaを起動し、URLを確認してください。"); }
+      if (!response.ok) throw new Error(`Ollama接続に失敗しました（HTTP ${response.status}）。`);
+      const payload = await response.json() as { models?: Array<{ name?: string }> };
+      const models = Array.isArray(payload.models) ? payload.models.map(item => item.name || "").filter(Boolean) : [];
+      if (!models.includes(model) && !models.some(name => name.split(":")[0] === model.split(":")[0])) {
+        throw new Error(`モデル「${model}」が見つかりません。PowerShellで ollama pull ${model} を実行してください。`);
+      }
+      return { ok: true, message: `Ollamaに接続できました（モデル：${model}）。` };
+    }
     const key = this.getApiKey();
     if (!key) throw new Error("OpenAI APIキーを保存してください。");
-    const model = safeText(modelInput, 100) || "gpt-6-luna";
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
@@ -325,8 +341,8 @@ export class LiveStreamArticleManager {
 
   private async analyze(session: LiveSession, final: boolean): Promise<void> {
     if (session.analysisInFlight || session.pendingComments.length === 0) return;
-    const key = this.getApiKey();
     const config = this.getConfig();
+    const key = config.provider === "ollama" ? "local" : this.getApiKey();
     if (!config.enabled || !key) return;
     session.analysisInFlight = true;
     session.lastAnalysisAt = Date.now();
