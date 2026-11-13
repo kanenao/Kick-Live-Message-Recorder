@@ -1,7 +1,10 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { join, basename } from "node:path";
+import { tmpdir } from "node:os";
 import type { VideoFrameSample } from "./video-frames";
+
+export type LiveAudioChunk = { timeSeconds: number; wavBase64: string };
 
 export type LiveVideoFrameStatus = {
   status: "starting" | "capturing" | "completed" | "stopped" | "error";
@@ -75,8 +78,9 @@ function resolveLiveStreamUrl(slug: string, isCancelled: () => boolean, onChild:
 export function startLiveVideoFrameCapture(
   slugInput: string,
   onFrame: (frame: VideoFrameSample) => void,
-  onStatus: (status: LiveVideoFrameStatus) => void
-): () => void {
+  onStatus: (status: LiveVideoFrameStatus) => void,
+  onAudioChunk?: (chunk: LiveAudioChunk) => void
+): () => Promise<void> {
   if (typeof slugInput !== "string" || !/^[a-zA-Z0-9_]{1,25}$/.test(slugInput)) {
     throw new Error("LIVE映像を解析するKickチャンネル名が不正です。");
   }
@@ -85,16 +89,27 @@ export function startLiveVideoFrameCapture(
   let finished = false;
   let resolverChild: ChildProcess | null = null;
   let ffmpegChild: ChildProcess | null = null;
+  let audioChild: ChildProcess | null = null;
+  let audioDirectory = "";
+  let audioListPath = "";
+  let audioPollTimer: ReturnType<typeof setInterval> | null = null;
+  let audioSegmentCount = 0;
+  let audioFinishedResolve: (() => void) | null = null;
+  let audioFinished: Promise<void> = Promise.resolve();
+  const processedAudioFiles = new Set<string>();
   let frameCount = 0;
   const publish = (status: LiveVideoFrameStatus["status"], message: string): void => {
     onStatus({ status, frameCount, message });
   };
-  const stop = (): void => {
-    if (cancelled) return;
-    cancelled = true;
-    resolverChild?.kill();
-    ffmpegChild?.kill();
-    if (!finished) publish("stopped", "LIVE映像の取得を停止しました。");
+  const stop = (): Promise<void> => {
+    if (!cancelled) {
+      cancelled = true;
+      resolverChild?.kill();
+      ffmpegChild?.kill();
+      audioChild?.kill();
+      if (!finished) publish("stopped", "LIVE映像・音声の取得を停止しました。");
+    }
+    return audioFinished;
   };
 
   publish("starting", "録画せずにLIVE映像の解析接続を準備しています。");
@@ -104,6 +119,75 @@ export function startLiveVideoFrameCapture(
       resolverChild = null;
       if (cancelled) return;
       const ffmpeg = findTool(process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
+
+      // 音声は45秒ごとの16kHzモノラルWAVに分割。録画ファイルは作らず、
+      // FFmpegが確定したセグメントだけをOllamaのASR処理へ渡す。
+      if (onAudioChunk) {
+        audioDirectory = mkdtempSync(join(tmpdir(), "kick-live-article-audio-"));
+        audioListPath = join(audioDirectory, "segments.csv");
+        audioFinished = new Promise<void>(resolvePromise => { audioFinishedResolve = resolvePromise; });
+        try {
+          const audio = spawn(ffmpeg, [
+            "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+            "-i", streamUrl, "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "16000",
+            "-c:a", "pcm_s16le", "-f", "segment", "-segment_time", "45",
+            "-segment_format", "wav", "-reset_timestamps", "1",
+            "-segment_list", audioListPath, "-segment_list_type", "csv",
+            join(audioDirectory, "audio-%05d.wav")
+          ], { windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });
+          audioChild = audio;
+          const flushAudioSegments = (): void => {
+            if (!audioDirectory || !existsSync(audioListPath)) return;
+            let entries: string[];
+            try { entries = readFileSync(audioListPath, "utf8").split(/\r?\n/).filter(Boolean); }
+            catch { return; }
+            for (const entry of entries) {
+              const listedName = (entry.split(",")[0] ?? "").replace(/^["']|["']$/g, "");
+              const name = basename(listedName);
+              if (!/^audio-\d{5}\.wav$/i.test(name) || processedAudioFiles.has(name)) continue;
+              const filePath = join(audioDirectory, name);
+              try {
+                const wav = readFileSync(filePath);
+                if (wav.length < 1600 || wav.length > 8_000_000) continue;
+                const match = name.match(/audio-(\d{5})\.wav/i);
+                const segmentIndex = match ? Number(match[1]) : audioSegmentCount;
+                processedAudioFiles.add(name);
+                audioSegmentCount += 1;
+                onAudioChunk({
+                  timeSeconds: segmentIndex * 45,
+                  wavBase64: wav.toString("base64")
+                });
+                publish("capturing", `LIVE映像の代表フレーム累計${frameCount}枚・音声区間${audioSegmentCount}件を取得中です。`);
+              } catch { /* A segment still being finalized will be picked up on the next poll. */ }
+            }
+          };
+          audioPollTimer = setInterval(flushAudioSegments, 2500);
+          audio.once("error", () => {
+            if (audioPollTimer) clearInterval(audioPollTimer);
+            audioPollTimer = null;
+            flushAudioSegments();
+            if (audioDirectory) rmSync(audioDirectory, { recursive: true, force: true });
+            audioDirectory = "";
+            audioFinishedResolve?.();
+            audioFinishedResolve = null;
+          });
+          audio.once("close", () => {
+            if (audioPollTimer) clearInterval(audioPollTimer);
+            audioPollTimer = null;
+            flushAudioSegments();
+            if (audioDirectory) rmSync(audioDirectory, { recursive: true, force: true });
+            audioDirectory = "";
+            audioFinishedResolve?.();
+            audioFinishedResolve = null;
+          });
+        } catch {
+          if (audioDirectory) rmSync(audioDirectory, { recursive: true, force: true });
+          audioDirectory = "";
+          audioFinishedResolve?.();
+          audioFinishedResolve = null;
+        }
+      }
+
       const child = spawn(ffmpeg, [
         "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
         "-i", streamUrl,
@@ -117,7 +201,9 @@ export function startLiveVideoFrameCapture(
         child.kill();
         return;
       }
-      publish("capturing", "LIVE映像から代表フレームを抽出しています。録画ファイルは作成しません。");
+      publish("capturing", onAudioChunk
+        ? "LIVE映像の代表フレームと音声を同時に解析しています。録画ファイルは作成しません。"
+        : "LIVE映像から代表フレームを抽出しています。録画ファイルは作成しません。");
       let buffer = Buffer.alloc(0);
       let stderr = "";
       const startedCaptureAt = Date.now();
