@@ -561,7 +561,7 @@ export default function App() {
     if (!query) return streamArticles;
     return streamArticles.filter(article => [
       article.displayName, article.slug, article.headline, article.category,
-      ...(article.keywords ?? []), ...(article.highlights ?? [])
+      ...(article.keywords ?? []), ...(article.highlights ?? []), article.videoSummary ?? "", ...(article.videoScenes ?? [])
     ].join(" ").toLocaleLowerCase("ja-JP").includes(query));
   }, [streamArticles, articleSearch]);
 
