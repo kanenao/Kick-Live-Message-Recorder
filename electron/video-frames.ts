@@ -63,26 +63,28 @@ function runTool(executable: string, args: string[], timeoutMs: number, captureS
   });
 }
 
-export async function extractVideoFrames(videoPathInput: string, outputDirectoryInput: string): Promise<VideoFrameSample[]> {
+function validateArticleVideoPath(videoPathInput: string, outputDirectoryInput: string): string {
   if (typeof videoPathInput !== "string" || !videoPathInput.trim()) {
-    throw new Error("映像解析する録画動画を選択してください。");
+    throw new Error("解析する録画動画を選択してください。");
   }
   const root = resolve(outputDirectoryInput);
   const videoPath = resolve(videoPathInput);
   if (!isPathInsideDirectory(videoPath, root) || !VIDEO_EXTENSIONS.has(extname(videoPath).toLowerCase())) {
-    throw new Error("映像解析には録画ライブラリ内の動画を選択してください。");
+    throw new Error("解析には録画ライブラリ内の動画を選択してください。");
   }
   let fileStats;
   try {
     fileStats = lstatSync(videoPath);
   } catch {
-    throw new Error("映像解析する録画動画が見つかりません。");
+    throw new Error("解析する録画動画が見つかりません。");
   }
   if (!fileStats.isFile() || fileStats.isSymbolicLink() || !statSync(videoPath).size) {
-    throw new Error("映像解析する録画動画が通常のファイルではないか、空です。");
+    throw new Error("解析する録画動画が通常のファイルではないか、空です。");
   }
+  return videoPath;
+}
 
-  const ffmpeg = findTool(process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
+async function probeVideoDuration(videoPath: string): Promise<number> {
   const ffprobe = findTool(process.platform === "win32" ? "ffprobe.exe" : "ffprobe");
   const durationText = await runTool(ffprobe, [
     "-v", "error", "-show_entries", "format=duration",
@@ -92,6 +94,18 @@ export async function extractVideoFrames(videoPathInput: string, outputDirectory
   if (!Number.isFinite(duration) || duration <= 0) {
     throw new Error("動画の再生時間を取得できません。FFprobeで動画を読み取れるか確認してください。");
   }
+  return duration;
+}
+
+export async function getVideoDurationSeconds(videoPathInput: string, outputDirectoryInput: string): Promise<number> {
+  const videoPath = validateArticleVideoPath(videoPathInput, outputDirectoryInput);
+  return probeVideoDuration(videoPath);
+}
+
+export async function extractVideoFrames(videoPathInput: string, outputDirectoryInput: string): Promise<VideoFrameSample[]> {
+  const videoPath = validateArticleVideoPath(videoPathInput, outputDirectoryInput);
+  const duration = await probeVideoDuration(videoPath);
+  const ffmpeg = findTool(process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
 
   // Long videos get more evenly distributed samples, capped at eight frames.
   const frameCount = Math.min(8, Math.max(3, Math.ceil(duration / 90)));
