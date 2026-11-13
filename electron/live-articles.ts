@@ -2,6 +2,8 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileS
 import { extname, join, resolve } from "node:path";
 import { isPathInsideDirectory } from "./recording";
 import { extractVideoFrames, type VideoFrameSample } from "./video-frames";
+import { formatAudioTranscript, transcribeVideoAudio, transcribeWavBase64, type AudioTranscriptSegment } from "./audio-transcription";
+import type { LiveAudioChunk } from "./live-video-frames";
 import type { KickChatMessage } from "./chat";
 
 export type LiveArticle = {
@@ -32,6 +34,13 @@ export type LiveArticle = {
   videoSummary?: string;
   videoScenes?: string[];
   videoAnalyzedAt?: string | null;
+  audioAnalyzed?: boolean;
+  audioSegmentCount?: number;
+  audioSummary?: string;
+  audioTranscript?: string;
+  audioTranscriptSegments?: AudioTranscriptSegment[];
+  audioAnalyzedAt?: string | null;
+  audioError?: string;
 };
 
 type LiveMetadata = {
@@ -49,6 +58,8 @@ type AiConfig = {
   baseUrl?: string;
   model: string;
   intervalSeconds: number;
+  audioEnabled?: boolean;
+  audioModel?: string;
 };
 
 type AnalysisResult = {
@@ -59,6 +70,7 @@ type AnalysisResult = {
   keywords: string[];
   videoSummary: string;
   videoScenes: string[];
+  audioSummary: string;
 };
 
 type CommentSample = { at: string; text: string };
@@ -70,6 +82,9 @@ type LiveSession = {
   uniqueCommenterBaseline: number;
   keywordCounts: Map<string, number>;
   pendingComments: CommentSample[];
+  pendingAudioSegments: AudioTranscriptSegment[];
+  audioQueue: Array<{ timeSeconds: number; wavBase64: string }>;
+  audioTranscriptionInFlight: boolean;
   lastAnalysisAt: number;
   analysisInFlight: boolean;
   finishing: boolean;
@@ -137,7 +152,8 @@ function parseAnalysis(payload: Record<string, unknown>): AnalysisResult {
     highlights: strings(value.highlights, 5, 240),
     keywords: strings(value.keywords, 8, 40),
     videoSummary: safeText(value.videoSummary, 1000),
-    videoScenes: strings(value.videoScenes, 8, 300)
+    videoScenes: strings(value.videoScenes, 8, 300),
+    audioSummary: safeText(value.audioSummary, 1200)
   };
   if (!result.headline || !result.summary || result.paragraphs.length < 2) {
     throw new Error("AIが記事に必要な項目を返しませんでした。");
@@ -200,7 +216,7 @@ export class LiveStreamArticleManager {
       headline: metadata.streamTitle || `${metadata.displayName || slug}のLIVE配信`,
       category: metadata.categoryName || "", startedAt: started.toISOString(),
       durationSeconds: 0, commentCount: 0, uniqueCommenters: 0, keywords: [],
-      paragraphs: ["LIVE配信が始まりました。コメントの受信状況に応じてAIが話題を整理し、この記事を随時更新します。", "記事の分析対象はKickの配信タイトル・カテゴリ・視聴者数・公開チャットコメントです。映像や音声を直接認識した内容ではありません。"],
+      paragraphs: ["LIVE配信が始まりました。映像・音声・コメントをそれぞれ分析し、確認できた情報をAIが統合して記事を随時更新します。", "映像は代表フレーム、音声はローカル音声認識、コメントはKickの公開チャットを情報源として扱います。認識できない内容は推測しません。"],
       sourceVideo: "", sourceLogs: [], createdAt: new Date().toISOString(),
       status: "live", aiGenerated: false, aiSummary: "コメントの受信を待っています。",
       highlights: [], lastAiUpdateAt: null, viewerCount: currentViewerCount,
@@ -211,7 +227,11 @@ export class LiveStreamArticleManager {
       uniqueCommenterBaseline: previous?.uniqueCommenters ?? 0,
       keywordCounts: new Map((previous?.keywords ?? []).map(word => [word, 1])),
       pendingComments: [], lastAnalysisAt: 0, analysisInFlight: false, finishing: false,
-      videoFrameTotalCount: previous?.videoFrameCount ?? 0, forceAi
+      videoFrameTotalCount: previous?.videoFrameCount ?? 0,
+      pendingAudioSegments: [],
+      audioQueue: [],
+      audioTranscriptionInFlight: false,
+      forceAi
     };
     this.sessions.set(slug, session);
     this.persist(session);
