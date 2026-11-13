@@ -123,6 +123,9 @@ type AiArticleStatus = {
   configured: boolean; encryptionAvailable: boolean;
   aiArticleEnabled: boolean; aiArticleProvider: "ollama" | "openai"; aiArticleOllamaUrl: string; aiArticleModel: string; aiArticleIntervalSeconds: number;
 };
+type AiModelPullStatus = {
+  model: string; status: string; percent: number | null; completed?: number; total?: number; done: boolean; error?: string;
+};
 type CommentVideoEvent = { status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string; outputPath?: string; generatedComments?: number; skippedComments?: number };
 type CommentVideoPreviewData = {
   width: number;
@@ -134,7 +137,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.1.0-beta.49";
+const APP_VERSION = "0.1.0-beta.50";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -162,6 +165,16 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.1.0-beta.50",
+    title: "無料Ollamaモデルをアプリ内から導入",
+    changes: [
+      "映像・記事生成用VisionモデルとQwen3-ASR音声認識モデルを、設定画面からワンクリックでダウンロード",
+      "Ollamaのダウンロード進捗・取得容量・完了状態を表示し、途中キャンセルにも対応",
+      "モデル名を変更して別モデルを導入可能。PowerShellでollama pullを手入力する初期設定を削減",
+      "LIVE・録画済み配信の映像／音声／コメント統合記事と新聞ジャーナル表示はbeta49から継続"
+    ]
+  },
   {
     version: "0.1.0-beta.49",
     title: "映像・音声・コメントを統合した配信記事",
@@ -612,6 +625,8 @@ export default function App() {
   });
   const [aiArticleBusy, setAiArticleBusy] = useState(false);
   const [aiArticleMessage, setAiArticleMessage] = useState("");
+  const [aiModelPullBusy, setAiModelPullBusy] = useState(false);
+  const [aiModelPullStatus, setAiModelPullStatus] = useState<AiModelPullStatus | null>(null);
 
   const filteredStreamArticles = useMemo(() => {
     const query = articleSearch.trim().toLocaleLowerCase("ja-JP");
@@ -850,7 +865,15 @@ export default function App() {
       setStreamArticles(current => [article, ...current.filter(item => item.id !== article.id)]
         .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt)));
     });
-    return () => { active = false; unsubscribe(); };
+    const unsubscribePull = window.kickRecorder.onAiArticleModelPullStatus(status => {
+      if (!active) return;
+      setAiModelPullStatus(status);
+      if (status.done) {
+        setAiModelPullBusy(false);
+        setAiArticleMessage(status.error || `モデル「${status.model}」のインストールが完了しました。`);
+      }
+    });
+    return () => { active = false; unsubscribe(); unsubscribePull(); };
   }, [isDesktop]);
 
   useEffect(() => {
@@ -1358,6 +1381,30 @@ export default function App() {
     } catch (error) {
       setAiArticleMessage(error instanceof Error ? error.message : "OpenAI APIへ接続できませんでした。");
     } finally { setAiArticleBusy(false); }
+  }
+
+  async function pullAiArticleModel(model: string) {
+    if (!window.kickRecorder || settings.aiArticleProvider !== "ollama" || aiModelPullBusy || !model.trim()) return;
+    setAiModelPullBusy(true);
+    setAiModelPullStatus({ model: model.trim(), status: "準備中", percent: 0, done: false });
+    setAiArticleMessage("");
+    try {
+      const result = await window.kickRecorder.pullAiArticleModel(model.trim());
+      setAiArticleMessage(`モデル「${result.model}」をOllamaへインストールしました。接続テストを実行して利用を確認してください。`);
+    } catch (error) {
+      setAiArticleMessage(error instanceof Error ? error.message : "Ollamaモデルをインストールできませんでした。");
+    } finally {
+      setAiModelPullBusy(false);
+    }
+  }
+
+  async function cancelAiArticleModelPull() {
+    if (!window.kickRecorder || !aiModelPullBusy) return;
+    try {
+      await window.kickRecorder.cancelAiArticleModelPull();
+    } catch (error) {
+      setAiArticleMessage(error instanceof Error ? error.message : "モデル取得をキャンセルできませんでした。");
+    }
   }
 
   async function clearAiArticleApiKey() {
@@ -1953,9 +2000,15 @@ export default function App() {
               <label className="comment-video-field"><span>AIエンジン</span><select value={settings.aiArticleProvider} onChange={event => setSettings(previous => ({ ...previous, aiArticleProvider: event.target.value as "ollama" | "openai", aiArticleModel: event.target.value === "ollama" ? "qwen2.5vl:3b" : "gpt-6-luna" }))} disabled={aiArticleBusy}><option value="ollama">Ollama（無料・ローカルAI）</option><option value="openai">OpenAI API（有料）</option></select></label>
               {settings.aiArticleProvider === "ollama" ? <>
                 <label className="comment-video-field"><span>Ollama接続URL</span><input type="url" value={settings.aiArticleOllamaUrl} onChange={event => setSettings(previous => ({ ...previous, aiArticleOllamaUrl: event.target.value }))} placeholder="http://127.0.0.1:11434" disabled={aiArticleBusy} /><small>通常はこの初期値のままで利用できます。</small></label>
-                <label className="comment-video-field"><span>記事生成・映像解析モデル</span><input value={settings.aiArticleModel} onChange={event => setSettings(previous => ({ ...previous, aiArticleModel: event.target.value }))} placeholder="qwen2.5vl:3b" disabled={aiArticleBusy} /><small>映像解析対応モデル：qwen2.5vl:3b（初回は ollama pull qwen2.5vl:3b）。対応するVisionモデルを指定してください。</small></label>
+                <div className="ai-model-install-field">
+                  <label className="comment-video-field"><span>記事生成・映像解析モデル</span><input value={settings.aiArticleModel} onChange={event => setSettings(previous => ({ ...previous, aiArticleModel: event.target.value }))} placeholder="qwen2.5vl:3b" disabled={aiArticleBusy || aiModelPullBusy} /><small>初期値は qwen2.5vl:3b。画像入力に対応したOllama Visionモデルを指定してください。</small></label>
+                  <button className="small-action" onClick={() => void pullAiArticleModel(settings.aiArticleModel)} disabled={aiArticleBusy || aiModelPullBusy || !settings.aiArticleModel.trim()}>記事・映像モデルをインストール</button>
+                </div>
                 <label className="comment-video-checkbox"><input type="checkbox" checked={settings.aiArticleAudioEnabled} onChange={event => setSettings(previous => ({ ...previous, aiArticleAudioEnabled: event.target.checked }))} disabled={aiArticleBusy} /><span>音声を文字起こしして記事へ反映する（無料・ローカル）</span></label>
-                <label className="comment-video-field"><span>音声認識モデル（Qwen3-ASR）</span><input value={settings.aiArticleAudioModel} onChange={event => setSettings(previous => ({ ...previous, aiArticleAudioModel: event.target.value }))} placeholder="frozenlab/qwen3-asr:0.6b" disabled={aiArticleBusy || !settings.aiArticleAudioEnabled} /><small>初回のみ PowerShell で <code>ollama pull frozenlab/qwen3-asr:0.6b</code> を実行してください（約1GB）。日本語を含む音声を45秒単位で認識します。qwen3a音声入力に対応したOllamaが必要です。</small></label>
+                <div className="ai-model-install-field">
+                  <label className="comment-video-field"><span>音声認識モデル（Qwen3-ASR）</span><input value={settings.aiArticleAudioModel} onChange={event => setSettings(previous => ({ ...previous, aiArticleAudioModel: event.target.value }))} placeholder="frozenlab/qwen3-asr:0.6b" disabled={aiArticleBusy || aiModelPullBusy || !settings.aiArticleAudioEnabled} /><small>初期値は frozenlab/qwen3-asr:0.6b（約1GB）。日本語を含む音声を45秒単位で認識します。Qwen3-ASR対応の新しいOllamaが必要です。</small></label>
+                  <button className="small-action" onClick={() => void pullAiArticleModel(settings.aiArticleAudioModel)} disabled={aiArticleBusy || aiModelPullBusy || !settings.aiArticleAudioEnabled || !settings.aiArticleAudioModel.trim()}>音声認識モデルをインストール</button>
+                </div>
               </> : <>
               <label className="comment-video-field"><span>OpenAI APIキー</span><input type="password" value={aiArticleApiKey} onChange={event => setAiArticleApiKey(event.target.value)} placeholder={aiArticleStatus.configured ? "保存済み（変更するときだけ入力）" : "sk-..."} autoComplete="new-password" disabled={aiArticleBusy || !aiArticleStatus.encryptionAvailable} /><small>キー自体は画面や設定ファイルへ保存せず、Windowsの暗号化ストレージへ保存します。</small></label>
               <label className="comment-video-field"><span>AIモデル</span><select value={settings.aiArticleModel} onChange={event => setSettings(previous => ({ ...previous, aiArticleModel: event.target.value }))} disabled={aiArticleBusy}><option value="gpt-6-luna">GPT-6 Luna（低コスト・推奨）</option><option value="gpt-6.1-terra">GPT-6.1 Terra</option><option value="gpt-6.1-sol">GPT-6.1 Sol</option></select></label>
@@ -1964,10 +2017,17 @@ export default function App() {
             </div>
             <div className="comment-video-actions">
               {settings.aiArticleProvider === "openai" && <><button className="primary-small" onClick={() => void saveAiArticleApiKey()} disabled={aiArticleBusy || !aiArticleApiKey.trim() || !aiArticleStatus.encryptionAvailable}>APIキーを保存</button><button className="small-action" onClick={() => void clearAiArticleApiKey()} disabled={aiArticleBusy || !aiArticleStatus.configured}>APIキーを削除</button></>}
-              <button className="small-action" onClick={() => void testAiArticleConnection()} disabled={aiArticleBusy}>{settings.aiArticleProvider === "ollama" ? "Ollama接続テスト" : "接続テスト"}</button>
+              <button className="small-action" onClick={() => void testAiArticleConnection()} disabled={aiArticleBusy || aiModelPullBusy}>{settings.aiArticleProvider === "ollama" ? "Ollama接続テスト" : "接続テスト"}</button>
             </div>
+            {aiModelPullStatus && <div className="ai-model-pull-status" role="status">
+              <div className="ai-model-pull-heading"><strong>{aiModelPullStatus.model}</strong><span>{aiModelPullStatus.done ? "完了" : aiModelPullStatus.status}{aiModelPullStatus.percent !== null ? ` ・ ${aiModelPullStatus.percent}%` : ""}</span></div>
+              {aiModelPullStatus.percent !== null && <div className="version-progress"><div style={{ width: `${aiModelPullStatus.percent}%` }} /></div>}
+              {typeof aiModelPullStatus.completed === "number" && typeof aiModelPullStatus.total === "number" && <small>{(aiModelPullStatus.completed / 1_000_000).toFixed(1)} MB / {(aiModelPullStatus.total / 1_000_000).toFixed(1)} MB</small>}
+              {!aiModelPullStatus.done && <button className="remove" onClick={() => void cancelAiArticleModelPull()}>ダウンロードをキャンセル</button>}
+              {aiModelPullStatus.error && <small>{aiModelPullStatus.error}</small>}
+            </div>}
             {aiArticleMessage && <div className="api-message" role="status">{aiArticleMessage}</div>}
-            <div className="notice">AI記事の自動更新をONにすると、通常のコメント自動取得設定がOFFでも記事用コメントを受信します。録画済み動画の手動記事生成は、自動LIVE記事のON／OFFとは独立してAI分析します。{settings.aiArticleProvider === "ollama" ? "映像・音声・コメントのデータは設定したOllamaへ送信され、ローカルOllamaを使う場合は外部AIサービスへ送信されません。記事生成・映像解析モデルと音声認識モデルは別々に動作し、初回は各モデルのダウンロードが必要です。PCのメモリ・CPU/GPUを使用します。" : "記事生成モデルには映像フレーム・コメント・配信情報と、利用可能な場合は音声文字起こしテキストをOpenAI APIへ送信します。API利用料が発生し、映像フレームも外部へ送信されるため、送信してよい録画だけを対象にしてください。音声の新規文字起こし処理はOllama利用時のみです。"}</div>
+            <div className="notice">AI記事の自動更新をONにすると、通常のコメント自動取得設定がOFFでも記事用コメントを受信します。録画済み動画の手動記事生成は、自動LIVE記事のON／OFFとは独立してAI分析します。{settings.aiArticleProvider === "ollama" ? "映像・音声・コメントのデータは設定したOllamaへ送信され、ローカルOllamaを使う場合は外部AIサービスへ送信されません。記事生成用Visionモデルと音声認識モデルは設定画面の「インストール」ボタンから取得できます。ダウンロードには初回のみ通信が必要です。PCのメモリ・CPU/GPUを使用します。" : "記事生成モデルには映像フレーム・コメント・配信情報と、利用可能な場合は音声文字起こしテキストをOpenAI APIへ送信します。API利用料が発生し、映像フレームも外部へ送信されるため、送信してよい録画だけを対象にしてください。音声の新規文字起こし処理はOllama利用時のみです。"}</div>
           </div>
           <div className="comment-video-form-grid">
             <label className="comment-video-field"><span>登録配信者</span><select value={articleSlug} onChange={event => setArticleSlug(event.target.value)}>
