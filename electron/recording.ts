@@ -117,6 +117,10 @@ export class KickRecordingManager {
     return this.active.has(slug.toLowerCase());
   }
 
+  hasActiveRecordings(): boolean {
+    return this.active.size > 0;
+  }
+
   getActiveRecordingPath(inputSlug: unknown): string | null {
     if (typeof inputSlug !== "string" || !/^[a-zA-Z0-9_]{1,25}$/.test(inputSlug)) return null;
     const slug = inputSlug.toLowerCase();
