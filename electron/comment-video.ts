@@ -498,7 +498,9 @@ export async function previewCommentVideo(
       .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "")
       .trim()
       .slice(0, 500);
-    const resolved = resolveCommentPosition(raw, cleanRawContent);
+    const resolved = values.position === "command"
+      ? resolveCommentPosition(raw, cleanRawContent)
+      : { text: cleanRawContent };
     if (!resolved.text) continue;
     previewCandidates.push({
       seconds,
@@ -730,7 +732,9 @@ export class KickCommentVideoGenerator {
           .replace(/\[emote:\d+:([^\]]+)\]/g, "$1")
           .replace(/[\r\n\t]+/g, " ")
           .trim();
-        const resolved = resolveCommentPosition(raw, cleanContent);
+        const resolved = options.position === "command"
+          ? resolveCommentPosition(raw, cleanContent)
+          : { text: cleanContent };
         const displayContent = options.showUsername && username
           ? username + " : " + resolved.text
           : resolved.text;
