@@ -545,6 +545,12 @@ let mainWindow: BrowserWindow | null = null;
 
 const recordingManager = new KickRecordingManager(event => {
   mainWindow?.webContents.send("recording:status", event);
+  if (event.status === "recording" && readState().settings.autoGenerateArticles) {
+    startLiveArticleTimer();
+  }
+  if (event.status === "stopped" || event.status === "error") {
+    setTimeout(() => { void runLiveArticleCycle(); }, 1_000).unref?.();
+  }
 });
 
 const chatReceiver = new KickChatReceiver(event => {
@@ -712,7 +718,7 @@ async function createKickArticle(slugInput: unknown, metadata?: KickChannelCheck
   return article;
 }
 async function runLiveArticleCycle(): Promise<void> {
-  if (articleCycleRunning || !chatReceiver.getStatus().serverRunning) return;
+  if (articleCycleRunning) return;
   articleCycleRunning = true;
   try {
     const state = readState();
@@ -756,13 +762,18 @@ async function runLiveArticleCycle(): Promise<void> {
     });
   } finally {
     articleCycleRunning = false;
+    if (!chatReceiver.getStatus().serverRunning &&
+        !recordingManager.hasActiveRecordings() &&
+        liveArticleChannels.size === 0) {
+      stopLiveArticleTimer();
+    }
   }
 }
 
 function startLiveArticleTimer(): void {
   if (articleTimer) clearInterval(articleTimer);
   void runLiveArticleCycle();
-  articleTimer = setInterval(() => { void runLiveArticleCycle(); }, 3 * 60 * 1000);
+  articleTimer = setInterval(() => { void runLiveArticleCycle(); }, 60 * 1000);
   articleTimer.unref();
 }
 
@@ -1179,8 +1190,11 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("chat:stop", event => {
     assertTrustedSender(event);
-    stopLiveArticleTimer();
-    return chatReceiver.stop();
+    const status = chatReceiver.stop();
+    if (!recordingManager.hasActiveRecordings() && liveArticleChannels.size === 0) {
+      stopLiveArticleTimer();
+    }
+    return status;
   });
 
   ipcMain.handle("chat:subscribe", async (event, slugs: unknown) => {
