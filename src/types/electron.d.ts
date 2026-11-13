@@ -75,6 +75,16 @@ type KickRecorderAiArticleStatus = {
   aiArticleEnabled: boolean; aiArticleProvider: "ollama" | "openai"; aiArticleOllamaUrl: string; aiArticleModel: string; aiArticleIntervalSeconds: number;
 };
 
+type KickRecorderAiModelPullStatus = {
+  model: string;
+  status: string;
+  percent: number | null;
+  completed?: number;
+  total?: number;
+  done: boolean;
+  error?: string;
+};
+
 type KickRecorderCommentVideoEvent = {
   status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string;
   outputPath?: string; generatedComments?: number; skippedComments?: number;
@@ -204,6 +214,9 @@ declare global {
       saveAiArticleKey: (apiKey: string) => Promise<{ ok: true }>;
       clearAiArticleKey: () => Promise<{ ok: true }>;
       testAiArticleConnection: (model: string) => Promise<{ ok: true; message: string }>;
+      pullAiArticleModel: (model: string) => Promise<{ ok: true; model: string }>;
+      cancelAiArticleModelPull: () => Promise<{ ok: true; cancelled: boolean; model?: string }>;
+      onAiArticleModelPullStatus: (callback: (status: KickRecorderAiModelPullStatus) => void) => () => void;
       onStreamArticleUpdate: (callback: (article: KickRecorderStreamArticle) => void) => () => void;
       startManualLiveArticle: (channel: string) => Promise<{ ok: true; slug: string; article: KickRecorderStreamArticle; chatStatus: KickRecorderChatStatus }>;
       stopManualLiveArticle: () => Promise<{ ok: true; slug: string }>;
