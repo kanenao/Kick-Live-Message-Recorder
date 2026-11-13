@@ -186,8 +186,7 @@ export function startLiveVideoFrameCapture(
         } catch {
           if (audioDirectory) rmSync(audioDirectory, { recursive: true, force: true });
           audioDirectory = "";
-          audioFinishedResolve?.();
-          audioFinishedResolve = null;
+          finishAudioCapture();
         }
       }
 
