@@ -82,9 +82,9 @@ const COMMENT_FONT_FAMILIES: Record<CommentVideoFontFamily, string> = {
 };
 
 function normalizeFontFamily(value: unknown): CommentVideoFontFamily {
-  return value === "ms-pgothic" || value === "yu-gothic" || value === "arial"
+  return value === "meiryo" || value === "yu-gothic" || value === "arial"
     ? value
-    : "meiryo";
+    : "ms-pgothic";
 }
 
 function normalizeCommentVideoPosition(value: unknown): CommentVideoPosition {
@@ -457,7 +457,7 @@ export async function previewCommentVideo(
       seconds,
       content: cleanContent,
       username: username.slice(0, 80),
-      color: readString(raw.usernameColor) ?? readString(raw.color) ?? "#ffffff"
+      color: readString(raw.messageColor) ?? readString(raw.commentColor) ?? "#ffffff"
     });
   }
 
@@ -549,8 +549,8 @@ export class KickCommentVideoGenerator {
       displaySeconds: boundedNumber(values.displaySeconds, 6, 2, 15),
       speedPercent: boundedNumber(values.speedPercent, 100, 50, 200),
       rowLimit: Math.round(boundedNumber(values.rowLimit, 12, 1, 20)),
-      collisionGap: boundedNumber(values.collisionGap, 48, 0, 200),
-      opacity: boundedNumber(values.opacity, 92, 20, 100),
+      collisionGap: boundedNumber(values.collisionGap, 24, 0, 200),
+      opacity: boundedNumber(values.opacity, 100, 20, 100),
       quality: values.quality === "high" || values.quality === "compact" ? values.quality : "standard",
       position: normalizeCommentVideoPosition(values.position),
       showUsername: values.showUsername === true
@@ -683,7 +683,7 @@ export class KickCommentVideoGenerator {
         comments.push({
           seconds,
           text,
-          color: readString(raw.usernameColor) ?? readString(raw.color) ?? ""
+          color: readString(raw.messageColor) ?? readString(raw.commentColor) ?? "#ffffff"
         });
 
         if (readCount % 10_000 === 0) {
@@ -714,7 +714,7 @@ export class KickCommentVideoGenerator {
         "",
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        "Style: Default," + COMMENT_FONT_FAMILIES[options.fontFamily] + "," + options.fontSize + ",&H00FFFFFF,&H000000FF,&H80000000,&H00000000,1,0,0,0,100,100,0,0,1,2,1,7,14,14,14,1",
+        "Style: Default," + COMMENT_FONT_FAMILIES[options.fontFamily] + "," + options.fontSize + ",&H00FFFFFF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,3.2,1,7,14,14,14,1",
         "",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
@@ -723,12 +723,14 @@ export class KickCommentVideoGenerator {
 
       const lineHeight = Math.max(options.fontSize + 12, Math.round(options.fontSize * 1.55));
       const moveDuration = options.displaySeconds * 100 / options.speedPercent;
-      const topMargin = Math.max(12, Math.round(info.height * 0.012));
+      const topMargin = Math.max(18, Math.round(info.height * 0.02));
       const usableHeight = Math.max(1, info.height - topMargin * 2 - options.fontSize);
       const visibleRows = Math.max(1, Math.floor(usableHeight / lineHeight) + 1);
       const laneCount = Math.min(options.rowLimit, visibleRows);
       const laneSpacing = laneCount > 1 ? usableHeight / (laneCount - 1) : 0;
       const lanes: Array<LaneState | null> = Array.from({ length: laneCount }, () => null);
+      // ニコ生風に、文章の長さで速度が変わらないよう画面幅を基準に一定速度で流す。
+      const scrollPixelsPerSecond = info.width / moveDuration;
 
       // Saccubusのue/shita/naka配置を参考に、固定表示と横スクロールを選べるようにする。
       // 上下固定は同じ行の表示時間を管理し、表示中コメントが同じ位置で重ならないようにする。
@@ -759,9 +761,13 @@ export class KickCommentVideoGenerator {
         let laneIndex = -1;
         const isScrolling = options.position === "scroll";
         const start = comment.seconds;
+        // 文字が長いコメントは、画面を出切るまでの時間だけ長くする。
+        const commentMoveDuration = isScrolling
+          ? (info.width + width + 32) / scrollPixelsPerSecond
+          : options.displaySeconds;
 
         if (isScrolling) {
-          const speed = (info.width + width) / moveDuration;
+          const speed = scrollPixelsPerSecond;
           const laneStart = nextLaneStart();
           for (let offset = 0; offset < lanes.length; offset += 1) {
             // 横スクロールは文字幅・速度差・時間差・指定間隔を調べ、衝突しない行だけを再利用。
@@ -771,10 +777,11 @@ export class KickCommentVideoGenerator {
               laneIndex = index;
               break;
             }
-            const overlap = Math.max(0, Math.min(moveDuration, previous.end - comment.seconds));
+            const overlap = Math.max(0, Math.min(commentMoveDuration, previous.end - comment.seconds));
             const gapNeeded = options.collisionGap +
               Math.max(0, speed - previous.speed) * overlap;
-            const currentGap = previous.speed * Math.max(0, comment.seconds - previous.start) - width;
+            // 先行コメントの後端と、次コメントの進入位置の実距離で衝突を判定。
+            const currentGap = previous.speed * Math.max(0, comment.seconds - previous.start) - previous.width;
             if (currentGap >= gapNeeded) {
               laneIndex = index;
               break;
@@ -782,7 +789,7 @@ export class KickCommentVideoGenerator {
           }
 
           if (laneIndex >= 0) {
-            const end = Math.min(info.duration, start + moveDuration);
+            const end = Math.min(info.duration, start + commentMoveDuration);
             lanes[laneIndex] = { start, end, speed, width };
           }
         } else {
@@ -804,7 +811,7 @@ export class KickCommentVideoGenerator {
           continue;
         }
 
-        const end = Math.min(info.duration, start + (isScrolling ? moveDuration : options.displaySeconds));
+        const end = Math.min(info.duration, start + commentMoveDuration);
         const color = colorToAss(comment.color);
         const alpha = Math.round((100 - options.opacity) * 2.55).toString(16).padStart(2, "0").toUpperCase();
         let tags: string;
@@ -812,9 +819,9 @@ export class KickCommentVideoGenerator {
         if (isScrolling) {
           const y = Math.round(topMargin + laneIndex * laneSpacing);
           tags = "{\\move(" + (info.width + 16) + "," + y + "," + Math.round(-width) + "," + y +
-            ",0," + Math.max(1, Math.round(moveDuration * 1000)) + ")" +
+            ",0," + Math.max(1, Math.round(commentMoveDuration * 1000)) + ")" +
             "\\fn" + COMMENT_FONT_FAMILIES[options.fontFamily] + "\\b1\\1c" + color +
-            "\\alpha&H" + alpha + "&\\bord2.5\\shad1}";
+            "\\alpha&H" + alpha + "&\\bord3.2\\shad1}";
         } else {
           const y = options.position === "top"
             ? topMargin + laneIndex * fixedLaneStep
@@ -826,7 +833,7 @@ export class KickCommentVideoGenerator {
           tags = "{" + alignment + "\\pos(" + Math.round(info.width / 2) + "," + y + ")" +
             "\\fn" + COMMENT_FONT_FAMILIES[options.fontFamily] + "\\b1\\1c" + color +
             (horizontalScale < 100 ? "\\fscx" + horizontalScale : "") +
-            "\\alpha&H" + alpha + "&\\bord2.5\\shad1}";
+            "\\alpha&H" + alpha + "&\\bord3.2\\shad1}";
         }
 
         batch.push(
