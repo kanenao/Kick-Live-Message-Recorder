@@ -3,9 +3,16 @@
 Kickの配信を監視・録画し、公式Webhookでチャットを保存するWindowsデスクトップアプリです。ローカルOllamaを使った日本語の配信記事生成にも対応します。
 
 <aside>
-<strong>開発版：0.1.0-beta.15</strong><br />
+<strong>開発版：0.1.0-beta.16</strong><br />
 録画ごとの開始・終了時刻保存、Kickコメントの時刻同期、スクロール式ASS字幕の書き出しに対応しました。
 </aside>
+
+## β16 更新内容
+
+- AI放送記事に録画映像のフレーム解析、音声文字起こし、Kickコメントの統合を追加
+- FFmpeg / Whisper.cpp / 日本語モデルのパスを設定画面から指定
+- Ollamaの qwen2.5vl:3b で映像を、qwen2.5:3b で記事をPC内生成
+- 録画中はコメントの新着がない場合も約3分ごとにメディア解析・記事更新
 
 ## β15 更新内容
 
@@ -58,20 +65,29 @@ Webhook URLはCloudflare Quick Tunnelから毎回発行されます。アプリ�
 
 購読APIへの登録成功とWebhookの実配信成功は別です。Kick側のWebhook配信状況も含め、受信件数が増えることを確認してから運用してください。
 
-## 無料のAI記事生成（Ollama）
+## 無料のリアルタイムAI放送記事（映像・音声・コメント）
 
-1. Windows版Ollamaを https://ollama.com/download からインストールします。
-2. PowerShellでモデルを取得します。
+AIの処理はすべてPC内で行います。OpenAI APIキー、クラウドAI契約、従量課金は不要です。次のローカルツールを導入してください。
+
+1. [Ollama for Windows](https://ollama.com/download) をインストールし、PowerShellでテキスト記事モデルと映像モデルを取得します。
 
 ```powershell
 ollama pull qwen2.5:3b
+ollama pull qwen2.5vl:3b
 ```
 
-3. Ollamaを起動した状態でアプリの設定画面を開き、Ollamaの接続を確認します。
-4. 「配信中の記事を自動生成」を有効にします。
-5. チャット受信中に新着コメントがあれば約3分ごとに記事を保存します。
+2. [FFmpegのWindowsビルド](https://www.gyan.dev/ffmpeg/builds/)を取得し、設定画面で `ffmpeg.exe` を選択します。
+3. [Whisper.cpp公式リリース](https://github.com/ggml-org/whisper.cpp/releases)からWindows用 `whisper-cli.exe` を用意します。
+4. [日本語対応のggml-base.bin](https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin)を取得し、設定画面で選択します。
+5. Kickのチャンネルを登録し、自動録画または手動録画を開始します。
+6. 設定画面でチャット受信を開始し、Kick DeveloperのWebhook URL登録とコメント購読を完了します。
+7. 「配信中の記事を自動生成」を有効にします。
 
-記事は録画保存先の `Articles` フォルダー、チャットは `ChatLogs` フォルダーに保存します。記事は保存した視聴者コメントとKickの番組情報を元に生成します。現時点では映像・音声の内容を直接解析する機能ではありません。記事生成はPC内のOllamaで行い、OpenAI APIキーや従量課金は不要です。モデルの実行速度はPCのメモリー・CPU/GPU性能に依存します。
+録画中は約3分ごとに、録画ファイルから映像フレーム1枚と直近約60秒の音声を抽出します。音声はWhisper.cppで日本語文字起こしし、映像はOllamaの `qwen2.5vl:3b` で画面に見える内容を説明します。これらをKickコメント・配信タイトルとともに `qwen2.5:3b` へ渡して記事化します。コメントが増えていない周期でも録画中なら記事を更新します。配信終了後はコメントと最後に得られた配信情報を使って最終記事を作成します。
+
+チャット受信のみの場合はコメントを中心に記事を生成します。録画していない場合、映像・音声の解析はできません。FFmpeg、Whisper.cpp、モデルが未設定・未導入の場合は記事の注意メッセージに不足内容を表示します。音声文字起こしは誤認識があり得るため、記事の記述は実際の配信と照合してください。
+
+記事は録画保存先の `Articles` フォルダー、チャットは `ChatLogs` フォルダーに保存します。音声・映像サンプルはローカルで処理し、一時ファイルは解析後に削除します。Whisper.cppのモデルやOllamaモデルの実行速度はPCのメモリー・CPU/GPU性能に依存します。
 
 ## 自動アップデート
 
