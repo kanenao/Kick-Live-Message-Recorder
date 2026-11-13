@@ -80,12 +80,16 @@ export function startLiveVideoFrameCapture(
   onFrame: (frame: VideoFrameSample) => void,
   onStatus: (status: LiveVideoFrameStatus) => void,
   onAudioChunk?: (chunk: LiveAudioChunk) => void,
-  onAudioError?: (message: string) => void
+  onAudioError?: (message: string) => void,
+  initialOffsetSeconds = 0
 ): () => Promise<void> {
   if (typeof slugInput !== "string" || !/^[a-zA-Z0-9_]{1,25}$/.test(slugInput)) {
     throw new Error("LIVE映像を解析するKickチャンネル名が不正です。");
   }
   const slug = slugInput.toLowerCase();
+  const captureOffsetSeconds = Number.isFinite(initialOffsetSeconds)
+    ? Math.max(0, Math.min(7 * 24 * 60 * 60, initialOffsetSeconds))
+    : 0;
   let cancelled = false;
   let finished = false;
   let resolverChild: ChildProcess | null = null;
@@ -162,7 +166,7 @@ export function startLiveVideoFrameCapture(
                 processedAudioFiles.add(name);
                 audioSegmentCount += 1;
                 onAudioChunk({
-                  timeSeconds: segmentIndex * 45,
+                  timeSeconds: captureOffsetSeconds + segmentIndex * 45,
                   wavBase64: wav.toString("base64")
                 });
                 publish("capturing", `LIVE映像の代表フレーム累計${frameCount}枚・音声区間${audioSegmentCount}件を取得中です。`);
@@ -249,7 +253,7 @@ export function startLiveVideoFrameCapture(
           buffer = buffer.subarray(end + 2);
           if (jpeg.length < 100 || jpeg.length > 3_000_000) continue;
           const frame: VideoFrameSample = {
-            timeSeconds: Math.max(0, Math.round((Date.now() - startedCaptureAt) / 1000)),
+            timeSeconds: Math.max(0, Math.round(captureOffsetSeconds + (Date.now() - startedCaptureAt) / 1000)),
             imageBase64: jpeg.toString("base64")
           };
           frameCount += 1;
