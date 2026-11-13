@@ -458,7 +458,13 @@ export class LiveStreamArticleManager {
     session.finishing = true;
     session.article.durationSeconds = Math.max(0, Math.floor((Date.now() - Date.parse(session.article.startedAt)) / 1000));
     session.article.viewerCount = 0;
-    const hasFinalAnalysisInput = (): boolean => session.pendingComments.length > 0 || Boolean(session.videoFrames?.length);
+    const audioDrainDeadline = Date.now() + 240_000;
+    while ((session.audioTranscriptionInFlight || session.audioQueue.length > 0) && Date.now() < audioDrainDeadline) {
+      if (!session.audioTranscriptionInFlight && session.audioQueue.length > 0) void this.processAudioQueue(session);
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    const hasFinalAnalysisInput = (): boolean =>
+      session.pendingComments.length > 0 || session.pendingAudioSegments.length > 0 || Boolean(session.videoFrames?.length);
     if (hasFinalAnalysisInput() && !session.analysisInFlight) {
       await this.analyze(session, true, session.forceAi === true);
     } else if (session.analysisInFlight) {
@@ -513,13 +519,18 @@ export class LiveStreamArticleManager {
   }
 
   private async analyze(session: LiveSession, final: boolean, force = false): Promise<void> {
-    if (session.analysisInFlight || (session.pendingComments.length === 0 && !session.videoFrames?.length)) return;
+    if (session.analysisInFlight || (
+      session.pendingComments.length === 0 &&
+      session.pendingAudioSegments.length === 0 &&
+      !session.videoFrames?.length
+    )) return;
     const config = this.getConfig();
     const key = config.provider === "ollama" ? "local" : this.getApiKey();
     if ((!config.enabled && !session.forceAi && !force) || !key) return;
     session.analysisInFlight = true;
     session.lastAnalysisAt = Date.now();
     const batch = session.pendingComments.splice(0, final ? 120 : 80);
+    const audioBatch = session.pendingAudioSegments.splice(0, final ? 80 : 30);
     const article = session.article;
     this.persist(session);
     const userInput = {
@@ -534,7 +545,14 @@ export class LiveStreamArticleManager {
       uniqueCommenters: article.uniqueCommenters,
       previousSummary: article.aiSummary ?? "",
       previousArticle: article.paragraphs,
+      previousAudioSummary: article.audioSummary ?? "",
       newComments: batch.map(comment => ({ time: comment.at, text: comment.text })),
+      audioTranscript: audioBatch.map(segment => ({
+        startSeconds: segment.startSeconds,
+        endSeconds: segment.endSeconds,
+        text: segment.text
+      })),
+      audioSegmentCount: article.audioSegmentCount ?? 0,
       keywords: article.keywords,
       videoFrames: (session.videoFrames ?? []).map(frame => ({ timeSeconds: frame.timeSeconds }))
     };
