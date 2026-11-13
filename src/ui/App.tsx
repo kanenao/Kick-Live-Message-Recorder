@@ -115,6 +115,9 @@ type StreamArticle = {
   status?: "live" | "completed"; aiGenerated?: boolean; aiSummary?: string; highlights?: string[];
   lastAiUpdateAt?: string | null; viewerCount?: number; peakViewerCount?: number; aiError?: string;
   videoAnalyzed?: boolean; videoFrameCount?: number; videoSummary?: string; videoScenes?: string[]; videoAnalyzedAt?: string | null;
+  audioAnalyzed?: boolean; audioSegmentCount?: number; audioSummary?: string; audioTranscript?: string;
+  audioTranscriptSegments?: Array<{ startSeconds: number; endSeconds: number; text: string }>;
+  audioAnalyzedAt?: string | null; audioError?: string;
 };
 type AiArticleStatus = {
   configured: boolean; encryptionAvailable: boolean;
@@ -1903,10 +1906,10 @@ export default function App() {
           <button className="small-action" onClick={() => setLibraryRefreshKey(value => value + 1)} disabled={!isDesktop || articleBusy}>一覧を更新</button>
         </div>
         {!isDesktop ? <div className="empty-state"><strong>Windowsデスクトップ版で利用できます</strong><span>録画ファイルとコメントログを読み込む必要があります。</span></div> : <>
-          <div className="comment-video-intro">録画済み配信は、コメント・配信情報に加えて、録画動画から一定間隔で抽出した最大8枚の代表フレームもAI分析できます。映像から確認できた場面・画面内のテキスト・表示内容を記事へ反映します。AIは音声やフレーム間の動きを直接解析するものではないため、確認できない発言・出来事は推測しません。登録済み配信者のLIVE自動記事でも代表フレームを抽出し、コメント・配信情報・映像を組み合わせて更新します。登録不要のチャンネルは下の「LIVE記事だけ生成」から単発で開始できます。</div>
+          <div className="comment-video-intro">配信映像・音声・コメントを別々に解析し、AIが根拠を照合して新聞記事風に統合します。映像は最大8枚の代表フレーム、音声は45秒ごとの文字起こし、コメントは話題や視聴者の反応として扱います。LIVE中も記事を段階的に更新し、終了後に全体を整理します。音声認識にない発言や、静止画だけでは確認できない動きは推測しません。登録不要のチャンネルも録画せずにLIVE記事を生成できます。</div>
           <div className="settings-subsection manual-live-article-panel">
             <div className="settings-subheading"><h3>登録不要：LIVE記事だけ生成</h3><span className="api-state connected">録画なし</span></div>
-            <p className="manual-live-article-description">チャンネル管理に登録していない配信者でも利用できます。Kickのチャンネル名またはURLを入力すると、LIVEコメントと映像の代表フレームを取得して記事を自動更新します。録画ファイルは作成せず、通常のチャンネル登録・自動録画設定も変更しません。</p>
+            <p className="manual-live-article-description">チャンネル管理に登録していない配信者でも利用できます。Kickのチャンネル名またはURLを入力すると、LIVE映像・音声・コメントを解析して記事を自動更新します。録画ファイルは作成せず、通常のチャンネル登録・自動録画設定も変更しません。</p>
             <div className="comment-video-form-grid">
               <label className="comment-video-field"><span>Kickチャンネル名／URL</span><input value={manualLiveArticleInput} onChange={event => setManualLiveArticleInput(event.target.value)} placeholder="例：streamer_name または https://kick.com/streamer_name" disabled={manualLiveArticleBusy || Boolean(manualLiveArticleSlug)} /></label>
             </div>
@@ -1916,7 +1919,7 @@ export default function App() {
               {manualLiveArticleSlug && <span className="comment-video-log-count">生成中：{manualLiveArticleSlug}</span>}
             </div>
             {manualLiveArticleSlug && liveArticleCaptureStatus?.slug === manualLiveArticleSlug && <div className={liveArticleCaptureStatus.status === "error" ? "comment-video-status error" : "comment-video-status"} role="status"><strong>{liveArticleCaptureStatus.message}</strong></div>}
-            <div className="notice">LIVE映像はFFmpegで25秒間隔の代表フレームを継続抽出し、AI分析には直近8枚を使用します。全編録画は行いません。この機能にはKick API Client ID／Secretの設定が必要です。コメントログの保存は基本設定の「コメントを保存する」に従います。LIVE終了後は「記事を保存して終了」を押してください。</div>
+            <div className="notice">LIVE映像は25秒間隔で代表フレームを抽出し、音声は45秒単位でWAV化してローカルASRへ渡します。録画ファイルは作成しません。音声文字起こしにはOllamaとQwen3-ASRモデルが必要です。LIVE終了時は音声認識キューを処理して記事を最終化します。この機能にはKick API Client ID／Secretの設定が必要です。</div>
           </div>
           <div className="settings-subsection ai-article-settings">
             <div className="settings-subheading"><h3>LIVE中のリアルタイムAI記事</h3><span className={settings.aiArticleProvider === "ollama" ? "api-state connected" : aiArticleStatus.configured ? "api-state connected" : "api-state"}>{settings.aiArticleProvider === "ollama" ? "無料ローカルAI" : aiArticleStatus.configured ? "APIキー設定済み" : "APIキー未設定"}</span></div>
@@ -1925,7 +1928,9 @@ export default function App() {
               <label className="comment-video-field"><span>AIエンジン</span><select value={settings.aiArticleProvider} onChange={event => setSettings(previous => ({ ...previous, aiArticleProvider: event.target.value as "ollama" | "openai", aiArticleModel: event.target.value === "ollama" ? "qwen2.5vl:3b" : "gpt-6-luna" }))} disabled={aiArticleBusy}><option value="ollama">Ollama（無料・ローカルAI）</option><option value="openai">OpenAI API（有料）</option></select></label>
               {settings.aiArticleProvider === "ollama" ? <>
                 <label className="comment-video-field"><span>Ollama接続URL</span><input type="url" value={settings.aiArticleOllamaUrl} onChange={event => setSettings(previous => ({ ...previous, aiArticleOllamaUrl: event.target.value }))} placeholder="http://127.0.0.1:11434" disabled={aiArticleBusy} /><small>通常はこの初期値のままで利用できます。</small></label>
-                <label className="comment-video-field"><span>Ollamaモデル名</span><input value={settings.aiArticleModel} onChange={event => setSettings(previous => ({ ...previous, aiArticleModel: event.target.value }))} placeholder="qwen2.5vl:3b" disabled={aiArticleBusy} /><small>映像解析対応モデル：qwen2.5vl:3b（初回は ollama pull qwen2.5vl:3b）。Qwen3-VLなども利用できます。</small></label>
+                <label className="comment-video-field"><span>記事生成・映像解析モデル</span><input value={settings.aiArticleModel} onChange={event => setSettings(previous => ({ ...previous, aiArticleModel: event.target.value }))} placeholder="qwen2.5vl:3b" disabled={aiArticleBusy} /><small>映像解析対応モデル：qwen2.5vl:3b（初回は ollama pull qwen2.5vl:3b）。対応するVisionモデルを指定してください。</small></label>
+                <label className="comment-video-checkbox"><input type="checkbox" checked={settings.aiArticleAudioEnabled} onChange={event => setSettings(previous => ({ ...previous, aiArticleAudioEnabled: event.target.checked }))} disabled={aiArticleBusy} /><span>音声を文字起こしして記事へ反映する（無料・ローカル）</span></label>
+                <label className="comment-video-field"><span>音声認識モデル（Qwen3-ASR）</span><input value={settings.aiArticleAudioModel} onChange={event => setSettings(previous => ({ ...previous, aiArticleAudioModel: event.target.value }))} placeholder="frozenlab/qwen3-asr:0.6b" disabled={aiArticleBusy || !settings.aiArticleAudioEnabled} /><small>初回のみ PowerShell で <code>ollama pull frozenlab/qwen3-asr:0.6b</code> を実行してください（約1GB）。日本語を含む音声を45秒単位で認識します。qwen3a音声入力に対応したOllamaが必要です。</small></label>
               </> : <>
               <label className="comment-video-field"><span>OpenAI APIキー</span><input type="password" value={aiArticleApiKey} onChange={event => setAiArticleApiKey(event.target.value)} placeholder={aiArticleStatus.configured ? "保存済み（変更するときだけ入力）" : "sk-..."} autoComplete="new-password" disabled={aiArticleBusy || !aiArticleStatus.encryptionAvailable} /><small>キー自体は画面や設定ファイルへ保存せず、Windowsの暗号化ストレージへ保存します。</small></label>
               <label className="comment-video-field"><span>AIモデル</span><select value={settings.aiArticleModel} onChange={event => setSettings(previous => ({ ...previous, aiArticleModel: event.target.value }))} disabled={aiArticleBusy}><option value="gpt-6-luna">GPT-6 Luna（低コスト・推奨）</option><option value="gpt-6.1-terra">GPT-6.1 Terra</option><option value="gpt-6.1-sol">GPT-6.1 Sol</option></select></label>
@@ -1937,7 +1942,7 @@ export default function App() {
               <button className="small-action" onClick={() => void testAiArticleConnection()} disabled={aiArticleBusy}>{settings.aiArticleProvider === "ollama" ? "Ollama接続テスト" : "接続テスト"}</button>
             </div>
             {aiArticleMessage && <div className="api-message" role="status">{aiArticleMessage}</div>}
-            <div className="notice">AI記事の自動更新をONにすると、通常のコメント自動取得設定がOFFでも記事用コメントを受信します。録画済み動画の手動記事生成は、自動LIVE記事のON／OFFとは独立してAI分析します。{settings.aiArticleProvider === "ollama" ? "映像フレーム・コメント・配信情報はPC内のOllamaへ送信され、外部AIサービスへは送信されません。映像解析には画像対応モデル（qwen2.5vl:3bなど）が必要です。モデルの実行にはPCのメモリ・CPU/GPUを使用します。" : "映像から抽出した代表フレーム、コメント、配信情報をOpenAI APIへ送信して分析します。API利用料が発生するほか、映像フレームも外部へ送信されるため、送信してよい録画だけを対象にしてください。"}</div>
+            <div className="notice">AI記事の自動更新をONにすると、通常のコメント自動取得設定がOFFでも記事用コメントを受信します。録画済み動画の手動記事生成は、自動LIVE記事のON／OFFとは独立してAI分析します。{settings.aiArticleProvider === "ollama" ? "映像・音声・コメントのデータは設定したOllamaへ送信され、ローカルOllamaを使う場合は外部AIサービスへ送信されません。記事生成・映像解析モデルと音声認識モデルは別々に動作し、初回は各モデルのダウンロードが必要です。PCのメモリ・CPU/GPUを使用します。" : "記事生成モデルには映像フレーム・コメント・配信情報と、利用可能な場合は音声文字起こしテキストをOpenAI APIへ送信します。API利用料が発生し、映像フレームも外部へ送信されるため、送信してよい録画だけを対象にしてください。音声の新規文字起こし処理はOllama利用時のみです。"}</div>
           </div>
           <div className="comment-video-form-grid">
             <label className="comment-video-field"><span>登録配信者</span><select value={articleSlug} onChange={event => setArticleSlug(event.target.value)}>
@@ -1950,7 +1955,7 @@ export default function App() {
             </select></label>
             <label className="comment-video-field"><span>記事見出し（任意）</span><input value={articleHeadline} onChange={event => setArticleHeadline(event.target.value)} maxLength={160} placeholder="空欄なら配信者名から自動作成" /></label>
           </div>
-          <div className="comment-video-actions"><button className="primary-small" onClick={() => void createStreamArticle()} disabled={articleBusy || !articleSlug || !articleVideoPath}>{articleBusy ? "映像・コメントをAI分析中..." : settings.aiArticleProvider === "ollama" || aiArticleStatus.configured ? "映像・コメントAI分析付き記事を生成" : "この配信の記事を生成"}</button><span className="comment-video-log-count">同じ配信者のコメントログ {commentLogFiles.filter(file => file.channelSlug.toLowerCase() === articleSlug.toLowerCase()).length}件を自動で参照</span></div>
+          <div className="comment-video-actions"><button className="primary-small" onClick={() => void createStreamArticle()} disabled={articleBusy || !articleSlug || !articleVideoPath}>{articleBusy ? "映像・音声・コメントをAI分析中..." : settings.aiArticleProvider === "ollama" || aiArticleStatus.configured ? "3つの情報源からAI記事を生成" : "この配信の記事を生成"}</button><span className="comment-video-log-count">同じ配信者のコメントログ {commentLogFiles.filter(file => file.channelSlug.toLowerCase() === articleSlug.toLowerCase()).length}件を自動で参照</span></div>
           {articleMessage && <div className="api-message" role="status">{articleMessage}</div>}
           <div className="article-list">
             <div className="settings-subheading article-list-heading"><h3>記事一覧</h3><span className="api-state connected">{filteredStreamArticles.length}件 / 全{streamArticles.length}件</span></div>
