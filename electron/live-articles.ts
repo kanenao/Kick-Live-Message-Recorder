@@ -337,7 +337,7 @@ export class LiveStreamArticleManager {
 
   async testConnection(modelInput: unknown): Promise<{ ok: true; message: string }> {
     const config = this.getConfig();
-    const model = safeText(modelInput, 100) || (config.provider === "ollama" ? "qwen2.5:3b" : "gpt-6-luna");
+    const model = safeText(modelInput, 100) || (config.provider === "ollama" ? "qwen2.5vl:3b" : "gpt-6-luna");
     if (config.provider === "ollama") {
       const baseUrl = (config.baseUrl || "http://127.0.0.1:11434").replace(/\/+$/, "");
       let response: Response;
@@ -401,7 +401,7 @@ export class LiveStreamArticleManager {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            model: safeText(config.model, 100) || "qwen2.5:3b",
+            model: safeText(config.model, 100) || "qwen2.5vl:3b",
             stream: false,
             format: "json",
             messages: [
