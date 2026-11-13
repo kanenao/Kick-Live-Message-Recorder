@@ -207,6 +207,17 @@
 
 .ai-article-settings{margin:20px 0 24px;padding:18px;border:1px solid #35443d;border-radius:9px;background:#151d1a}
 .ai-article-form-grid{margin-top:14px}
+.ai-model-install-field{display:flex;flex-direction:column;gap:8px;min-width:0}
+.ai-model-install-field .comment-video-field{flex:1}
+.ai-model-install-field>.small-action{align-self:flex-start;max-width:100%;white-space:normal;text-align:center}
+.ai-model-pull-status{margin-top:13px;padding:12px 13px;border:1px solid #385943;border-radius:8px;background:#19251e;color:#c7e7d1}
+.ai-model-pull-heading{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:7px;font-size:10px}
+.ai-model-pull-heading strong{color:#a1e4b5;overflow-wrap:anywhere}
+.ai-model-pull-heading span{color:#d0d9d2}
+.ai-model-pull-status .version-progress{margin:9px 0}
+.ai-model-pull-status small{display:block;margin-top:6px;color:#9cac9f;font-size:9px;line-height:1.6;overflow-wrap:anywhere}
+.ai-model-pull-status button{margin-top:9px}
+
 .article-status-live,.article-status-done,.article-ai-label{display:inline-block;margin-left:8px;padding:3px 7px;border-radius:5px;font-size:9px;font-weight:700;letter-spacing:.3px;vertical-align:middle}
 .article-status-live{background:#56302d;color:#ffb0a7}
 .article-status-done{background:#26352d;color:#92d6ad}
