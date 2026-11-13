@@ -205,6 +205,9 @@ export function startLiveVideoFrameCapture(
                 (audioStderr ? " " + audioStderr.slice(-700) : " 終了コード：" + String(code ?? "不明")));
               return;
             }
+            // FFmpegが終了時に最後の45秒未満のWAVを初めてCSVへ書き出す場合があるため、
+            // 音声トラックの有無を判定する前に最終セグメントを必ず読み込む。
+            flushAudioSegments();
             finalizeAudioCapture(audioSegmentCount === 0
               ? "LIVE配信から音声トラックを取得できませんでした。配信に音声がないか、音声形式がFFmpegに対応していない可能性があります。"
               : undefined);
