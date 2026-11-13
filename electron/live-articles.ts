@@ -326,6 +326,9 @@ export class LiveStreamArticleManager {
       }
     } finally {
       session.audioTranscriptionInFlight = false;
+      if (session.audioQueue.length > 0 && !session.finishing) {
+        void this.processAudioQueue(session);
+      }
     }
   }
 
