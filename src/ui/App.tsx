@@ -29,6 +29,8 @@ type AppSettings = {
   aiArticleOllamaUrl: string;
   aiArticleModel: string;
   aiArticleIntervalSeconds: number;
+  aiArticleAudioEnabled: boolean;
+  aiArticleAudioModel: string;
 };
 
 type PersistedState = {
@@ -129,7 +131,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.1.0-beta.48";
+const APP_VERSION = "0.1.0-beta.49";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -157,6 +159,16 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.1.0-beta.49",
+    title: "映像・音声・コメントを統合した配信記事",
+    changes: [
+      "録画済み動画とLIVE配信から音声を45秒単位で抽出し、OllamaのQwen3-ASRで日本語文字起こし",
+      "映像フレーム・時刻付き音声文字起こし・視聴者コメントを別々に分析し、AIが相互に照合して新聞記事風に統合",
+      "記事カードに音声の要約・文字起こし・分析エラーを表示。LIVE終了時は音声認識キューを処理してから記事を最終化",
+      "無料ローカル音声認識のON／OFFとモデル名を設定可能に"
+    ]
+  },
   {
     version: "0.1.0-beta.48",
     title: "コメントごとのue・naka・shita指定に対応",
@@ -374,7 +386,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   aiArticleProvider: "ollama",
   aiArticleOllamaUrl: "http://127.0.0.1:11434",
   aiArticleModel: "qwen2.5vl:3b",
-  aiArticleIntervalSeconds: 120
+  aiArticleIntervalSeconds: 120,
+  aiArticleAudioEnabled: true,
+  aiArticleAudioModel: "frozenlab/qwen3-asr:0.6b"
 };
 
 function normalizeState(value: unknown): PersistedState {
@@ -448,7 +462,11 @@ function normalizeState(value: unknown): PersistedState {
       aiArticleModel: typeof settings.aiArticleModel === "string" && /^[a-zA-Z0-9._:-]{1,100}$/.test(settings.aiArticleModel)
         ? (settings.aiArticleProvider !== "openai" && settings.aiArticleModel === "qwen2.5:3b" ? "qwen2.5vl:3b" : settings.aiArticleModel) : (settings.aiArticleProvider === "openai" ? "gpt-6-luna" : "qwen2.5vl:3b"),
       aiArticleIntervalSeconds: typeof settings.aiArticleIntervalSeconds === "number"
-        ? Math.max(30, Math.min(600, Math.round(settings.aiArticleIntervalSeconds))) : 120
+        ? Math.max(30, Math.min(600, Math.round(settings.aiArticleIntervalSeconds))) : 120,
+      aiArticleAudioEnabled: settings.aiArticleAudioEnabled !== false,
+      aiArticleAudioModel: typeof settings.aiArticleAudioModel === "string" &&
+        /^[a-zA-Z0-9._:/-]{1,120}$/.test(settings.aiArticleAudioModel)
+        ? settings.aiArticleAudioModel : "frozenlab/qwen3-asr:0.6b"
     }
   };
 }
