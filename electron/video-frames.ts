@@ -1,5 +1,5 @@
 import { existsSync, lstatSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { extname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { isPathInsideDirectory } from "./recording";
@@ -24,7 +24,7 @@ function findTool(executable: "ffmpeg.exe" | "ffprobe.exe" | "ffmpeg" | "ffprobe
 
 function runTool(executable: string, args: string[], timeoutMs: number, captureStdout: boolean): Promise<string> {
   return new Promise((resolvePromise, rejectPromise) => {
-    let child;
+    let child: ChildProcess;
     try {
       child = spawn(executable, args, { windowsHide: true, stdio: ["ignore", captureStdout ? "pipe" : "ignore", "pipe"] });
     } catch (error) {
