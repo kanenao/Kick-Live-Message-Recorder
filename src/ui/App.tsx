@@ -573,7 +573,6 @@ export default function App() {
         ...(kind === "ffmpeg" ? { ffmpegPath: selectedPath } :
           kind === "whisperCli" ? { whisperCliPath: selectedPath } : { whisperModelPath: selectedPath })
       }));
-      const status = await window.kickRecorder.getMediaToolStatus();
       const pathSettings = {
         ...settings,
         ...(kind === "ffmpeg" ? { ffmpegPath: selectedPath } :
@@ -1027,8 +1026,8 @@ export default function App() {
         <div className="settings-subsection">
           <div className="settings-subheading">
             <h3>ライブ映像・音声のローカル解析</h3>
-            <span className={mediaToolStatus.ffmpegAvailable && mediaToolStatus.whisperAvailable && mediaToolStatus.whisperModelAvailable ? "api-state connected" : "api-state"}>
-              {mediaToolStatus.ffmpegAvailable && mediaToolStatus.whisperAvailable && mediaToolStatus.whisperModelAvailable ? "音声・映像ツール準備完了" : "セットアップが必要"}
+            <span className={mediaToolStatus.ffmpegAvailable && mediaToolStatus.whisperAvailable && mediaToolStatus.whisperModelAvailable && ollamaStatus.models.some(model => model.name.toLowerCase().startsWith("qwen2.5vl")) ? "api-state connected" : "api-state"}>
+              {mediaToolStatus.ffmpegAvailable && mediaToolStatus.whisperAvailable && mediaToolStatus.whisperModelAvailable && ollamaStatus.models.some(model => model.name.toLowerCase().startsWith("qwen2.5vl")) ? "音声・映像ツール準備完了" : "セットアップが必要"}
             </span>
           </div>
           <p className="settings-help">FFmpegで録画中ファイルから直近の映像1枚と音声約60秒を抽出し、Whisper.cppで文字起こしします。映像はOllamaの qwen2.5vl:3b、記事本文は qwen2.5:3b で解析します。処理はPC内で完結します。</p>
