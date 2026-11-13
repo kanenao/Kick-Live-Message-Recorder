@@ -131,6 +131,18 @@ function sampleAudioSegmentsAcrossDuration(
   });
 }
 
+function sampleCommentsAcrossDuration(
+  comments: CommentSample[],
+  maximum: number
+): CommentSample[] {
+  if (comments.length <= maximum) return comments;
+  if (maximum <= 1) return [comments[0]];
+  return Array.from({ length: maximum }, (_, index) => {
+    const sourceIndex = Math.round(index * (comments.length - 1) / (maximum - 1));
+    return comments[sourceIndex];
+  });
+}
+
 function extractResponseText(payload: Record<string, unknown>): string {
   if (typeof payload.output_text === "string") return payload.output_text;
   if (!Array.isArray(payload.output)) return "";
@@ -281,6 +293,15 @@ export class LiveStreamArticleManager {
     if (count === 1 || count % 3 === 0) void this.analyze(session, false, true);
   }
 
+  onAudioCaptureError(slugInput: unknown, message: unknown): void {
+    if (typeof slugInput !== "string") return;
+    const session = this.sessions.get(slugInput.toLowerCase());
+    if (!session || session.finishing) return;
+    const detail = safeText(message, 500) || "LIVE音声を取得できませんでした。";
+    session.article.audioError = detail;
+    this.persist(session);
+  }
+
   onAudioChunk(slugInput: unknown, chunk: LiveAudioChunk): void {
     if (typeof slugInput !== "string" || !chunk || typeof chunk.wavBase64 !== "string") return;
     const session = this.sessions.get(slugInput.toLowerCase());
@@ -370,6 +391,16 @@ export class LiveStreamArticleManager {
     const chatRoot = join(root, "Chat", slug);
     const sourceLogs = Array.isArray(article.sourceLogs) ? article.sourceLogs.slice(0, 31) : [];
     const comments: CommentSample[] = [];
+    let totalCommentsSeen = 0;
+    let reservoirState = 0x12345678;
+    const nextReservoirRandom = (): number => {
+      reservoirState = (reservoirState + 0x6D2B79F5) >>> 0;
+      let value = reservoirState;
+      value = Math.imul(value ^ (value >>> 15), value | 1);
+      value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+      return ((value ^ (value >>> 14)) >>> 0) / 4_294_967_296;
+    };
+    const commentReservoirSize = 600;
     for (const path of sourceLogs) {
       if (typeof path !== "string" || !isPathInsideDirectory(path, chatRoot) ||
           extname(path).toLowerCase() !== ".jsonl" || !existsSync(path)) continue;
@@ -383,11 +414,19 @@ export class LiveStreamArticleManager {
         const text = content.normalize("NFKC").replace(/\s+/g, " ").trim().slice(0, 500);
         if (!text) continue;
         const at = typeof item.createdAt === "string" && !Number.isNaN(Date.parse(item.createdAt))
-          ? item.createdAt : new Date().toISOString();
-        comments.push({ at, text });
-        if (comments.length > 120) comments.shift();
+          ? item.createdAt : article.startedAt;
+        const sample = { at, text };
+        totalCommentsSeen += 1;
+        if (comments.length < commentReservoirSize) {
+          comments.push(sample);
+        } else {
+          const slot = Math.floor(nextReservoirRandom() * totalCommentsSeen);
+          if (slot < commentReservoirSize) comments[slot] = sample;
+        }
       }
     }
+    comments.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+    const articleCommentSamples = sampleCommentsAcrossDuration(comments, 120);
     let videoFrames: VideoFrameSample[] = [];
     let videoError = "";
     let audioSegments: AudioTranscriptSegment[] = [];
@@ -426,7 +465,7 @@ export class LiveStreamArticleManager {
     const session: LiveSession = {
       article, directory, commenters: new Set(), uniqueCommenterBaseline: article.uniqueCommenters,
       keywordCounts: new Map((article.keywords ?? []).map(word => [word, 1])),
-      pendingComments: comments,
+      pendingComments: articleCommentSamples,
       // Keep the full transcript in the article, but give the AI evenly spaced
       // excerpts across the whole recording so long streams are not cut at 60 minutes.
       pendingAudioSegments: sampleAudioSegmentsAcrossDuration(audioSegments, 80),
