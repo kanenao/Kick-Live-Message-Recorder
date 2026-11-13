@@ -261,6 +261,72 @@ export class LiveStreamArticleManager {
     if (count === 1 || count % 3 === 0) void this.analyze(session, false, true);
   }
 
+  onAudioChunk(slugInput: unknown, chunk: LiveAudioChunk): void {
+    if (typeof slugInput !== "string" || !chunk || typeof chunk.wavBase64 !== "string") return;
+    const session = this.sessions.get(slugInput.toLowerCase());
+    const config = this.getConfig();
+    if (!session || session.finishing || config.provider !== "ollama" || config.audioEnabled === false) return;
+    if (session.audioQueue.length >= 16) {
+      session.article.audioError = "音声認識が追いつかず、一部の音声区間を取りこぼしました。AIの更新間隔やPC負荷を確認してください。";
+      session.audioQueue.shift();
+    }
+    session.audioQueue.push({
+      timeSeconds: Math.max(0, Number.isFinite(chunk.timeSeconds) ? chunk.timeSeconds : 0),
+      wavBase64: chunk.wavBase64
+    });
+    void this.processAudioQueue(session);
+  }
+
+  private async processAudioQueue(session: LiveSession): Promise<void> {
+    if (session.audioTranscriptionInFlight) return;
+    const config = this.getConfig();
+    if (config.provider !== "ollama" || config.audioEnabled === false) return;
+    session.audioTranscriptionInFlight = true;
+    try {
+      while (session.audioQueue.length > 0) {
+        const chunk = session.audioQueue.shift();
+        if (!chunk) continue;
+        try {
+          const text = await transcribeWavBase64(
+            chunk.wavBase64,
+            config.baseUrl || "http://127.0.0.1:11434",
+            safeText(config.audioModel, 120) || "frozenlab/qwen3-asr:0.6b"
+          );
+          session.article.audioSegmentCount = (session.article.audioSegmentCount ?? 0) + 1;
+          session.article.audioAnalyzed = true;
+          session.article.audioAnalyzedAt = new Date().toISOString();
+          if (text) {
+            const segment: AudioTranscriptSegment = {
+              startSeconds: chunk.timeSeconds,
+              endSeconds: chunk.timeSeconds + 45,
+              text
+            };
+            session.pendingAudioSegments.push(segment);
+            if (session.pendingAudioSegments.length > 80) session.pendingAudioSegments.shift();
+            const savedSegments = [...(session.article.audioTranscriptSegments ?? []), segment].slice(-160);
+            session.article.audioTranscriptSegments = savedSegments;
+            session.article.audioTranscript = formatAudioTranscript(savedSegments);
+            session.article.audioError = "";
+            this.persist(session);
+            const intervalMs = Math.max(30, Math.min(600, config.intervalSeconds)) * 1000;
+            if (Date.now() - session.lastAnalysisAt >= intervalMs && !session.analysisInFlight) {
+              void this.analyze(session, false, session.forceAi === true);
+            }
+          } else {
+            this.persist(session);
+          }
+        } catch (error) {
+          session.article.audioError = error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500);
+          session.audioQueue = [];
+          this.persist(session);
+          break;
+        }
+      }
+    } finally {
+      session.audioTranscriptionInFlight = false;
+    }
+  }
+
   isArticleActive(slugInput: unknown, idInput: unknown): boolean {
     if (typeof slugInput !== "string" || typeof idInput !== "string") return false;
     const session = this.sessions.get(slugInput.toLowerCase());
