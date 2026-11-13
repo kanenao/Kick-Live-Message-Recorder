@@ -652,6 +652,7 @@ function startArticleFrameCapture(slugInput: string): void {
   try {
     const stop = startLiveVideoFrameCapture(slug, frame => {
       frames.push(frame);
+      if (frames.length > 8) frames.shift();
       liveArticleManager.updateVideoFrames(slug, [...frames]);
     }, status => {
       mainWindow?.webContents.send("articles:live-capture-status", { slug, ...status });
