@@ -87,9 +87,11 @@ export function startLiveVideoFrameCapture(
     throw new Error("LIVE映像を解析するKickチャンネル名が不正です。");
   }
   const slug = slugInput.toLowerCase();
-  const captureOffsetSeconds = Number.isFinite(initialOffsetSeconds)
+  const captureRequestedAt = Date.now();
+  const requestedOffsetSeconds = Number.isFinite(initialOffsetSeconds)
     ? Math.max(0, Math.min(7 * 24 * 60 * 60, initialOffsetSeconds))
     : 0;
+  let captureOffsetSeconds = requestedOffsetSeconds;
   let cancelled = false;
   let finished = false;
   let resolverChild: ChildProcess | null = null;
@@ -128,6 +130,8 @@ export function startLiveVideoFrameCapture(
       const streamUrl = await resolveLiveStreamUrl(slug, () => cancelled, child => { resolverChild = child; });
       resolverChild = null;
       if (cancelled) return;
+      // URL解決にかかった時間も加え、手動開始した途中参加LIVEでも配信全体の時刻に合わせる。
+      captureOffsetSeconds = requestedOffsetSeconds + (Date.now() - captureRequestedAt) / 1000;
       const ffmpeg = findTool(process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
 
       // 音声は45秒ごとの16kHzモノラルWAVに分割。録画ファイルは作らず、
