@@ -237,6 +237,14 @@ const api = {
     ipcRenderer.on("articles:updated", listener);
     return () => ipcRenderer.removeListener("articles:updated", listener);
   },
+  startManualLiveArticle: (channel: string): Promise<{ ok: true; slug: string; article: StreamArticle; chatStatus: ChatReceiverStatus }> =>
+    ipcRenderer.invoke("articles:live:start", channel),
+  stopManualLiveArticle: (): Promise<{ ok: true; slug: string }> => ipcRenderer.invoke("articles:live:stop"),
+  onLiveArticleCaptureStatus: (callback: (status: { slug: string; status: "starting" | "capturing" | "completed" | "stopped" | "error"; frameCount: number; message: string }) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: { slug: string; status: "starting" | "capturing" | "completed" | "stopped" | "error"; frameCount: number; message: string }): void => callback(status);
+    ipcRenderer.on("articles:live-capture-status", listener);
+    return () => ipcRenderer.removeListener("articles:live-capture-status", listener);
+  },
   listStreamArticles: (slug?: string): Promise<StreamArticle[]> => ipcRenderer.invoke("articles:list", slug),
   deleteStreamArticle: (slug: string, id: string): Promise<{ ok: true; id: string }> => ipcRenderer.invoke("articles:delete", slug, id),
   generateStreamArticle: (input: { videoPath: string; slug: string; displayName?: string; category?: string; headline?: string; chatPaths?: string[] }): Promise<StreamArticle> =>
