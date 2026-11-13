@@ -52,6 +52,8 @@ type AppSettings = {
   notifyOnLive: boolean;
   showRecordingPreview: boolean;
   aiArticleEnabled: boolean;
+  aiArticleProvider: "ollama" | "openai";
+  aiArticleOllamaUrl: string;
   aiArticleModel: string;
   aiArticleIntervalSeconds: number;
 };
@@ -81,7 +83,9 @@ const DEFAULT_STATE: AppState = {
     notifyOnLive: true,
     showRecordingPreview: true,
     aiArticleEnabled: false,
-    aiArticleModel: "gpt-6-luna",
+    aiArticleProvider: "ollama",
+    aiArticleOllamaUrl: "http://127.0.0.1:11434",
+    aiArticleModel: "qwen2.5:3b",
     aiArticleIntervalSeconds: 120
   }
 };
@@ -594,7 +598,7 @@ const liveArticleManager = new LiveStreamArticleManager(
   getRecordingOutputDirectory,
   () => {
     const settings = readState().settings;
-    return { enabled: settings.aiArticleEnabled, model: settings.aiArticleModel, intervalSeconds: settings.aiArticleIntervalSeconds };
+    return { enabled: settings.aiArticleEnabled, provider: settings.aiArticleProvider, baseUrl: settings.aiArticleOllamaUrl, model: settings.aiArticleModel, intervalSeconds: settings.aiArticleIntervalSeconds };
   },
   readOpenAiApiKey,
   article => mainWindow?.webContents.send("articles:updated", article)
@@ -692,8 +696,10 @@ function normalizeState(input: unknown): AppState {
       notifyOnLive: settings.notifyOnLive !== false,
       showRecordingPreview: settings.showRecordingPreview !== false,
       aiArticleEnabled: settings.aiArticleEnabled === true,
-      aiArticleModel: typeof settings.aiArticleModel === "string" && /^[a-zA-Z0-9._-]{1,100}$/.test(settings.aiArticleModel)
-        ? settings.aiArticleModel : "gpt-6-luna",
+      aiArticleProvider: settings.aiArticleProvider === "openai" ? "openai" : "ollama",
+      aiArticleOllamaUrl: typeof settings.aiArticleOllamaUrl === "string" && /^https?:\/\//i.test(settings.aiArticleOllamaUrl) ? settings.aiArticleOllamaUrl.slice(0, 300) : "http://127.0.0.1:11434",
+      aiArticleModel: typeof settings.aiArticleModel === "string" && /^[a-zA-Z0-9._:-]{1,100}$/.test(settings.aiArticleModel)
+        ? settings.aiArticleModel : (settings.aiArticleProvider === "openai" ? "gpt-6-luna" : "qwen2.5:3b"),
       aiArticleIntervalSeconds: typeof settings.aiArticleIntervalSeconds === "number" && Number.isFinite(settings.aiArticleIntervalSeconds)
         ? Math.max(30, Math.min(600, Math.round(settings.aiArticleIntervalSeconds))) : 120
     }
@@ -1248,7 +1254,7 @@ function registerIpcHandlers(): void {
     assertTrustedSender(event);
     const article = generateStreamArticle(input, getRecordingOutputDirectory());
     const settings = readState().settings;
-    if (settings.aiArticleEnabled && readOpenAiApiKey()) {
+    if (settings.aiArticleEnabled && (settings.aiArticleProvider === "ollama" || readOpenAiApiKey())) {
       return liveArticleManager.enhanceArchivedArticle(article);
     }
     return article;
