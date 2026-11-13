@@ -126,15 +126,15 @@ type CommentVideoPreviewData = {
   totalComments: number;
   malformedLines: number;
   outsideVideoCount: number;
-  comments: Array<{ seconds: number; content: string; username: string; color: string }>;
+  comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.1.0-beta.47";
-const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean }> = [
+const APP_VERSION = "0.1.0-beta.48";
+const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
-  { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7 },
-  { text: "まってた", color: "#ffffff", lane: 2, delay: 1.3 },
-  { text: "888888888", color: "#ffffff", lane: 3, delay: 0.25 },
+  { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
+  { text: "まってた", color: "#ffffff", lane: 2, delay: 1.3, position: "bottom" },
+  { text: "888888888", color: "#ffffff", lane: 3, delay: 0.25, position: "top" },
   { text: "すき！", color: "#ffffff", lane: 4, delay: 1.7 },
   { text: "うぽつ", color: "#ffffff", lane: 5, delay: 0.85 },
   { text: "これはすごい", color: "#ffffff", lane: 6, delay: 1.9 },
@@ -157,6 +157,16 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.1.0-beta.48",
+    title: "コメントごとのue・naka・shita指定に対応",
+    changes: [
+      "mail・commandsなどの位置コマンド情報と、本文先頭の@ue／/shita／[naka]指定を読み取り",
+      "1本の動画内で上部固定・中央スクロール・下部固定をコメントごとに混在可能に",
+      "上部固定と下部固定の重なり管理を分離し、最大表示行数の初期値を14行へ拡大",
+      "実ログプレビューでコメント別の表示位置を確認可能に"
+    ]
+  },
   {
     version: "0.1.0-beta.47",
     title: "ニコ生風コメント表示を改善",
@@ -542,12 +552,12 @@ export default function App() {
   const [selectedCommentLogPaths, setSelectedCommentLogPaths] = useState<string[]>([]);
   const [isLoadingCommentLogs, setIsLoadingCommentLogs] = useState(false);
   const [commentVideoDelay, setCommentVideoDelay] = useState(0);
-  const [commentVideoPosition, setCommentVideoPosition] = useState<"scroll" | "top" | "bottom">("scroll");
+  const [commentVideoPosition, setCommentVideoPosition] = useState<"scroll" | "top" | "bottom" | "command">("scroll");
   const [commentVideoFontFamily, setCommentVideoFontFamily] = useState<"ms-pgothic" | "meiryo" | "yu-gothic" | "arial">("ms-pgothic");
   const [commentVideoFontSize, setCommentVideoFontSize] = useState(48);
   const [commentVideoDuration, setCommentVideoDuration] = useState(6);
   const [commentVideoSpeed, setCommentVideoSpeed] = useState(100);
-  const [commentVideoRows, setCommentVideoRows] = useState(12);
+  const [commentVideoRows, setCommentVideoRows] = useState(14);
   const [commentVideoGap, setCommentVideoGap] = useState(24);
   const [commentVideoOpacity, setCommentVideoOpacity] = useState(100);
   const [commentVideoQuality, setCommentVideoQuality] = useState<"high" | "standard" | "compact">("standard");
@@ -1718,12 +1728,12 @@ export default function App() {
               <div className="settings-subheading"><h3>コメント表示設定</h3><span className="api-state connected">ASS字幕合成</span></div>
               <div className="comment-video-settings-grid">
                 <label className="comment-video-field"><span>同期ずれ（秒）</span><input type="number" min="-300" max="300" step="0.1" value={commentVideoDelay} onChange={event => setCommentVideoDelay(Number(event.target.value))} disabled={commentVideoBusy} /><small>＋はコメントを遅らせ、－は早めます。</small></label>
-                <label className="comment-video-field"><span>コメントの表示位置</span><select value={commentVideoPosition} onChange={event => setCommentVideoPosition(event.target.value as "scroll" | "top" | "bottom")} disabled={commentVideoBusy}><option value="scroll">中央スクロール（naka風・標準）</option><option value="top">上部固定（ue風）</option><option value="bottom">下部固定（shita風）</option></select><small>Saccubusの上・中央・下の配置を参考にしました。Kickログには位置コマンドがないため、選択した方式を全コメントに適用します。</small></label>
+                <label className="comment-video-field"><span>コメントの表示位置</span><select value={commentVideoPosition} onChange={event => setCommentVideoPosition(event.target.value as "scroll" | "top" | "bottom" | "command")} disabled={commentVideoBusy}><option value="scroll">すべて中央スクロール（naka）</option><option value="top">すべて上部固定（ue）</option><option value="bottom">すべて下部固定（shita）</option><option value="command">コメントごとの指定を優先（ue・naka・shita）</option></select><small>「コメントごとの指定」ではログのmail／commands／positionを読み取ります。本文先頭に @ue・/naka・[shita] を付けた場合も位置指定として扱い、表示時に指定文字を除去します。指定がないコメントは中央スクロールです。</small></label>
                 <label className="comment-video-field"><span>フォント</span><select value={commentVideoFontFamily} onChange={event => setCommentVideoFontFamily(event.target.value as "ms-pgothic" | "meiryo" | "yu-gothic" | "arial")} disabled={commentVideoBusy}><option value="ms-pgothic">ＭＳ Ｐゴシック</option><option value="meiryo">メイリオ</option><option value="yu-gothic">游ゴシック</option><option value="arial">Arial</option></select><small>Windowsにインストールされているフォントを使用します。</small></label>
                 <label className="comment-video-field"><span>文字サイズ</span><input type="number" min="16" max="80" value={commentVideoFontSize} onChange={event => setCommentVideoFontSize(Number(event.target.value))} disabled={commentVideoBusy} /><small>動画の解像度に合わせて調整します。</small></label>
                 <label className="comment-video-field"><span>画面幅の横断時間（秒）</span><input type="number" min="2" max="15" value={commentVideoDuration} onChange={event => setCommentVideoDuration(Number(event.target.value))} disabled={commentVideoBusy} /><small>画面幅を横切る基準時間です。長いコメントは文字幅に応じて表示時間が長くなります。</small></label>
                 <label className="comment-video-field"><span>流れる速度（%）</span><input type="number" min="50" max="200" step="5" value={commentVideoSpeed} onChange={event => setCommentVideoSpeed(Number(event.target.value))} disabled={commentVideoBusy} /><small>100%が標準。小さくするとゆっくり、大きくすると速く流れます。</small></label>
-                <label className="comment-video-field"><span>最大表示行数</span><input type="number" min="1" max="20" value={commentVideoRows} onChange={event => setCommentVideoRows(Number(event.target.value))} disabled={commentVideoBusy} /><small>参考動画に合わせた初期値は12行。動画の高さに合わせて実際の表示可能行数は自動調整します。</small></label>
+                <label className="comment-video-field"><span>最大表示行数</span><input type="number" min="1" max="20" value={commentVideoRows} onChange={event => setCommentVideoRows(Number(event.target.value))} disabled={commentVideoBusy} /><small>初期値14行。動画の高さと文字サイズに合わせて実際の表示可能行数は自動調整します。</small></label>
                 <label className="comment-video-field"><span>コメント同士の最小間隔（px）</span><input type="number" min="0" max="200" step="4" value={commentVideoGap} onChange={event => setCommentVideoGap(Number(event.target.value))} disabled={commentVideoBusy} /><small>初期値24px。文字幅と移動速度から同じ行で重ならない間隔を確保します。</small></label>
                 <label className="comment-video-field"><span>文字の不透明度（%）</span><input type="number" min="20" max="100" value={commentVideoOpacity} onChange={event => setCommentVideoOpacity(Number(event.target.value))} disabled={commentVideoBusy} /><small>100で不透明、低いほど透過します。</small></label>
                 <label className="comment-video-field"><span>出力画質</span><select value={commentVideoQuality} onChange={event => setCommentVideoQuality(event.target.value as "high" | "standard" | "compact")} disabled={commentVideoBusy}><option value="high">高画質・大きめ</option><option value="standard">標準（おすすめ）</option><option value="compact">容量優先</option></select><small>利用可能なH.264エンコーダーを優先し、ない場合は互換形式へ切り替えます。</small></label>
@@ -1761,7 +1771,7 @@ export default function App() {
               <div className="comment-video-preview-values">
                 <span>{commentVideoFontFamily === "ms-pgothic" ? "ＭＳ Ｐゴシック" : commentVideoFontFamily === "yu-gothic" ? "游ゴシック" : commentVideoFontFamily === "arial" ? "Arial" : "メイリオ"}</span>
                 <span>{Math.max(16, Math.min(80, commentVideoFontSize))}px</span>
-                <span>{commentVideoPosition === "top" ? "上部固定" : commentVideoPosition === "bottom" ? "下部固定" : "中央スクロール"}</span>
+                <span>{commentVideoPosition === "top" ? "全コメント上部固定" : commentVideoPosition === "bottom" ? "全コメント下部固定" : commentVideoPosition === "command" ? "コメント別位置指定" : "全コメント中央スクロール"}</span>
                 <span>速度 {Math.max(50, Math.min(200, commentVideoSpeed))}%</span>
                 <span>間隔 {Math.max(0, Math.min(200, commentVideoGap))}px</span>
                 <span>表示 {Math.max(1, Math.min(20, commentVideoRows, Math.floor((1080 - 26 - Math.max(16, Math.min(80, commentVideoFontSize))) / Math.max(1, Math.max(commentVideoFontSize + 12, commentVideoFontSize * 1.55))) + 1))}行 / 上限 {Math.max(1, Math.min(20, commentVideoRows))}行</span>
@@ -1774,14 +1784,18 @@ export default function App() {
                       const visibleRows = Math.max(1, Math.floor((1080 - 26 - fontSize) / lineHeight) + 1);
                       const gap = Math.max(0, Math.min(200, commentVideoGap));
                       const fixedRows = Math.max(1, Math.min(20, commentVideoRows, Math.floor((1080 * 0.28 + gap) / Math.max(1, lineHeight + gap))));
-                      const laneCount = commentVideoPosition === "scroll"
+                      const position = commentVideoPosition === "command"
+                        ? comment.position ?? "scroll"
+                        : commentVideoPosition;
+                      const laneCount = position === "scroll"
                         ? Math.max(1, Math.min(20, commentVideoRows, visibleRows))
                         : fixedRows;
                       return {
                         text: commentVideoShowUsername && comment.username ? comment.username + " : " + comment.content : comment.content,
                         color: "#ffffff",
+                        position,
                         lane: index % laneCount,
-                        delay: commentVideoPosition === "scroll" ? Math.floor(index / laneCount) * 0.9 + (index % 4) * 0.16 : 0,
+                        delay: position === "scroll" ? Math.floor(index / laneCount) * 0.9 + (index % 4) * 0.16 : 0,
                         repeatLane: index >= laneCount
                       };
                     })
@@ -1795,7 +1809,8 @@ export default function App() {
                     const allowedRows = commentVideoPosition === "scroll"
                       ? Math.max(1, Math.min(20, commentVideoRows, visibleRows))
                       : fixedRows;
-                    return commentVideoPosition === "scroll" ? item.lane < allowedRows : index < allowedRows;
+                    const position = item.position ?? (commentVideoPosition === "command" ? "scroll" : commentVideoPosition);
+                    return position === "scroll" ? item.lane < allowedRows : index < allowedRows;
                   })
                   .map((item, index) => {
                   const fontSize = Math.max(16, Math.min(80, commentVideoFontSize));
@@ -1803,13 +1818,14 @@ export default function App() {
                   const previewVisibleRows = Math.max(1, Math.floor((1080 - 26 - fontSize) / lineHeight) + 1);
                   const gap = Math.max(0, Math.min(200, commentVideoGap));
                   const fixedRows = Math.max(1, Math.min(20, commentVideoRows, Math.floor((1080 * 0.28 + gap) / Math.max(1, lineHeight + gap))));
-                  const laneCount = commentVideoPosition === "scroll"
+                  const itemPosition = item.position ?? (commentVideoPosition === "command" ? "scroll" : commentVideoPosition);
+                  const laneCount = itemPosition === "scroll"
                     ? Math.max(1, Math.min(20, commentVideoRows, previewVisibleRows))
                     : fixedRows;
                   const laneProgress = item.lane / Math.max(1, laneCount - 1);
-                  const top = commentVideoPosition === "top"
+                  const top = itemPosition === "top"
                     ? 5 + laneProgress * 27
-                    : commentVideoPosition === "bottom"
+                    : itemPosition === "bottom"
                       ? 95 - laneProgress * 27
                       : 5 + laneProgress * 90;
                   const duration = Math.max(2, Math.min(15, commentVideoDuration));
@@ -1824,12 +1840,12 @@ export default function App() {
                     key={index}
                     style={{
                       top: top + "%",
-                      left: commentVideoPosition === "scroll" ? "100%" : "50%",
-                      transform: commentVideoPosition === "scroll" ? undefined : "translateX(-50%)",
-                      animationName: commentVideoPosition === "scroll" ? "comment-video-preview-scroll" : "none",
-                      maxWidth: commentVideoPosition === "scroll" ? "none" : "92%",
-                      overflow: commentVideoPosition === "scroll" ? "visible" : "hidden",
-                      textOverflow: commentVideoPosition === "scroll" ? "clip" : "ellipsis",
+                      left: itemPosition === "scroll" ? "100%" : "50%",
+                      transform: itemPosition === "scroll" ? undefined : "translateX(-50%)",
+                      animationName: itemPosition === "scroll" ? "comment-video-preview-scroll" : "none",
+                      maxWidth: itemPosition === "scroll" ? "none" : "92%",
+                      overflow: itemPosition === "scroll" ? "visible" : "hidden",
+                      textOverflow: itemPosition === "scroll" ? "clip" : "ellipsis",
                       textAlign: "center",
                       color: item.color,
                       opacity: Math.max(0.2, Math.min(1, commentVideoOpacity / 100)),
@@ -1837,7 +1853,7 @@ export default function App() {
                       fontFamily: commentVideoFontFamily === "ms-pgothic" ? '"ＭＳ Ｐゴシック", sans-serif'
                         : commentVideoFontFamily === "yu-gothic" ? '"游ゴシック", sans-serif'
                         : commentVideoFontFamily === "arial" ? "Arial, sans-serif" : 'Meiryo, "メイリオ", sans-serif',
-                      animationDuration: (commentVideoPosition === "scroll" ? commentScrollSeconds : duration) + "s",
+                      animationDuration: (itemPosition === "scroll" ? commentScrollSeconds : duration) + "s",
                       animationDelay: (item.delay + (item.repeatLane ? gapDelay : 0)).toFixed(3) + "s"
                     }}
                   >{commentVideoPreviewResult?.comments.length ? item.text : commentVideoShowUsername ? "@viewer : " + item.text : item.text}</span>;
