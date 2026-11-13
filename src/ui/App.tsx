@@ -1810,7 +1810,11 @@ export default function App() {
                     const allowedRows = position === "scroll"
                       ? Math.max(1, Math.min(20, commentVideoRows, visibleRows))
                       : fixedRows;
-                    return position === "scroll" ? item.lane < allowedRows : index < allowedRows;
+                    const positionIndex = items.slice(0, index).filter(previous => {
+                      const previousPosition = previous.position ?? (commentVideoPosition === "command" ? "scroll" : commentVideoPosition);
+                      return previousPosition === position;
+                    }).length;
+                    return position === "scroll" ? item.lane < allowedRows : positionIndex < allowedRows;
                   })
                   .map((item, index) => {
                   const fontSize = Math.max(16, Math.min(80, commentVideoFontSize));
@@ -1826,7 +1830,7 @@ export default function App() {
                   const top = itemPosition === "top"
                     ? 5 + laneProgress * 27
                     : itemPosition === "bottom"
-                      ? 95 - laneProgress * 27
+                      ? 88 - laneProgress * 23
                       : 5 + laneProgress * 90;
                   const duration = Math.max(2, Math.min(15, commentVideoDuration));
                   const speed = Math.max(50, Math.min(200, commentVideoSpeed));
