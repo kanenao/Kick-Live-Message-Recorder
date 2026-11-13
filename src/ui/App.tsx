@@ -128,7 +128,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string }>;
 };
 
-const APP_VERSION = "0.1.0-beta.42";
+const APP_VERSION = "0.1.0-beta.43";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ff4545", lane: 1, delay: 0.7 },
@@ -156,6 +156,15 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffe64a", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.1.0-beta.43",
+    title: "無料ローカルAI（Ollama）で配信記事を生成",
+    changes: [
+      "AIエンジンにOllamaを追加。OpenAI APIキーや従量課金なしで、PC内のモデルを使ってLIVE記事・録画済み配信記事を生成",
+      "Ollamaの接続URL・モデル名・接続テストを追加。従来のOpenAI APIも選択式で継続利用可能",
+      "コメント本文はローカルOllamaへ送信し、外部AIサービスへ送らないプライバシー説明とセットアップ案内を追加"
+    ]
+  },
   {
     version: "0.1.0-beta.42",
     title: "長文コメントの表示幅計算を改善",
