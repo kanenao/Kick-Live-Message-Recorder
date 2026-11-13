@@ -637,7 +637,7 @@ export class LiveStreamArticleManager {
     const controller = new AbortController();
     const activePull = { model, controller };
     this.activeModelPull = activePull;
-    const baseUrl = (config.baseUrl || "http://127.0.0.1:11434").replace(/\\/+$/, "");
+    const baseUrl = (config.baseUrl || "http://127.0.0.1:11434").replace(/\/+$/, "");
     let lastPercent = 0;
     let receivedSuccess = false;
     const publish = (status: string, completed?: number, total?: number, done = false, error?: string): void => {
@@ -753,7 +753,7 @@ export class LiveStreamArticleManager {
       const payload = await response.json() as { models?: Array<{ name?: string }> };
       const models = Array.isArray(payload.models) ? payload.models.map(item => item.name || "").filter(Boolean) : [];
       if (!models.includes(model) && !models.some(name => name.split(":")[0] === model.split(":")[0])) {
-        throw new Error(`記事生成モデル「${model}」が見つかりません。PowerShellで ollama pull ${model} を実行してください。`);
+        throw new Error(`記事生成モデル「${model}」が見つかりません。設定画面の「モデルをインストール」から取得してください。`);
       }
       const audioModel = safeText(config.audioModel, 120) || "frozenlab/qwen3-asr:0.6b";
       const audioModelMissing = config.audioEnabled !== false &&
@@ -764,7 +764,7 @@ export class LiveStreamArticleManager {
         message: config.audioEnabled === false
           ? `Ollamaに接続できました（記事生成モデル：${model}）。音声認識はOFFです。`
           : audioModelMissing
-            ? `記事生成モデル「${model}」は利用可能です。音声認識モデル「${audioModel}」は未導入です。音声を使う場合は PowerShell で ollama pull ${audioModel} を実行してください。モデル未導入でも映像・コメントの記事生成は利用できます。`
+            ? `記事生成モデル「${model}」は利用可能です。音声認識モデル「${audioModel}」は未導入です。音声を使う場合は設定画面の「音声認識モデルをインストール」から取得してください。モデル未導入でも映像・コメントの記事生成は利用できます。`
             : `Ollamaに接続できました（記事生成：${model}／音声認識：${audioModel}）。`
       };
     }
