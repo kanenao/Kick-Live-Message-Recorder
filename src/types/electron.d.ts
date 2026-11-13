@@ -200,6 +200,7 @@ declare global {
       testAiArticleConnection: (model: string) => Promise<{ ok: true; message: string }>;
       onStreamArticleUpdate: (callback: (article: KickRecorderStreamArticle) => void) => () => void;
       listStreamArticles: (slug?: string) => Promise<KickRecorderStreamArticle[]>;
+      deleteStreamArticle: (slug: string, id: string) => Promise<{ ok: true; id: string }>;
       generateStreamArticle: (input: { videoPath: string; slug: string; displayName?: string; category?: string; headline?: string; chatPaths?: string[] }) => Promise<KickRecorderStreamArticle>;
       listCommentLogFiles: () => Promise<KickRecorderCommentLogFile[]>;
       previewCommentVideo: (input: { videoPath: string; chatPaths: string[]; delaySeconds?: number }) => Promise<KickRecorderCommentVideoPreview>;
