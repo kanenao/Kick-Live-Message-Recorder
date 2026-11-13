@@ -1077,7 +1077,14 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("app:save-state", (event, state: unknown) => {
     assertTrustedSender(event);
-    return writeState(state);
+    const result = writeState(state);
+    if (readState().settings.autoGenerateArticles &&
+        (recordingManager.hasActiveRecordings() || chatReceiver.getStatus().serverRunning)) {
+      startLiveArticleTimer();
+    } else if (!readState().settings.autoGenerateArticles) {
+      stopLiveArticleTimer();
+    }
+    return result;
   });
 
   ipcMain.handle("app:select-output-directory", async event => {
@@ -1213,7 +1220,7 @@ function registerIpcHandlers(): void {
     assertTrustedSender(event);
     await chatReceiver.startServer(getRecordingOutputDirectory());
     const status = await chatReceiver.startTunnel(app.getPath("userData"));
-    startLiveArticleTimer();
+    if (readState().settings.autoGenerateArticles) startLiveArticleTimer();
     return status;
   });
 
