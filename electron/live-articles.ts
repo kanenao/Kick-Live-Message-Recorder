@@ -5,6 +5,7 @@ import { extractVideoFrames, getVideoDurationSeconds, type VideoFrameSample } fr
 import { formatAudioTranscript, transcribeVideoAudio, transcribeWavBase64, type AudioTranscriptSegment } from "./audio-transcription";
 import type { LiveAudioChunk } from "./live-video-frames";
 import type { KickChatMessage } from "./chat";
+import { describeEmptyAiResponse, extractAiResponseText, normalizeAiJsonText } from "./ai-response";
 
 export type LiveArticle = {
   id: string;
@@ -165,28 +166,11 @@ function isCommentWithinArticleWindow(
     createdMs <= startedMs + (durationSeconds + paddingSeconds) * 1000;
 }
 
-function extractResponseText(payload: Record<string, unknown>): string {
-  if (typeof payload.output_text === "string") return payload.output_text;
-  if (!Array.isArray(payload.output)) return "";
-  const chunks: string[] = [];
-  for (const item of payload.output) {
-    if (!item || typeof item !== "object") continue;
-    const content = (item as { content?: unknown }).content;
-    if (!Array.isArray(content)) continue;
-    for (const part of content) {
-      if (!part || typeof part !== "object") continue;
-      const value = part as { type?: unknown; text?: unknown };
-      if ((value.type === "output_text" || value.type === "text") && typeof value.text === "string") chunks.push(value.text);
-    }
-  }
-  return chunks.join("\n").trim();
-}
-
 function parseAnalysis(payload: Record<string, unknown>): AnalysisResult {
-  const raw = extractResponseText(payload);
-  if (!raw) throw new Error("AIから記事本文が返されませんでした。");
+  const raw = extractAiResponseText(payload);
+  if (!raw) throw new Error(describeEmptyAiResponse(payload));
   let parsed: unknown;
-  try { parsed = JSON.parse(raw); } catch { throw new Error("AI記事の形式を読み取れませんでした。"); }
+  try { parsed = JSON.parse(normalizeAiJsonText(raw)); } catch { throw new Error("AI記事の形式を読み取れませんでした。回答は受信しましたが、JSONとして解析できませんでした。"); }
   if (!parsed || typeof parsed !== "object") throw new Error("AI記事の内容が不正です。");
   const value = parsed as Record<string, unknown>;
   const strings = (input: unknown, maxItems: number, maxLength: number): string[] =>
@@ -900,9 +884,8 @@ export class LiveStreamArticleManager {
           }
           throw new Error(`Ollama APIエラー（HTTP ${response.status}）：${detail.slice(0, 300)}`);
         }
-        const payload = await response.json() as { message?: { content?: unknown } };
-        if (typeof payload.message?.content !== "string") throw new Error("Ollamaから記事本文が返されませんでした。");
-        result = parseAnalysis({ output_text: payload.message.content });
+        const payload = await response.json() as Record<string, unknown>;
+        result = parseAnalysis(payload);
       } else {
         const response = await fetch("https://api.openai.com/v1/responses", {
         method: "POST",
