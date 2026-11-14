@@ -1936,7 +1936,7 @@ export default function App() {
         </div>
 
         <div className="recording-library-stats">
-          <div className="recording-library-stat"><span>配信者</span><strong>{recordingLibraryChannels.length.toLocaleString("ja-JP")}</strong></div>
+          <div className="recording-library-stat"><span>登録ファイル</span><strong>{(recordingFiles.length + commentLogFiles.length).toLocaleString("ja-JP")}</strong></div>
           <div className="recording-library-stat"><span>録画動画</span><strong>{recordingFiles.length.toLocaleString("ja-JP")}</strong></div>
           <div className="recording-library-stat"><span>コメントログ</span><strong>{commentLogFiles.length.toLocaleString("ja-JP")}</strong></div>
         </div>
@@ -1972,7 +1972,7 @@ export default function App() {
                         <div className="recording-channel-info">
                           <strong>{group.displayName}</strong>
                           <small>@{group.slug}</small>
-                          <small>動画 {group.videos.length}件 ・ コメント {group.logs.length}件{group.latestAt ? " ・ " + new Date(group.latestAt).toLocaleString("ja-JP") : ""}</small>
+                          <small>録画動画 {group.videos.length}件 ・ コメントログ {group.logs.length}件{group.latestAt ? " ・ " + new Date(group.latestAt).toLocaleString("ja-JP") : ""}</small>
                         </div>
                         <div className="recording-channel-actions">
                           <button className="primary-small" onClick={() => setExpandedLibraryVideosChannel(current => current === group.slug ? null : group.slug)} disabled={group.videos.length === 0}>
