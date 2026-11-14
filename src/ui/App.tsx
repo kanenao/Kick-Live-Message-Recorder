@@ -155,7 +155,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.1.0-beta.52";
+const APP_VERSION = "0.1.0-alpha.52";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -184,7 +184,7 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
 ];
 const VERSION_HISTORY = [
   {
-    version: "0.1.0-beta.52",
+    version: "0.1.0-alpha.52",
     title: "配信AI新聞に放送画面を掲載",
     changes: [
       "LIVE配信の代表フレームを約25秒ごとに保存し、新聞記事カードの放送画面を自動更新",
@@ -194,7 +194,7 @@ const VERSION_HISTORY = [
     ]
   },
   {
-    version: "0.1.0-beta.51",
+    version: "0.1.0-alpha.51",
     title: "LIVE AI映像解析とコメント同期を改善",
     changes: [
       "AI記事の解析中に新しい映像フレームが届いても、未解析フレームを解析済みとして数えないよう修正",
@@ -1746,13 +1746,13 @@ export default function App() {
       <div className="nav-label">アプリ</div>
       <button className={tab === "updates" ? "nav-item selected" : "nav-item"} onClick={() => setTab("updates")}>↻ <span>バージョン更新</span></button>
       <button className={tab === "settings" ? "nav-item selected" : "nav-item"} onClick={() => setTab("settings")}>⚙ <span>設定</span></button>
-      <div className="sidebar-bottom"><span className="status-dot" /> β版・開発テスト中<small>現在のバージョン {appVersion}</small></div>
+      <div className="sidebar-bottom"><span className="status-dot" /> α版・開発テスト中<small>現在のバージョン {appVersion}</small></div>
     </aside>
 
     <main className="main">
       <header className="topbar">
         <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "recording" ? "録画専用" : tab === "library" ? "録画ライブラリ" : tab === "comment-video" ? "コメント付き動画を生成" : tab === "articles" ? "配信記事" : tab === "updates" ? "バージョン更新" : "設定"}</h1></div>
-        <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="beta-tag">β版</span><div className="avatar">KR</div></div>
+        <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="alpha-tag">α版</span><div className="avatar">KR</div></div>
       </header>
 
       {storageError && <div className="storage-error" role="alert">{storageError}</div>}
@@ -2427,7 +2427,7 @@ export default function App() {
 
       {tab === "updates" && <section className="panel version-update-panel">
         <div className="panel-heading">
-          <div><h2>バージョン更新</h2><p>新しいβ版の確認・ダウンロード・更新履歴をここで管理できます</p></div>
+          <div><h2>バージョン更新</h2><p>新しいα版の確認・ダウンロード・更新履歴をここで管理できます</p></div>
           <a className="text-button" href="https://github.com/kanenao/Kick-Live-Message-Recorder/releases" target="_blank" rel="noreferrer">GitHub Releases ↗</a>
         </div>
         <div className="version-update-grid">
@@ -2435,7 +2435,7 @@ export default function App() {
             <span className="version-card-label">現在インストール中</span>
             <strong>v{appVersion}</strong>
             <small>Kick Live Message Recorder</small>
-            <div className="version-card-foot">Windows 64bit・β版</div>
+            <div className="version-card-foot">Windows 64bit・α版</div>
           </div>
           <div className="version-check-card">
             <div className="version-check-heading">
@@ -2462,7 +2462,7 @@ export default function App() {
           <div className="settings-subheading"><h3>バージョン更新履歴</h3><span className="api-state connected">{VERSION_HISTORY.length}件</span></div>
           <div className="version-history-list">
             {VERSION_HISTORY.map((release, index) => <article className="version-history-item" key={release.version}>
-              <div className="version-history-marker">{index === 0 ? "NEW" : "β"}</div>
+              <div className="version-history-marker">{index === 0 ? "NEW" : release.version.includes("-alpha.") ? "α" : "β"}</div>
               <div className="version-history-content">
                 <div className="version-history-heading"><strong>v{release.version}</strong><span>{release.title}</span></div>
                 <ul>{release.changes.map(change => <li key={change}>{change}</li>)}</ul>
@@ -2474,7 +2474,7 @@ export default function App() {
       </section>}
 
       {tab === "settings" && <section className="panel">
-        <div className="panel-heading"><div><h2>基本設定</h2><p>β版の録画動作・保存先の設定</p></div></div>
+        <div className="panel-heading"><div><h2>基本設定</h2><p>α版の録画動作・保存先の設定</p></div></div>
         <div className="setting-row">
           <div><strong>配信開始時に自動録画</strong><small>自動モードの登録チャンネルが配信を開始すると録画します</small></div>
           <label className="setting-control"><input type="checkbox" checked={settings.autoRecordOnStreamStart} onChange={e => setSettings(prev => ({ ...prev, autoRecordOnStreamStart: e.target.checked }))} /><span>{settings.autoRecordOnStreamStart ? "有効" : "無効"}</span></label>
@@ -2649,7 +2649,7 @@ export default function App() {
         {!isDesktop && <div className="notice">保存先フォルダーの選択はWindowsデスクトップ版で利用できます。ブラウザープレビューでは設定をブラウザー内に保存します。</div>}
       </section>}
 
-      <footer>Kick Live Message Recorder <span>•</span> β版 {appVersion} <span>•</span> 日本語版</footer>
+      <footer>Kick Live Message Recorder <span>•</span> α版 {appVersion} <span>•</span> 日本語版</footer>
     </main>
   </div>;
 }
