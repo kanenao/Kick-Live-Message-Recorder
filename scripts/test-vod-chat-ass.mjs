@@ -11,8 +11,8 @@ assert.equal(formatVodAssTimestamp(65.239), "0:01:05.23");
 assert.equal(formatVodAssTimestamp(3661.999), "1:01:01.99");
 
 const escaped = escapeVodAssText("こんにちは, {\\pos(1,2)}\n[emote:123:Nice]");
-assert.ok(escaped.includes("\\\\{"));
-assert.ok(escaped.includes("\\\\}"));
+assert.ok(escaped.includes("\\{"));
+assert.ok(escaped.includes("\\}"));
 assert.ok(escaped.includes("Nice"));
 assert.ok(!escaped.includes("\n"));
 
@@ -27,7 +27,7 @@ const composer = new VodChatAssComposer(3600);
 const first = composer.createDialogue({ content: "テストコメント", timeInSeconds: 12.345 });
 assert.ok(first);
 assert.ok(first.startsWith("Dialogue: 0,0:00:12.34,"));
-assert.ok(first.includes("\\\\move("));
+assert.ok(first.includes("\\move("));
 assert.ok(first.includes("テストコメント"));
 const second = composer.createDialogue({ content: "別のコメント", timeInSeconds: 12.345 });
 assert.ok(second);
