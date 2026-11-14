@@ -77,8 +77,10 @@ export function createVodChatAssHeader(channelSlug: string, title: string): stri
 /** Right-to-left Nico-style comments, preserving all comments with bounded lane reuse. */
 export class VodChatAssComposer {
   private readonly lanes: Array<AssLane | null> = Array.from({ length: LANE_COUNT }, () => null);
+  private readonly durationSeconds: number;
 
-  constructor(private readonly durationSeconds: number) {
+  constructor(durationSeconds: number) {
+    this.durationSeconds = durationSeconds;
     if (!Number.isFinite(durationSeconds) || durationSeconds <= 0 || durationSeconds > 7 * 24 * 60 * 60) {
       throw new Error("VODの再生時間が正しくありません。");
     }
