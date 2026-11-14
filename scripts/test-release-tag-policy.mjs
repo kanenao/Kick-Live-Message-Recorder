@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-const betaVersionPattern = /^\\d+\\.\\d+\\.\\d+-beta\\.\\d+$/;
+const betaVersionPattern = /^\d+\.\d+\.\d+-beta\.\d+$/;
 const betaTagPattern = /^v.*-beta.*$/;
-const betaReleaseBranchPattern = /^release\\/.*-beta.*$/;
+const betaReleaseBranchPattern = /^release\/.*-beta.*$/;
 
 assert.match(packageJson.version, betaVersionPattern, "package.json must use a beta version while beta-only distribution is active");
 
@@ -18,7 +18,7 @@ const tagCases = [
   ["0.1.0-beta.51", false]
 ];
 for (const [tag, expected] of tagCases) {
-  assert.equal(betaTagPattern.test(tag), expected, `Unexpected beta tag classification: ${tag}`);
+  assert.equal(betaTagPattern.test(tag), expected, \`Unexpected beta tag classification: \${tag}\`);
 }
 
 const branchCases = [
@@ -29,7 +29,7 @@ const branchCases = [
   ["feature/beta51-ai-article-live", false]
 ];
 for (const [branch, expected] of branchCases) {
-  assert.equal(betaReleaseBranchPattern.test(branch), expected, `Unexpected release branch classification: ${branch}`);
+  assert.equal(betaReleaseBranchPattern.test(branch), expected, \`Unexpected release branch classification: \${branch}\`);
 }
 
 const shouldPublishRef = ref =>
@@ -45,7 +45,7 @@ const refCases = [
   ["refs/heads/feature/beta51-ai-article-live", false]
 ];
 for (const [ref, expected] of refCases) {
-  assert.equal(shouldPublishRef(ref), expected, `Unexpected publish condition: ${ref}`);
+  assert.equal(shouldPublishRef(ref), expected, \`Unexpected publish condition: \${ref}\`);
 }
 
-console.log(`β版タグ振り分けテスト成功（package.json: ${packageJson.version}）`);
+console.log(\`β版タグ振り分けテスト成功（package.json: \${packageJson.version}）\`);
