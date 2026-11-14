@@ -2,7 +2,9 @@
 
 Kick配信の録画・コメント保存を行うWindowsデスクトップアプリです。
 
-**開発版：0.1.0-beta.49**
+**β51開発の基準：0.1.0-beta.50**
+
+β版と製品版の分離方針は [docs/RELEASE_CHANNELS.md](docs/RELEASE_CHANNELS.md) を参照してください。
 
 ## 主な機能
 
