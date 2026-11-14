@@ -78,7 +78,7 @@ type StreamArticle = {
   status?: "live" | "completed"; aiGenerated?: boolean; aiSummary?: string; highlights?: string[];
   lastAiUpdateAt?: string | null; viewerCount?: number; peakViewerCount?: number; aiError?: string;
   videoAnalyzed?: boolean; videoFrameCount?: number; videoSummary?: string; videoScenes?: string[]; videoAnalyzedAt?: string | null;
-  videoPreviewAvailable?: boolean; videoPreviewTimeSeconds?: number; videoPreviewUpdatedAt?: string; videoPreviewDataUrl?: string;
+  videoPreviewAvailable?: boolean; videoPreviewTimeSeconds?: number; videoPreviewUpdatedAt?: string;
   audioAnalyzed?: boolean; audioSegmentCount?: number; audioSummary?: string; audioTranscript?: string;
   audioTranscriptSegments?: Array<{ startSeconds: number; endSeconds: number; text: string }>;
   audioAnalyzedAt?: string | null; audioError?: string;
@@ -273,6 +273,7 @@ const api = {
     return () => ipcRenderer.removeListener("articles:live-capture-status", listener);
   },
   listStreamArticles: (slug?: string): Promise<StreamArticle[]> => ipcRenderer.invoke("articles:list", slug),
+  getStreamArticlePreview: (slug: string, id: string): Promise<string | null> => ipcRenderer.invoke("articles:preview", slug, id),
   deleteStreamArticle: (slug: string, id: string): Promise<{ ok: true; id: string }> => ipcRenderer.invoke("articles:delete", slug, id),
   generateStreamArticle: (input: { videoPath: string; slug: string; displayName?: string; category?: string; headline?: string; chatPaths?: string[] }): Promise<StreamArticle> =>
     ipcRenderer.invoke("articles:generate", input),
