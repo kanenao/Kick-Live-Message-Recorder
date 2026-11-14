@@ -36,6 +36,8 @@ jobs:
         run: node --experimental-strip-types scripts/test-vod-chat-ass.mjs
       - name: AI記事応答形式テスト
         run: node --experimental-strip-types scripts/test-ai-response.mjs
+      - name: 配信AI新聞の放送画面保存テスト
+        run: node --experimental-strip-types scripts/test-article-preview.mjs
       - name: 型チェック
         run: npm run typecheck
       - name: アプリをビルド
