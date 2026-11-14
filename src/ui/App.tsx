@@ -166,6 +166,15 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
 ];
 const VERSION_HISTORY = [
   {
+    version: "0.1.0-beta.51",
+    title: "LIVE AI映像解析の更新漏れを改善",
+    changes: [
+      "AI記事の解析中に新しい映像フレームが届いても、未解析フレームを解析済みとして数えないよう修正",
+      "AI応答の完了後、解析待ちの映像フレームが残っている場合は設定した更新間隔に沿って次の解析を予約",
+      "配信終了時の最終解析と通常のLIVE更新予約が競合しないよう、終了時に予約タイマーを解除"
+    ]
+  },
+  {
     version: "0.1.0-beta.50",
     title: "無料Ollamaモデルをアプリ内から導入",
     changes: [
