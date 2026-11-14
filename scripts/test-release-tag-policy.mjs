@@ -13,7 +13,7 @@ assert.ok(!workflowText.includes('tags: ["v*"]'), "Broad version tag triggers mu
 assert.ok(workflowText.includes("name: β版専用タグの振り分けテスト"), "The beta tag policy test must run in CI");
 const publishConditionLines = workflowText.split(String.fromCharCode(10)).filter(line =>
   line.trim().startsWith("if:") &&
-  (line.includes("refs/tags/v") || line.includes("steps.release_tag"))
+  (line.includes("contains(github.ref, '-beta')") || line.includes("steps.release_tag"))
 );
 assert.equal(publishConditionLines.length, 3, "Expected job, duplicate-cleanup and publish guards");
 for (const condition of publishConditionLines) {
