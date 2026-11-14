@@ -11,7 +11,7 @@ assert.match(packageJson.version, betaVersionPattern, "package.json must use a b
 assert.ok(workflowText.includes('tags: ["v*-beta*"]'), "GitHub Actions must listen to beta-only tags");
 assert.ok(!workflowText.includes('tags: ["v*"]'), "Broad version tag triggers must not be present");
 assert.ok(workflowText.includes("name: β版専用タグの振り分けテスト"), "The beta tag policy test must run in CI");
-const publishConditionLines = workflowText.split(/\\r?\\n/).filter(line =>
+const publishConditionLines = workflowText.split(String.fromCharCode(10)).filter(line =>
   line.trim().startsWith("if:") &&
   (line.includes("refs/tags/v") || line.includes("steps.release_tag"))
 );
