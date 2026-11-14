@@ -22,6 +22,8 @@ jobs:
           node-version: 22
       - name: 依存パッケージをインストール
         run: npm install --no-audit --no-fund --no-package-lock
+      - name: β版専用タグの振り分けテスト
+        run: node scripts/test-release-tag-policy.mjs
       - name: 型チェック
         run: npm run typecheck
       - name: アプリをビルド
@@ -133,7 +135,7 @@ jobs:
           retention-days: 14
 
   publish-release:
-    name: GitHub Releasesへ自動更新版を公開
+    name: β版GitHub Releasesへ自動更新版を公開
     runs-on: windows-latest
     concurrency:
       group: kick-recorder-release-${{ github.ref }}
