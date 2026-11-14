@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 const changelog = readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8");
+const appSource = readFileSync(new URL("../src/ui/App.tsx", import.meta.url), "utf8");
 
 const match = packageJson.version.match(/^(\d+\.\d+\.\d+)-alpha\.(\d+)$/);
 assert.ok(match, "package.json must use the alpha version format while alpha development is active");
@@ -12,6 +13,8 @@ const currentVersion = packageJson.version;
 const latestPublicVersion = "0.1.0-beta.50";
 
 assert.ok(readme.includes("開発中：" + currentVersion), "README must show the current alpha development version");
+assert.ok(appSource.includes('const APP_VERSION = "' + currentVersion + '";'), "The app UI version must match package.json");
+assert.ok(appSource.includes('version: "' + currentVersion + '"'), "The in-app version history must include the current alpha version");
 assert.ok(readme.includes("最新公開版：" + latestPublicVersion), "README must preserve the latest historically published beta version");
 assert.ok(readme.includes("CHANGELOG.md"), "README must link to the version history");
 assert.ok(readme.includes("バージョン番号の決め方"), "README must explain the independent core version and alpha counter");
