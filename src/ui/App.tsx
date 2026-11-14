@@ -130,7 +130,7 @@ type StreamArticle = {
   status?: "live" | "completed"; aiGenerated?: boolean; aiSummary?: string; highlights?: string[];
   lastAiUpdateAt?: string | null; viewerCount?: number; peakViewerCount?: number; aiError?: string;
   videoAnalyzed?: boolean; videoFrameCount?: number; videoSummary?: string; videoScenes?: string[]; videoAnalyzedAt?: string | null;
-  videoPreviewAvailable?: boolean; videoPreviewTimeSeconds?: number; videoPreviewUpdatedAt?: string; videoPreviewDataUrl?: string;
+  videoPreviewAvailable?: boolean; videoPreviewTimeSeconds?: number; videoPreviewUpdatedAt?: string;
   audioAnalyzed?: boolean; audioSegmentCount?: number; audioSummary?: string; audioTranscript?: string;
   audioTranscriptSegments?: Array<{ startSeconds: number; endSeconds: number; text: string }>;
   audioAnalyzedAt?: string | null; audioError?: string;
@@ -567,6 +567,64 @@ function formatArticlePreviewTime(seconds: number): string {
   return hours > 0
     ? String(hours).padStart(2, "0") + ":" + String(minutes).padStart(2, "0") + ":" + String(remainingSeconds).padStart(2, "0")
     : String(minutes).padStart(2, "0") + ":" + String(remainingSeconds).padStart(2, "0");
+}
+
+function ArticleBroadcastFrame({ article }: { article: StreamArticle }) {
+  const frameRef = useRef<HTMLElement | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let observer: IntersectionObserver | null = null;
+    setPreviewUrl(null);
+    if (!article.videoPreviewAvailable || !window.kickRecorder) return;
+
+    const loadPreview = (): void => {
+      void window.kickRecorder?.getStreamArticlePreview(article.slug, article.id)
+        .then(url => { if (!cancelled) setPreviewUrl(url); })
+        .catch(() => { if (!cancelled) setPreviewUrl(null); });
+    };
+
+    if (typeof IntersectionObserver !== "undefined" && frameRef.current) {
+      observer = new IntersectionObserver(entries => {
+        if (entries.some(entry => entry.isIntersecting)) {
+          observer?.disconnect();
+          loadPreview();
+        }
+      }, { rootMargin: "280px" });
+      observer.observe(frameRef.current);
+    } else {
+      loadPreview();
+    }
+
+    return () => {
+      cancelled = true;
+      observer?.disconnect();
+    };
+  }, [article.slug, article.id, article.videoPreviewAvailable, article.videoPreviewUpdatedAt]);
+
+  return <figure ref={frameRef} className={previewUrl ? "article-broadcast-frame has-image" : "article-broadcast-frame is-empty"}>
+    {previewUrl
+      ? <img src={previewUrl} alt={article.displayName + "の配信画面"} loading="lazy" />
+      : <div className="article-broadcast-placeholder">
+          <span className="article-broadcast-placeholder-mark" aria-hidden="true">▶</span>
+          <strong>放送画面は未取得です</strong>
+          <small>{article.videoPreviewAvailable
+            ? "放送画面を読み込み中、または画像が見つかりません"
+            : article.status === "live"
+              ? "LIVE映像の代表フレームを待っています"
+              : article.sourceVideo
+                ? "録画から画像を取得するには記事を再生成してください"
+                : "この記録には保存済みの映像がありません"}</small>
+        </div>}
+    <figcaption>
+      <span>放送画面</span>
+      <span>{typeof article.videoPreviewTimeSeconds === "number"
+        ? "開始から " + formatArticlePreviewTime(article.videoPreviewTimeSeconds)
+        : article.status === "live" ? "LIVEフレーム" : "代表フレーム"}</span>
+    </figcaption>
+    {article.status === "live" && <span className="article-broadcast-live-pill"><i /> LIVE</span>}
+  </figure>;
 }
 
 export default function App() {
@@ -2318,20 +2376,7 @@ export default function App() {
               {dayArticles.map(article => <article className="article-card" key={article.slug + ":" + article.id}>
               <div className="article-meta"><span className="article-byline">配信者・{article.displayName}</span> ・ {new Date(article.startedAt).toLocaleString("ja-JP")} <span className={article.status === "live" ? "article-status-live" : "article-status-done"}>{article.status === "live" ? "LIVE・更新中" : article.status === "completed" ? "配信終了" : "アーカイブ"}</span>{article.aiGenerated && <span className="article-ai-label">AI記事</span>}</div>
               <div className="article-broadcast-layout">
-                <figure className={article.videoPreviewDataUrl ? "article-broadcast-frame has-image" : "article-broadcast-frame is-empty"}>
-                  {article.videoPreviewDataUrl
-                    ? <img src={article.videoPreviewDataUrl} alt={article.displayName + "の配信画面"} loading="lazy" />
-                    : <div className="article-broadcast-placeholder">
-                        <span className="article-broadcast-placeholder-mark" aria-hidden="true">▶</span>
-                        <strong>放送画面は未取得です</strong>
-                        <small>{article.status === "live" ? "LIVE映像の代表フレームを待っています" : article.sourceVideo ? "録画から画像を取得するには記事を再生成してください" : "この記録には保存済みの映像がありません"}</small>
-                      </div>}
-                  <figcaption>
-                    <span>放送画面</span>
-                    <span>{typeof article.videoPreviewTimeSeconds === "number" ? "開始から " + formatArticlePreviewTime(article.videoPreviewTimeSeconds) : article.status === "live" ? "LIVEフレーム" : "代表フレーム"}</span>
-                  </figcaption>
-                  {article.status === "live" && <span className="article-broadcast-live-pill"><i /> LIVE</span>}
-                </figure>
+<ArticleBroadcastFrame article={article} />
                 <div className="article-broadcast-copy">
                   <h3>{article.headline}</h3>
                   {article.streamTitle && article.streamTitle !== article.headline && <p className="article-original-stream-title"><strong>元配信タイトル</strong> {article.streamTitle}</p>}
