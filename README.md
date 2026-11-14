@@ -16,7 +16,7 @@ Kick配信の映像・音声・コメントを録画・保存するWindowsデス
 - [最新のβ版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/latest)
 - [β51開発ブランチ](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/feature/beta51-ai-article-live)
 - [バージョン更新履歴（CHANGELOG）](CHANGELOG.md)
-- [β版・製品版の運用方針](docs/RELEASE_CHANNELS.md)
+- [β版・製品版の運用方針](https://github.com/kanenao/Kick-Live-Message-Recorder/blob/feature/beta51-ai-article-live/docs/RELEASE_CHANNELS.md)
 
 ## 主な機能
 
