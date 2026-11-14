@@ -927,7 +927,7 @@ export class LiveStreamArticleManager {
         throw new Error(`OpenAI APIエラー（HTTP ${response.status}）：${detail.slice(0, 300)}`);
       }
       const payload = await response.json() as Record<string, unknown>;
-      result = parseAnalysis(payload);
+      result = parseAnalysis(payload, article.streamTitle || article.headline);
       }
       article.headline = result.headline;
       article.aiSummary = result.summary;
