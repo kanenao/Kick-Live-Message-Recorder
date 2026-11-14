@@ -68,6 +68,7 @@ type KickRecorderStreamArticle = {
   status?: "live" | "completed"; aiGenerated?: boolean; aiSummary?: string; highlights?: string[];
   lastAiUpdateAt?: string | null; viewerCount?: number; peakViewerCount?: number; aiError?: string;
   videoAnalyzed?: boolean; videoFrameCount?: number; videoSummary?: string; videoScenes?: string[]; videoAnalyzedAt?: string | null;
+  videoPreviewAvailable?: boolean; videoPreviewTimeSeconds?: number; videoPreviewUpdatedAt?: string;
   audioAnalyzed?: boolean; audioSegmentCount?: number; audioSummary?: string; audioTranscript?: string;
   audioTranscriptSegments?: Array<{ startSeconds: number; endSeconds: number; text: string }>;
   audioAnalyzedAt?: string | null; audioError?: string;
@@ -228,6 +229,7 @@ declare global {
       stopManualLiveArticle: () => Promise<{ ok: true; slug: string }>;
       onLiveArticleCaptureStatus: (callback: (status: { slug: string; status: "starting" | "capturing" | "completed" | "stopped" | "error"; frameCount: number; message: string }) => void) => () => void;
       listStreamArticles: (slug?: string) => Promise<KickRecorderStreamArticle[]>;
+      getStreamArticlePreview: (slug: string, id: string) => Promise<string | null>;
       deleteStreamArticle: (slug: string, id: string) => Promise<{ ok: true; id: string }>;
       generateStreamArticle: (input: { videoPath: string; slug: string; displayName?: string; category?: string; headline?: string; chatPaths?: string[] }) => Promise<KickRecorderStreamArticle>;
       listCommentLogFiles: () => Promise<KickRecorderCommentLogFile[]>;
