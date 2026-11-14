@@ -11,7 +11,7 @@ import {
   type IpcMainInvokeEvent,
   type MenuItemConstructorOptions
 } from "electron";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 import { autoUpdater } from "electron-updater";
 import { isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
@@ -576,6 +576,14 @@ type SavedKickArticle = {
   visualSummary?: string;
   transcript?: string;
   analyzedAt?: string;
+  analysis?: {
+    frameCount: number;
+    transcriptCharacters: number;
+    commentCount: number;
+    durationMs: number;
+    visionAnalyzed: boolean;
+    warnings: string[];
+  };
 };
 
 let articleTimer: NodeJS.Timeout | null = null;
@@ -583,6 +591,7 @@ let articleCycleRunning = false;
 const liveArticleChannels = new Set<string>();
 const liveArticleMetadata = new Map<string, KickChannelCheck>();
 const lastArticleMessageIds = new Map<string, string>();
+const liveArticleSessionIds = new Map<string, string>();
 
 function getArticleDirectory(): string {
   const directory = join(chatReceiver.getOutputDirectory() || getRecordingOutputDirectory(), "Articles");
@@ -590,7 +599,7 @@ function getArticleDirectory(): string {
   return directory;
 }
 
-function listSavedArticles(): SavedKickArticle[] {
+function readSavedArticles(): SavedKickArticle[] {
   const directory = getArticleDirectory();
   return readdirSync(directory)
     .filter(name => name.toLowerCase().endsWith(".json"))
@@ -603,8 +612,91 @@ function listSavedArticles(): SavedKickArticle[] {
       }
     })
     .filter((article): article is SavedKickArticle => article !== null)
-    .sort((a, b) => Date.parse(b.generatedAt) - Date.parse(a.generatedAt))
+    .sort((a, b) => Date.parse(b.generatedAt) - Date.parse(a.generatedAt));
+}
+
+function getArticleSessionKey(article: SavedKickArticle): string {
+  const startedAt = article.startedAt ? Date.parse(article.startedAt) : Number.NaN;
+  return Number.isFinite(startedAt) ? article.slug + "|" + startedAt : article.id;
+}
+
+function listSavedArticles(): SavedKickArticle[] {
+  const seenSessions = new Set<string>();
+  return readSavedArticles()
+    .filter(article => {
+      const key = getArticleSessionKey(article);
+      if (seenSessions.has(key)) return false;
+      seenSessions.add(key);
+      return true;
+    })
     .slice(0, 100);
+}
+
+function getArticleIdentity(
+  slug: string,
+  metadata: KickChannelCheck | undefined,
+  isFinal: boolean
+): { id: string; duplicateIds: string[] } {
+  const startedAt = metadata?.startedAt ? Date.parse(metadata.startedAt) : Number.NaN;
+  if (Number.isFinite(startedAt)) {
+    const matching = readSavedArticles().filter(article =>
+      article.slug === slug &&
+      article.startedAt !== null &&
+      Number.isFinite(Date.parse(article.startedAt)) &&
+      Date.parse(article.startedAt) === startedAt
+    );
+    const id = matching[0]?.id ?? `${slug}-${startedAt.toString(36)}`;
+    return { id, duplicateIds: matching.filter(article => article.id !== id).map(article => article.id) };
+  }
+
+  const isLiveSession = metadata?.isLive === true || recordingManager.isRecording(slug) || isFinal;
+  if (!isLiveSession) {
+    return { id: `${slug}-${Date.now().toString(36)}`, duplicateIds: [] };
+  }
+
+  let id = liveArticleSessionIds.get(slug);
+  if (!id) {
+    const recentUnfinished = readSavedArticles().find(article =>
+      article.slug === slug &&
+      !article.isFinal &&
+      Date.now() - Date.parse(article.generatedAt) >= 0 &&
+      Date.now() - Date.parse(article.generatedAt) < 12 * 60 * 60 * 1000
+    );
+    id = recentUnfinished?.id ?? `${slug}-${Date.now().toString(36)}`;
+    liveArticleSessionIds.set(slug, id);
+  }
+  return { id, duplicateIds: [] };
+}
+
+function writeArticleAnalysisLog(entry: {
+  slug: string;
+  status: "saved" | "error";
+  articleId?: string;
+  commentCount?: number;
+  frameCount?: number;
+  transcriptCharacters?: number;
+  durationMs?: number;
+  visionAnalyzed?: boolean;
+  message?: string;
+  warnings?: string[];
+}): void {
+  if (!/^[a-zA-Z0-9_]{1,25}$/.test(entry.slug)) return;
+  try {
+    const directory = join(getArticleDirectory(), "AnalysisLogs");
+    mkdirSync(directory, { recursive: true });
+    const record = {
+      timestamp: new Date().toISOString(),
+      ...entry,
+      message: entry.message?.slice(0, 1200),
+      warnings: entry.warnings?.slice(0, 10).map(warning => warning.slice(0, 500))
+    };
+    appendFileSync(join(directory, entry.slug.toLowerCase() + ".jsonl"), JSON.stringify(record) + "\n", {
+      encoding: "utf8",
+      mode: 0o600
+    });
+  } catch (error) {
+    console.error("Failed to write AI article analysis log:", error);
+  }
 }
 
 async function createKickArticle(slugInput: unknown, metadata?: KickChannelCheck, isFinal = false): Promise<SavedKickArticle> {
@@ -612,6 +704,7 @@ async function createKickArticle(slugInput: unknown, metadata?: KickChannelCheck
     throw new Error("記事生成対象のチャンネル名が不正です。");
   }
   const slug = slugInput.toLowerCase();
+  const analysisStartedAt = Date.now();
   const outputDirectory = chatReceiver.getOutputDirectory() || getRecordingOutputDirectory();
   const allMessages = chatReceiver.listMessages(slug, 5000, outputDirectory);
   const streamStart = metadata?.startedAt ? Date.parse(metadata.startedAt) : Number.NaN;
@@ -686,7 +779,16 @@ async function createKickArticle(slugInput: unknown, metadata?: KickChannelCheck
   });
 
   const generatedAt = new Date().toISOString();
-  const id = `${slug}-${generatedAt.replace(/[:.]/g, "-")}`;
+  const identity = getArticleIdentity(slug, metadata, isFinal);
+  const id = identity.id;
+  const diagnostics = {
+    frameCount: media.frameBase64s.length,
+    transcriptCharacters: media.transcript.length,
+    commentCount: messages.length,
+    durationMs: Date.now() - analysisStartedAt,
+    visionAnalyzed: Boolean(visualSummary),
+    warnings: media.warnings.slice(0, 10)
+  };
   const article: SavedKickArticle = {
     id,
     slug,
@@ -700,12 +802,33 @@ async function createKickArticle(slugInput: unknown, metadata?: KickChannelCheck
     visualSummary,
     transcript: media.transcript,
     analyzedAt: media.analyzedAt,
+    analysis: diagnostics,
     ...generated
   };
   writeFileSync(join(getArticleDirectory(), `${id}.json`), JSON.stringify(article, null, 2), {
     encoding: "utf8",
     mode: 0o600
   });
+  for (const duplicateId of identity.duplicateIds) {
+    try {
+      const duplicatePath = join(getArticleDirectory(), `${duplicateId}.json`);
+      if (existsSync(duplicatePath)) unlinkSync(duplicatePath);
+    } catch (error) {
+      console.warn("Failed to remove superseded live article snapshot:", error);
+    }
+  }
+  writeArticleAnalysisLog({
+    slug,
+    status: "saved",
+    articleId: id,
+    commentCount: diagnostics.commentCount,
+    frameCount: diagnostics.frameCount,
+    transcriptCharacters: diagnostics.transcriptCharacters,
+    durationMs: diagnostics.durationMs,
+    visionAnalyzed: diagnostics.visionAnalyzed,
+    warnings: diagnostics.warnings
+  });
+  if (isFinal) liveArticleSessionIds.delete(slug);
   const lastMessage = messages[messages.length - 1];
   if (lastMessage) lastArticleMessageIds.set(slug, lastMessage.messageId);
   mainWindow?.webContents.send("articles:new", article);
@@ -765,9 +888,11 @@ async function runLiveArticleCycle(): Promise<void> {
         try {
           await createKickArticle(result.slug, result, false);
         } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          writeArticleAnalysisLog({ slug: result.slug, status: "error", message });
           mainWindow?.webContents.send("articles:status", {
             slug: result.slug,
-            message: error instanceof Error ? error.message : String(error)
+            message
           });
         }
       } else if (result.found && liveArticleChannels.has(result.slug)) {
@@ -777,9 +902,11 @@ async function runLiveArticleCycle(): Promise<void> {
         try {
           await createKickArticle(result.slug, finalMetadata, true);
         } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          writeArticleAnalysisLog({ slug: result.slug, status: "error", message });
           mainWindow?.webContents.send("articles:status", {
             slug: result.slug,
-            message: error instanceof Error ? error.message : String(error)
+            message
           });
         }
       }
@@ -1342,8 +1469,19 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("articles:generate", async (event, slug: unknown) => {
     assertTrustedSender(event);
-    const results = await checkKickChannels([slug]);
-    return createKickArticle(slug, results[0], false);
+    try {
+      const results = await checkKickChannels([slug]);
+      return await createKickArticle(slug, results[0], false);
+    } catch (error) {
+      if (typeof slug === "string" && /^[a-zA-Z0-9_]{1,25}$/.test(slug)) {
+        writeArticleAnalysisLog({
+          slug,
+          status: "error",
+          message: error instanceof Error ? error.message : String(error)
+        });
+      }
+      throw error;
+    }
   });
 
   ipcMain.handle("recording:start", (event, slug: unknown) => {
