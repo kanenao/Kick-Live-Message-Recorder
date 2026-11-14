@@ -134,6 +134,8 @@ type CommentVideoPreviewData = {
   totalComments: number;
   malformedLines: number;
   outsideVideoCount: number;
+  syncSource: "recording-metadata" | "filename" | "file-mtime";
+  estimatedVideoStartAt: string;
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
@@ -1866,7 +1868,11 @@ export default function App() {
                       commentVideoPreviewResult.width + "×" + commentVideoPreviewResult.height + " ・ " +
                       "動画内 " + Math.round(commentVideoPreviewResult.durationSeconds).toLocaleString("ja-JP") + "秒 ・ " +
                       "範囲外 " + commentVideoPreviewResult.outsideVideoCount.toLocaleString("ja-JP") + "件 ・ " +
-                      "破損行 " + commentVideoPreviewResult.malformedLines.toLocaleString("ja-JP") + "件"
+                      "破損行 " + commentVideoPreviewResult.malformedLines.toLocaleString("ja-JP") + "件 ・ " +
+                      "同期基準 " + (commentVideoPreviewResult.syncSource === "recording-metadata"
+                        ? "録画プロセス開始メタデータ"
+                        : commentVideoPreviewResult.syncSource === "filename" ? "ファイル名の時刻" : "ファイル更新時刻から推定") +
+                      "（" + new Date(commentVideoPreviewResult.estimatedVideoStartAt).toLocaleString("ja-JP") + "）"
                     : commentVideoPreviewError
                       ? "実ログプレビューを利用できません：" + commentVideoPreviewError
                       : "動画とコメントログを選択すると、実際のコメント内容でプレビューします。"}
