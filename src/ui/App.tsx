@@ -130,6 +130,7 @@ type StreamArticle = {
   status?: "live" | "completed"; aiGenerated?: boolean; aiSummary?: string; highlights?: string[];
   lastAiUpdateAt?: string | null; viewerCount?: number; peakViewerCount?: number; aiError?: string;
   videoAnalyzed?: boolean; videoFrameCount?: number; videoSummary?: string; videoScenes?: string[]; videoAnalyzedAt?: string | null;
+  videoPreviewAvailable?: boolean; videoPreviewTimeSeconds?: number; videoPreviewUpdatedAt?: string; videoPreviewDataUrl?: string;
   audioAnalyzed?: boolean; audioSegmentCount?: number; audioSummary?: string; audioTranscript?: string;
   audioTranscriptSegments?: Array<{ startSeconds: number; endSeconds: number; text: string }>;
   audioAnalyzedAt?: string | null; audioError?: string;
@@ -154,7 +155,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.1.0-beta.51";
+const APP_VERSION = "0.1.0-beta.52";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -556,6 +557,16 @@ async function loadState(): Promise<PersistedState> {
   } catch {
     return { channels: [], recordingOnlyChannels: [], settings: DEFAULT_SETTINGS };
   }
+}
+
+function formatArticlePreviewTime(seconds: number): string {
+  const total = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const remainingSeconds = total % 60;
+  return hours > 0
+    ? String(hours).padStart(2, "0") + ":" + String(minutes).padStart(2, "0") + ":" + String(remainingSeconds).padStart(2, "0")
+    : String(minutes).padStart(2, "0") + ":" + String(remainingSeconds).padStart(2, "0");
 }
 
 export default function App() {
@@ -2306,10 +2317,28 @@ export default function App() {
               <div className="article-day-heading"><h4>{dateLabel}</h4><span>{dayArticles.length.toLocaleString("ja-JP")}本</span></div>
               {dayArticles.map(article => <article className="article-card" key={article.slug + ":" + article.id}>
               <div className="article-meta"><span className="article-byline">配信者・{article.displayName}</span> ・ {new Date(article.startedAt).toLocaleString("ja-JP")} <span className={article.status === "live" ? "article-status-live" : "article-status-done"}>{article.status === "live" ? "LIVE・更新中" : article.status === "completed" ? "配信終了" : "アーカイブ"}</span>{article.aiGenerated && <span className="article-ai-label">AI記事</span>}</div>
-              <h3>{article.headline}</h3>
-              {article.streamTitle && article.streamTitle !== article.headline && <p className="article-original-stream-title"><strong>元配信タイトル</strong> {article.streamTitle}</p>}
-              {article.category && <span className="live-stream-category">{article.category}</span>}
-              {article.aiSummary && <p className="article-summary">{article.aiSummary}</p>}
+              <div className="article-broadcast-layout">
+                <figure className={article.videoPreviewDataUrl ? "article-broadcast-frame has-image" : "article-broadcast-frame is-empty"}>
+                  {article.videoPreviewDataUrl
+                    ? <img src={article.videoPreviewDataUrl} alt={article.displayName + "の配信画面"} loading="lazy" />
+                    : <div className="article-broadcast-placeholder">
+                        <span className="article-broadcast-placeholder-mark" aria-hidden="true">▶</span>
+                        <strong>放送画面は未取得です</strong>
+                        <small>{article.status === "live" ? "LIVE映像の代表フレームを待っています" : article.sourceVideo ? "録画から画像を取得するには記事を再生成してください" : "この記録には保存済みの映像がありません"}</small>
+                      </div>}
+                  <figcaption>
+                    <span>放送画面</span>
+                    <span>{typeof article.videoPreviewTimeSeconds === "number" ? "開始から " + formatArticlePreviewTime(article.videoPreviewTimeSeconds) : article.status === "live" ? "LIVEフレーム" : "代表フレーム"}</span>
+                  </figcaption>
+                  {article.status === "live" && <span className="article-broadcast-live-pill"><i /> LIVE</span>}
+                </figure>
+                <div className="article-broadcast-copy">
+                  <h3>{article.headline}</h3>
+                  {article.streamTitle && article.streamTitle !== article.headline && <p className="article-original-stream-title"><strong>元配信タイトル</strong> {article.streamTitle}</p>}
+                  {article.category && <span className="live-stream-category">{article.category}</span>}
+                  {article.aiSummary && <p className="article-summary">{article.aiSummary}</p>}
+                </div>
+              </div>
               <div className="article-source-badges">
                 <span className={article.videoAnalyzed ? "is-analyzed" : ""}>映像 {article.videoAnalyzed ? "分析済み" : "未解析"}</span>
                 <span className={article.audioAnalyzed ? "is-analyzed" : ""}>音声 {article.audioAnalyzed ? `文字起こし ${(article.audioSegmentCount ?? article.audioTranscriptSegments?.length ?? 0).toLocaleString("ja-JP")}区間` : "未解析"}</span>
