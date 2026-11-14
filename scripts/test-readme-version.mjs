@@ -5,7 +5,7 @@ const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.me
 const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 const changelog = readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8");
 
-const match = packageJson.version.match(/^(\\d+\\.\\d+\\.\\d+)-beta\\.(\\d+)$/);
+const match = packageJson.version.match(/^(\d+\.\d+\.\d+)-beta\.(\d+)$/);
 assert.ok(match, "package.json must use the beta version format while beta-only development is active");
 const currentVersion = packageJson.version;
 const previousPublicVersion = match[1] + "-beta." + (Number(match[2]) - 1);
