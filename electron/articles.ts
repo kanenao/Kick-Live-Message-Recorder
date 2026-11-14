@@ -31,7 +31,6 @@ export type StreamArticle = {
   videoPreviewAvailable?: boolean;
   videoPreviewTimeSeconds?: number;
   videoPreviewUpdatedAt?: string;
-  videoPreviewDataUrl?: string;
 };
 
 type ChatLine = {
