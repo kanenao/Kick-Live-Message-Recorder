@@ -3,7 +3,7 @@
 Kick配信の映像・音声・コメントを録画・保存するWindowsデスクトップアプリです。24時間の配信監視、コメント付き動画の生成、映像・音声・コメントを組み合わせたAI配信記事に対応しています。
 
 > **最新公開版：0.1.0-beta.50**  
-> **開発中：0.1.0-beta.51（未公開）**  
+> **開発中：0.1.0-beta.52（未公開）**  
 > 現在はβ版のみを開発・配布しています。製品版は未完成で、製品版の公開・自動更新は行っていません。
 
 ## バージョン・ダウンロード
@@ -11,10 +11,10 @@ Kick配信の映像・音声・コメントを録画・保存するWindowsデス
 | 区分 | バージョン | 状態 |
 |---|---|---|
 | 最新公開版 | `0.1.0-beta.50` | GitHub Releasesで公開済み |
-| 開発版 | `0.1.0-beta.51` | 開発ブランチで作業中・未公開 |
+| 開発版 | `0.1.0-beta.52` | 開発ブランチで作業中・未公開 |
 
 - [最新のβ版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/latest)
-- [β51開発ブランチ](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/feature/beta51-ai-article-live)
+- [β52開発ブランチ](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/feature/beta52-broadcast-newspaper-layout)
 - [バージョン更新履歴（CHANGELOG）](CHANGELOG.md)
 - [β版・製品版の運用方針](docs/RELEASE_CHANNELS.md)
 
@@ -64,7 +64,7 @@ Kick配信の映像・音声・コメントを録画・保存するWindowsデス
 
 ## 最近の更新
 
-### 0.1.0-beta.51（開発中・未公開）
+### 0.1.0-beta.52（開発中・未公開）
 - 録画中の映像プレビューをダッシュボード・録画専用画面から即時ON／OFF。OFF時はプレーヤーを停止し、映像・音声録画とコメント取得は継続。
 - 録画ライブラリを配信者別カード表示へ刷新。動画・コメントログの件数集計、検索・種類別絞り込み、保存場所を開く操作を追加。
 - チャンネルごとの保存済みコメントを直近100件までライブラリ内で確認可能に。
