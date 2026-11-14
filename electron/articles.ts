@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync,
 import { basename, extname, join, resolve } from "node:path";
 import { isPathInsideDirectory } from "./recording";
 import { getVideoDurationSeconds } from "./video-frames";
-import { deleteArticlePreview, readArticlePreviewDataUrl } from "./article-preview";
+import { deleteArticlePreview, hasArticlePreview } from "./article-preview";
 
 export type StreamArticle = {
   id: string;
@@ -101,10 +101,7 @@ export function listStreamArticles(outputDirectory: string, slugInput?: unknown)
       try {
         const article = JSON.parse(readFileSync(join(directory, entry.name), "utf8")) as StreamArticle;
         if (article && article.slug === folder.name && typeof article.headline === "string" && Array.isArray(article.paragraphs)) {
-          const previewDataUrl = readArticlePreviewDataUrl(directory, article.id);
-          article.videoPreviewAvailable = Boolean(previewDataUrl);
-          if (previewDataUrl) article.videoPreviewDataUrl = previewDataUrl;
-          else delete article.videoPreviewDataUrl;
+          article.videoPreviewAvailable = hasArticlePreview(directory, article.id);
           results.push(article);
         }
       } catch { /* 破損した記事ファイルは一覧から除外 */ }
