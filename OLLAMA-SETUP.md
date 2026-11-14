@@ -41,7 +41,7 @@ If recording is not active, the app can still make a comment-based article from 
 - The temporary image/audio/transcript files used for a sampling cycle are removed after processing.
 - Article JSON files retain the generated text, evidence-source labels, visual summary, and transcript sample so the article can be reviewed later.
 - Speech recognition can mishear names, numbers, and overlapping speech. AI summaries may omit scene changes; review them against the original recording.
-- The 60-second sampling design is a periodic snapshot, not a full-frame-by-frame video understanding or a perfect full-stream transcript.
+- The 60-second sampling design is a periodic snapshot, not a full-frame-by-frame video understanding or a perfect full-stream transcript. Live article snapshots from the same stream are updated in one article record instead of creating a separate article on every cycle. The app shows per-cycle frame, transcript, comment, timing, and warning diagnostics, and appends detailed JSONL records under `Articles/AnalysisLogs/{channel}.jsonl`.
 
 ## Performance
 
