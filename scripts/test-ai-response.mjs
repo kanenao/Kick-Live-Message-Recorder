@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import {
   describeEmptyAiResponse,
   extractAiResponseText,
-  normalizeAiJsonText
+  normalizeAiJsonText,
+  parseAiArticleResponse
 } from "../electron/ai-response.ts";
 
 const articleJson = JSON.stringify({
@@ -85,3 +86,58 @@ assert.equal(
 );
 
 console.log("AI記事応答形式テスト成功（Responses／Chat Completions／Ollama／空応答診断／JSONフェンス）");
+
+
+// Ollama /api/generate uses "response", not message.content.
+assert.equal(extractAiResponseText({ response: articleJson, done: true }), articleJson);
+
+// Proxies may wrap the actual provider payload under data/result.
+assert.equal(
+  extractAiResponseText({ data: { output: [{ type: "message", content: [{ type: "output_text", text: articleJson }] }] } }),
+  articleJson
+);
+
+// Some Ollama-compatible servers represent message content as typed objects.
+assert.equal(
+  extractAiResponseText({ message: { content: { text: articleJson } } }),
+  articleJson
+);
+
+// Gemini-compatible text candidates are also recognized by the shared adapter.
+assert.equal(
+  extractAiResponseText({ candidates: [{ content: { parts: [{ text: articleJson }] } }] }),
+  articleJson
+);
+
+// Structured response variants accept title/body and build paragraphs only from returned text.
+const aliased = parseAiArticleResponse({
+  response: JSON.stringify({ title: "返却タイトル", body: "最初の段落です。\n\n次の段落です。" })
+}, "元配信タイトル");
+assert.equal(aliased.headline, "返却タイトル");
+assert.equal(aliased.paragraphs.length, 2);
+assert.equal(aliased.summary, "最初の段落です。");
+
+// Plain-text models no longer fail just because they did not follow the JSON schema.
+const plainArticle = parseAiArticleResponse({
+  message: { content: "見出し：配信の振り返り\n\n冒頭でゲームを開始しました。\n\n後半は視聴者と交流しました。" }
+}, "元配信タイトル");
+assert.equal(plainArticle.headline, "配信の振り返り");
+assert.equal(plainArticle.paragraphs.length, 2);
+assert.ok(plainArticle.summary.includes("冒頭"));
+
+// Fenced JSON may include a short preamble or reasoning text.
+const fence = String.fromCharCode(96).repeat(3);
+const fenced = normalizeAiJsonText("結果はこちらです。\n" + fence + "json\n" + articleJson + "\n" + fence + "\n以上です。");
+assert.equal(JSON.parse(fenced).headline, "配信の見どころ");
+
+// Missing article body is still reported with the missing fields.
+assert.throws(
+  () => parseAiArticleResponse({ message: { content: JSON.stringify({ headline: "タイトルだけ" }) } }, "元タイトル"),
+  /headline／summary／paragraphs／body/
+);
+
+// Truly empty payloads retain useful response diagnostics.
+assert.match(
+  describeEmptyAiResponse({ choices: [{ finish_reason: "length" }], usage: { output_tokens: 1800 } }),
+  /finish_reason=length.*output_tokens=1800/
+);
