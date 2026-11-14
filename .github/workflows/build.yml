@@ -32,6 +32,8 @@ jobs:
         run: node --experimental-strip-types scripts/test-library-comments.mjs
       - name: 録画ライブラリのファイル分類テスト
         run: node --experimental-strip-types scripts/test-library-filenames.mjs
+      - name: VOD ASS字幕生成テスト
+        run: node --experimental-strip-types scripts/test-vod-chat-ass.mjs
       - name: AI記事応答形式テスト
         run: node --experimental-strip-types scripts/test-ai-response.mjs
       - name: 型チェック
