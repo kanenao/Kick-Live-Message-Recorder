@@ -58,6 +58,9 @@ type KickRecorderRecordingEvent = {
   isVod?: boolean;
 };
 type KickRecorderCommentLogFile = { path: string; name: string; channelSlug: string; kind: "LIVE" | "VOD"; size: number; modifiedAt: string };
+type KickRecorderLibraryCommentMessage = {
+  eventId: string; senderUsername: string; content: string; createdAt: string; usernameColor: string | null;
+};
 type KickRecorderStreamArticle = {
   id: string; slug: string; displayName: string; headline: string; streamTitle?: string; category: string; startedAt: string;
   durationSeconds: number; commentCount: number; uniqueCommenters: number; keywords: string[];
@@ -212,6 +215,7 @@ declare global {
       deleteRecording: (filePath: string) => Promise<{ ok: true; name: string }>;
       openRecording: (filePath: string) => Promise<{ ok: true }>;
       revealRecording: (filePath: string) => Promise<{ ok: true }>;
+      openRecordingFolder: () => Promise<{ ok: true }>;
       getAiArticleStatus: () => Promise<KickRecorderAiArticleStatus>;
       saveAiArticleKey: (apiKey: string) => Promise<{ ok: true }>;
       clearAiArticleKey: () => Promise<{ ok: true }>;
@@ -227,6 +231,7 @@ declare global {
       deleteStreamArticle: (slug: string, id: string) => Promise<{ ok: true; id: string }>;
       generateStreamArticle: (input: { videoPath: string; slug: string; displayName?: string; category?: string; headline?: string; chatPaths?: string[] }) => Promise<KickRecorderStreamArticle>;
       listCommentLogFiles: () => Promise<KickRecorderCommentLogFile[]>;
+      listRecentCommentMessages: (channelSlug: string, limit?: number) => Promise<KickRecorderLibraryCommentMessage[]>;
       previewCommentVideo: (input: { videoPath: string; chatPaths: string[]; delaySeconds?: number }) => Promise<KickRecorderCommentVideoPreview>;
       startCommentVideo: (options: { videoPath: string; chatPath?: string; chatPaths?: string[]; delaySeconds?: number; fontFamily?: "ms-pgothic" | "meiryo" | "yu-gothic" | "arial"; fontSize?: number; displaySeconds?: number; speedPercent?: number; rowLimit?: number; collisionGap?: number; opacity?: number; quality?: "high" | "standard" | "compact"; position?: "scroll" | "top" | "bottom" | "command"; showUsername?: boolean }) => Promise<{ ok: true; outputPath: string }>;
       stopCommentVideo: () => Promise<{ ok: true }>;
