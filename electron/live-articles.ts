@@ -229,6 +229,27 @@ export class LiveStreamArticleManager {
     private readonly onUpdated: (article: LiveArticle) => void
   ) {}
 
+  private scheduleAnalysis(session: LiveSession, force = session.forceAi === true): void {
+    if (session.finishing || session.analysisInFlight) return;
+    const article = session.article;
+    const hasPendingVisualAnalysis = Boolean(session.videoFrames?.length) && !article.videoAnalyzed;
+    const hasPendingAnalysis = session.pendingAudioSegments.length > 0 ||
+      session.pendingComments.length >= 12 ||
+      hasPendingVisualAnalysis;
+    if (!hasPendingAnalysis) return;
+
+    const intervalMs = Math.max(30, Math.min(600, this.getConfig().intervalSeconds)) * 1000;
+    const waitMs = session.lastAnalysisAt <= 0
+      ? 0
+      : Math.max(0, intervalMs - (Date.now() - session.lastAnalysisAt));
+    if (session.analysisTimer) clearTimeout(session.analysisTimer);
+    session.analysisTimer = setTimeout(() => {
+      session.analysisTimer = null;
+      if (session.finishing || session.analysisInFlight) return;
+      void this.analyze(session, false, force || session.forceAi === true);
+    }, waitMs);
+  }
+
   startOrUpdate(metadata: LiveMetadata, forceAi = false): void {
     const config = this.getConfig();
     const apiKey = config.provider === "ollama" ? "local" : this.getApiKey();
@@ -331,7 +352,7 @@ export class LiveStreamArticleManager {
     session.videoFrameTotalCount = (session.videoFrameTotalCount ?? 0) + 1;
     const count = session.videoFrameTotalCount;
     if (count > (session.article.videoFrameCount ?? 0)) session.article.videoAnalyzed = false;
-    if (count === 1 || count % 3 === 0) void this.analyze(session, false, true);
+    if (count === 1 || count % 3 === 0) this.scheduleAnalysis(session, true);
   }
 
   onAudioCaptureError(slugInput: unknown, message: unknown): void {
@@ -977,20 +998,7 @@ export class LiveStreamArticleManager {
       if (final && (session.pendingComments.length > 0 || session.pendingAudioSegments.length > 0) && !article.aiGenerated) {
         article.aiError = article.aiError || "AI最終分析を完了できませんでした。";
       }
-      const intervalMs = Math.max(30, Math.min(600, this.getConfig().intervalSeconds)) * 1000;
-      const hasPendingVisualAnalysis = Boolean(session.videoFrames?.length) && !article.videoAnalyzed;
-      const hasPendingAnalysis = session.pendingAudioSegments.length > 0 ||
-        session.pendingComments.length >= 12 ||
-        hasPendingVisualAnalysis;
-      if (!session.finishing && !final && hasPendingAnalysis) {
-        const waitMs = Math.max(0, intervalMs - (Date.now() - session.lastAnalysisAt));
-        if (session.analysisTimer) clearTimeout(session.analysisTimer);
-        session.analysisTimer = setTimeout(() => {
-          session.analysisTimer = null;
-          if (session.finishing || session.analysisInFlight) return;
-          void this.analyze(session, false, session.forceAi === true);
-        }, waitMs);
-      }
+      if (!session.finishing && !final) this.scheduleAnalysis(session);
     }
   }
 
