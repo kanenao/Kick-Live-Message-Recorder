@@ -1805,6 +1805,9 @@ app.on("before-quit", () => {
   recordingManager.stopAll();
   for (const capture of liveArticleFrameCaptures.values()) capture.stop();
   liveArticleFrameCaptures.clear();
+  for (const timer of liveArticleCaptureRetryTimers.values()) clearTimeout(timer);
+  liveArticleCaptureRetryTimers.clear();
+  liveArticleCaptureRetryAttempts.clear();
   manualArticleSession = null;
   void chatReceiver.stop();
   vodChatDownloader.stopAll();
