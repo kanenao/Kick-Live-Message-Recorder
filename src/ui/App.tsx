@@ -184,6 +184,16 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
 ];
 const VERSION_HISTORY = [
   {
+    version: "0.1.0-beta.52",
+    title: "配信AI新聞に放送画面を掲載",
+    changes: [
+      "LIVE配信の代表フレームを約25秒ごとに保存し、新聞記事カードの放送画面を自動更新",
+      "録画済み配信の記事生成では、動画の中央付近から代表画面を抽出して掲載",
+      "放送画面を記事JSONと分離したJPEGで保存し、記事一覧では表示直前に必要な画像だけを取得",
+      "16:9の映像と記事見出し・要約を横並びにし、狭い画面では縦並びへ切り替え"
+    ]
+  },
+  {
     version: "0.1.0-beta.51",
     title: "LIVE AI映像解析とコメント同期を改善",
     changes: [
