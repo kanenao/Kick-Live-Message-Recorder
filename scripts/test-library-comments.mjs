@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { listRecentCommentMessages } from "../electron/comment-video.ts";
+import { listRecentCommentMessages } from "../electron/recording-library.ts";
 
 const root = mkdtempSync(join(tmpdir(), "kick-recorder-library-"));
 try {
