@@ -17,6 +17,9 @@ type AppSettings = {
   monitorIntervalSeconds: number;
   notifyOnLive: boolean;
   autoGenerateArticles: boolean;
+  ffmpegPath: string;
+  whisperCliPath: string;
+  whisperModelPath: string;
 };
 
 type AppState = {
@@ -76,6 +79,22 @@ type ChatServiceStatus = { serverRunning: boolean; tunnelRunning: boolean; local
 type ChatSubscriptionStatus = { slug: string; broadcasterUserId: number | null; subscribed: boolean; subscriptionId: string | null; createdAt: string | null };
 type SavedChatMessage = { messageId: string; slug: string; broadcaster: string; user: string; text: string; timestamp: string; receivedAt: string; badges: string[]; emotes: Array<{ emoteId: string; start: number; end: number }> };
 type ChatEvent = { type: "status"; status: ChatServiceStatus } | { type: "message"; message: SavedChatMessage };
+type MediaToolStatus = {
+  ffmpegAvailable: boolean; ffmpegPath: string;
+  whisperAvailable: boolean; whisperCliPath: string;
+  whisperModelAvailable: boolean; whisperModelPath: string;
+  visionModelRequired: string; setupNotes: string[];
+};
+type SavedArticle = {
+  id: string; slug: string; broadcaster: string; streamTitle: string; startedAt: string | null;
+  generatedAt: string; commentCount: number; isFinal: boolean; title: string; summary: string;
+  paragraphs: string[]; topics: string[]; provider: string; model: string;
+  mediaSources?: string[]; visualSummary?: string; transcript?: string; analyzedAt?: string;
+  analysis?: {
+    frameCount: number; transcriptCharacters: number; commentCount: number;
+    durationMs: number; visionAnalyzed: boolean; warnings: string[];
+  };
+};
 
 const api = {
   loadState: (): Promise<AppState> => ipcRenderer.invoke("app:load-state"),
@@ -85,6 +104,9 @@ const api = {
   getAppInfo: (): Promise<AppInfo> => ipcRenderer.invoke("app:get-info"),
   getOllamaStatus: (): Promise<{ connected: boolean; baseUrl: string; models: Array<{ name: string; size: number }>; message?: string }> =>
     ipcRenderer.invoke("ollama:get-status"),
+  getMediaToolStatus: (): Promise<MediaToolStatus> => ipcRenderer.invoke("media:get-status"),
+  selectMediaTool: (kind: "ffmpeg" | "whisperCli" | "whisperModel"): Promise<string | null> =>
+    ipcRenderer.invoke("media:select-tool", kind),
   generateOllamaArticle: (input: { title?: string; broadcaster?: string; startedAt?: string; comments: Array<{ user?: string; text: string; timestamp?: string }> }): Promise<{ title: string; summary: string; paragraphs: string[]; topics: string[]; provider: string; model: string }> =>
     ipcRenderer.invoke("ollama:generate-article", input),
   getKickCredentialsStatus: (): Promise<KickCredentialsStatus> => ipcRenderer.invoke("kick:get-credentials-status"),
@@ -99,8 +121,8 @@ const api = {
   getChatSubscriptionStatus: (slugs: string[]): Promise<ChatSubscriptionStatus[]> => ipcRenderer.invoke("chat:subscription-status", slugs),
   listChatMessages: (slug: string): Promise<SavedChatMessage[]> => ipcRenderer.invoke("chat:list", slug),
   exportChatMessages: (slug: string, format: "csv" | "jsonl"): Promise<{ saved: boolean; path?: string; count: number }> => ipcRenderer.invoke("chat:export", { slug, format }),
-  listArticles: (): Promise<Array<{ id: string; slug: string; broadcaster: string; streamTitle: string; startedAt: string | null; generatedAt: string; commentCount: number; isFinal: boolean; title: string; summary: string; paragraphs: string[]; topics: string[]; provider: string; model: string }>> => ipcRenderer.invoke("articles:list"),
-  generateArticle: (slug: string): Promise<{ id: string; slug: string; title: string; summary: string; paragraphs: string[]; topics: string[]; generatedAt: string; commentCount: number; isFinal: boolean; provider: string; model: string }> => ipcRenderer.invoke("articles:generate", slug),
+  listArticles: (): Promise<SavedArticle[]> => ipcRenderer.invoke("articles:list"),
+  generateArticle: (slug: string): Promise<SavedArticle> => ipcRenderer.invoke("articles:generate", slug),
   onArticleNew: (callback: (article: any) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, article: any): void => callback(article);
     ipcRenderer.on("articles:new", listener);

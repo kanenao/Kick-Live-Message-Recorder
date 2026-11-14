@@ -1,32 +1,49 @@
-# Ollama AI article generation
+# Free local AI article generation for Kick live streams
 
-This application can use a local Ollama server. No OpenAI API key is needed and article prompts are sent to the local machine's Ollama endpoint.
+All AI inference runs on the user's Windows PC. No OpenAI API key, cloud model account, or per-request AI fee is required. Internet access is needed only to download the installers and models and for Kick's own API/Webhook connectivity.
 
-## Windows setup
+## 1. Install Ollama and models
 
-1. Install Ollama from https://ollama.com/download
-2. Open PowerShell or Command Prompt.
-3. Run:
+Install Ollama 0.7.0 or later from https://ollama.com/download. The official Ollama model page lists qwen2.5vl:3b as a 3.2GB vision model. Then run in PowerShell:
 
 ```powershell
 ollama pull qwen2.5:3b
+ollama pull qwen2.5vl:3b
 ```
 
-4. Keep Ollama running. Its default API address is `http://127.0.0.1:11434`.
-5. Open the application's settings and test the Ollama connection.
+- `qwen2.5:3b`: Japanese article writing and evidence synthesis.
+- `qwen2.5vl:3b`: local visual descriptions for sampled video frames.
 
-## Privacy and fallback
+Keep Ollama running at its default local endpoint, `http://127.0.0.1:11434`.
 
-- The default model is `qwen2.5:3b`.
-- No API key or cloud AI account is required.
-- If Ollama is unavailable or the selected model is missing, the application uses its existing non-AI article generation path.
-- AI output is based only on recorded stream metadata and comments. It must not be treated as a verified transcript of the stream's audio/video.
+## 2. Install the local media tools
 
-## Hardware
+- FFmpeg: obtain a Windows build from https://www.gyan.dev/ffmpeg/builds/ and select `ffmpeg.exe` in the app's Settings.
+- Whisper.cpp: obtain a Windows x64 release from https://github.com/ggml-org/whisper.cpp/releases and select `whisper-cli.exe`.
+- Japanese-capable Whisper model: download `ggml-base.bin` from https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin and select it in Settings.
 
-The model is stored locally and uses the PC's RAM/CPU or supported GPU. Performance depends on available memory and hardware.
+The app remembers each selected path locally. The tools and model are not bundled in the installer.
 
+## 3. Enable live multimodal articles
 
-## Kick chat integration status
+1. Register the Kick channel in the dashboard.
+2. Start automatic or manual recording. Live audio/video analysis requires an active local recording; the local recording itself is the live capture source.
+3. (Optional) Start chat receiving in Settings, register the displayed Webhook URL in Kick Developer, and subscribe to the channel's `chat.message.sent` event. Chat is optional for video/audio-only articles.
+4. Enable "配信中の記事を自動生成".
 
-The current Kick beta does not yet capture or persist chat messages. The Ollama client and article generation service are prepared, but automatic article generation from live Kick chat requires the chat capture and storage feature to be completed first.
+While the stream is live and recording, the app samples up to three recent video frames and about 60 seconds of recent audio approximately every 60 seconds. Frame extraction is sequential to reduce disk/CPU contention; when FFmpeg catches an incomplete segment at the live file edge, the app waits briefly and retries the extraction once. Very small files immediately after recording starts are skipped until a later cycle. The analysis timer starts when recording begins, and does not require the chat webhook server to be running. Whisper.cpp transcribes the audio in Japanese. Ollama Vision summarizes what can be observed in the frame. The text model combines those observations with the saved Kick comments and stream metadata into a live article. A new article can be created even if no new chat message arrived during that cycle, or if chat reception has not been configured, as long as the recording remains active.
+
+If recording is not active, the app can still make a comment-based article from saved chat messages, but it cannot analyze video or audio. If a tool or model is unavailable, the app reports a warning and can continue with whatever evidence is available.
+
+## Privacy and accuracy
+
+- Prompts and media samples are sent to the local Ollama server, not an OpenAI API.
+- The temporary image/audio/transcript files used for a sampling cycle are removed after processing.
+- Article JSON files retain the generated text, evidence-source labels, visual summary, and transcript sample so the article can be reviewed later.
+- Speech recognition can mishear names, numbers, and overlapping speech. AI summaries may omit scene changes; review them against the original recording.
+- The 60-second sampling design is a periodic snapshot, not a full-frame-by-frame video understanding or a perfect full-stream transcript. Live article snapshots from the same stream are updated in one article record instead of creating a separate article on every cycle. The app shows per-cycle frame, transcript, comment, timing, and warning diagnostics, and appends detailed JSONL records under `Articles/AnalysisLogs/{channel}.jsonl`.
+
+## Performance
+
+Models use local RAM and CPU/GPU resources. The 3B vision model and Whisper base model may be slow on older or low-memory PCs. The free design avoids cloud AI charges but does not remove local hardware requirements.
+

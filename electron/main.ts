@@ -11,12 +11,13 @@ import {
   type IpcMainInvokeEvent,
   type MenuItemConstructorOptions
 } from "electron";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 import { autoUpdater } from "electron-updater";
 import { isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
-import { getOllamaStatus, generateKickBroadcastArticle } from "./ollama";
+import { getOllamaStatus, generateKickBroadcastArticle, describeKickFrame } from "./ollama";
 import { KickChatReceiver, type SavedKickChatMessage } from "./chat";
+import { analyzeLiveRecordingMedia, getMediaToolStatus } from "./media-analysis";
 
 // Chromiumが提供する標準メニューやコンテキストメニューも日本語で表示する。
 app.commandLine.appendSwitch("lang", "ja-JP");
@@ -38,6 +39,9 @@ type AppSettings = {
   monitorIntervalSeconds: number;
   notifyOnLive: boolean;
   autoGenerateArticles: boolean;
+  ffmpegPath: string;
+  whisperCliPath: string;
+  whisperModelPath: string;
 };
 
 type AppState = {
@@ -54,7 +58,10 @@ const DEFAULT_STATE: AppState = {
     autoMonitorEnabled: true,
     monitorIntervalSeconds: 60,
     notifyOnLive: true,
-    autoGenerateArticles: true
+    autoGenerateArticles: true,
+    ffmpegPath: "",
+    whisperCliPath: "",
+    whisperModelPath: ""
   }
 };
 
@@ -538,6 +545,12 @@ let mainWindow: BrowserWindow | null = null;
 
 const recordingManager = new KickRecordingManager(event => {
   mainWindow?.webContents.send("recording:status", event);
+  if (event.status === "recording" && readState().settings.autoGenerateArticles) {
+    startLiveArticleTimer();
+  }
+  if (event.status === "stopped" || event.status === "error") {
+    setTimeout(() => { void runLiveArticleCycle(); }, 1_000).unref?.();
+  }
 });
 
 const chatReceiver = new KickChatReceiver(event => {
@@ -559,6 +572,18 @@ type SavedKickArticle = {
   topics: string[];
   provider: string;
   model: string;
+  mediaSources?: string[];
+  visualSummary?: string;
+  transcript?: string;
+  analyzedAt?: string;
+  analysis?: {
+    frameCount: number;
+    transcriptCharacters: number;
+    commentCount: number;
+    durationMs: number;
+    visionAnalyzed: boolean;
+    warnings: string[];
+  };
 };
 
 let articleTimer: NodeJS.Timeout | null = null;
@@ -566,6 +591,7 @@ let articleCycleRunning = false;
 const liveArticleChannels = new Set<string>();
 const liveArticleMetadata = new Map<string, KickChannelCheck>();
 const lastArticleMessageIds = new Map<string, string>();
+const liveArticleSessionIds = new Map<string, string>();
 
 function getArticleDirectory(): string {
   const directory = join(chatReceiver.getOutputDirectory() || getRecordingOutputDirectory(), "Articles");
@@ -573,7 +599,7 @@ function getArticleDirectory(): string {
   return directory;
 }
 
-function listSavedArticles(): SavedKickArticle[] {
+function readSavedArticles(): SavedKickArticle[] {
   const directory = getArticleDirectory();
   return readdirSync(directory)
     .filter(name => name.toLowerCase().endsWith(".json"))
@@ -586,8 +612,92 @@ function listSavedArticles(): SavedKickArticle[] {
       }
     })
     .filter((article): article is SavedKickArticle => article !== null)
-    .sort((a, b) => Date.parse(b.generatedAt) - Date.parse(a.generatedAt))
+    .sort((a, b) => Date.parse(b.generatedAt) - Date.parse(a.generatedAt));
+}
+
+function getArticleSessionKey(article: SavedKickArticle): string {
+  const startedAt = article.startedAt ? Date.parse(article.startedAt) : Number.NaN;
+  return Number.isFinite(startedAt) ? article.slug + "|" + startedAt : article.id;
+}
+
+function listSavedArticles(): SavedKickArticle[] {
+  const seenSessions = new Set<string>();
+  return readSavedArticles()
+    .filter(article => {
+      const key = getArticleSessionKey(article);
+      if (seenSessions.has(key)) return false;
+      seenSessions.add(key);
+      return true;
+    })
     .slice(0, 100);
+}
+
+function getArticleIdentity(
+  slug: string,
+  metadata: KickChannelCheck | undefined,
+  isFinal: boolean
+): { id: string; duplicateIds: string[] } {
+  const startedAt = metadata?.startedAt ? Date.parse(metadata.startedAt) : Number.NaN;
+  if (Number.isFinite(startedAt)) {
+    const matching = readSavedArticles().filter(article =>
+      article.slug === slug &&
+      article.startedAt !== null &&
+      Number.isFinite(Date.parse(article.startedAt)) &&
+      Date.parse(article.startedAt) === startedAt
+    );
+    const id = matching[0]?.id ?? `${slug}-${startedAt.toString(36)}`;
+    return { id, duplicateIds: matching.filter(article => article.id !== id).map(article => article.id) };
+  }
+
+  const isLiveSession = metadata?.isLive === true || recordingManager.isRecording(slug) || isFinal;
+  if (!isLiveSession) {
+    return { id: `${slug}-${Date.now().toString(36)}`, duplicateIds: [] };
+  }
+
+  let id = liveArticleSessionIds.get(slug);
+  if (!id) {
+    const recentUnfinished = readSavedArticles().find(article =>
+      article.slug === slug &&
+      article.startedAt === null &&
+      !article.isFinal &&
+      Date.now() - Date.parse(article.generatedAt) >= 0 &&
+      Date.now() - Date.parse(article.generatedAt) < 12 * 60 * 60 * 1000
+    );
+    id = recentUnfinished?.id ?? `${slug}-${Date.now().toString(36)}`;
+    liveArticleSessionIds.set(slug, id);
+  }
+  return { id, duplicateIds: [] };
+}
+
+function writeArticleAnalysisLog(entry: {
+  slug: string;
+  status: "saved" | "error";
+  articleId?: string;
+  commentCount?: number;
+  frameCount?: number;
+  transcriptCharacters?: number;
+  durationMs?: number;
+  visionAnalyzed?: boolean;
+  message?: string;
+  warnings?: string[];
+}): void {
+  if (!/^[a-zA-Z0-9_]{1,25}$/.test(entry.slug)) return;
+  try {
+    const directory = join(getArticleDirectory(), "AnalysisLogs");
+    mkdirSync(directory, { recursive: true });
+    const record = {
+      timestamp: new Date().toISOString(),
+      ...entry,
+      message: entry.message?.slice(0, 1200),
+      warnings: entry.warnings?.slice(0, 10).map(warning => warning.slice(0, 500))
+    };
+    appendFileSync(join(directory, entry.slug.toLowerCase() + ".jsonl"), JSON.stringify(record) + "\n", {
+      encoding: "utf8",
+      mode: 0o600
+    });
+  } catch (error) {
+    console.error("Failed to write AI article analysis log:", error);
+  }
 }
 
 async function createKickArticle(slugInput: unknown, metadata?: KickChannelCheck, isFinal = false): Promise<SavedKickArticle> {
@@ -595,7 +705,9 @@ async function createKickArticle(slugInput: unknown, metadata?: KickChannelCheck
     throw new Error("記事生成対象のチャンネル名が不正です。");
   }
   const slug = slugInput.toLowerCase();
-  const allMessages = chatReceiver.listMessages(slug, 5000, chatReceiver.getOutputDirectory() || getRecordingOutputDirectory());
+  const analysisStartedAt = Date.now();
+  const outputDirectory = chatReceiver.getOutputDirectory() || getRecordingOutputDirectory();
+  const allMessages = chatReceiver.listMessages(slug, 5000, outputDirectory);
   const streamStart = metadata?.startedAt ? Date.parse(metadata.startedAt) : Number.NaN;
   const messages = Number.isFinite(streamStart) && streamStart > Date.UTC(2000, 0, 1)
     ? allMessages.filter(message => {
@@ -603,7 +715,19 @@ async function createKickArticle(slugInput: unknown, metadata?: KickChannelCheck
         return !Number.isFinite(timestamp) || timestamp >= streamStart;
       })
     : allMessages;
-  if (messages.length === 0) throw new Error(`${slug} の今回の配信に該当する保存済みチャットがありません。`);
+
+  const state = readState();
+  const activeVideoPath = recordingManager.getActiveRecordingPath(slug);
+  const media = activeVideoPath
+    ? await analyzeLiveRecordingMedia({
+        slug,
+        videoPath: activeVideoPath,
+        outputDirectory: getArticleDirectory(),
+        tools: state.settings,
+        userDataDirectory: app.getPath("userData"),
+        resourcesDirectory: process.resourcesPath
+      })
+    : { analyzedAt: new Date().toISOString(), frameBase64s: [], transcript: "", warnings: [] as string[] };
 
   const ollamaStatus = await getOllamaStatus();
   if (!ollamaStatus.connected) {
@@ -612,7 +736,34 @@ async function createKickArticle(slugInput: unknown, metadata?: KickChannelCheck
   if (ollamaStatus.models.length === 0) {
     throw new Error("Ollamaにモデルがありません。PowerShellで ollama pull qwen2.5:3b を実行してください。");
   }
+
+  let visualSummary = "";
+  const visionModel = ollamaStatus.models.find(model => /^qwen2\.5vl(?::3b)?$/i.test(model.name));
+  if (media.frameBase64s.length > 0 && visionModel) {
+    try {
+      visualSummary = await describeKickFrame({
+        model: visionModel.name,
+        title: metadata?.streamTitle || slug,
+        imageBase64: media.frameBase64s
+      });
+    } catch (error) {
+      media.warnings.push("映像のAI解析に失敗しました：" + (error instanceof Error ? error.message : String(error)));
+    }
+  } else if (media.frameBase64s.length > 0 && !visionModel) {
+    media.warnings.push("映像フレームは取得しましたが、qwen2.5vl:3bが未導入のためAI解析をスキップしました。");
+  }
+
+  if (messages.length === 0 && !media.transcript && !visualSummary) {
+    const detail = media.warnings.length ? " " + media.warnings.join(" ") : "";
+    throw new Error(`${slug} の記事材料がありません。チャット受信または録画・メディア解析の設定を確認してください。${detail}`);
+  }
+
   const preferredModel = ollamaStatus.models.find(model => model.name === "qwen2.5:3b") ?? ollamaStatus.models[0];
+  const mediaSources = [
+    ...(messages.length ? ["Kickチャット"] : []),
+    ...(media.transcript ? ["音声文字起こし（Whisper.cpp）"] : []),
+    ...(visualSummary ? ["映像解析（Ollama Vision）"] : [])
+  ];
   const generated = await generateKickBroadcastArticle({
     model: preferredModel.name,
     title: metadata?.streamTitle || slug,
@@ -622,11 +773,23 @@ async function createKickArticle(slugInput: unknown, metadata?: KickChannelCheck
       user: message.user,
       text: message.text,
       timestamp: message.timestamp
-    }))
+    })),
+    audioTranscript: media.transcript,
+    visualSummary,
+    mediaSources
   });
 
   const generatedAt = new Date().toISOString();
-  const id = `${slug}-${generatedAt.replace(/[:.]/g, "-")}`;
+  const identity = getArticleIdentity(slug, metadata, isFinal);
+  const id = identity.id;
+  const diagnostics = {
+    frameCount: media.frameBase64s.length,
+    transcriptCharacters: media.transcript.length,
+    commentCount: messages.length,
+    durationMs: Date.now() - analysisStartedAt,
+    visionAnalyzed: Boolean(visualSummary),
+    warnings: media.warnings.slice(0, 10)
+  };
   const article: SavedKickArticle = {
     id,
     slug,
@@ -636,38 +799,101 @@ async function createKickArticle(slugInput: unknown, metadata?: KickChannelCheck
     generatedAt,
     commentCount: messages.length,
     isFinal,
+    mediaSources,
+    visualSummary,
+    transcript: media.transcript,
+    analyzedAt: media.analyzedAt,
+    analysis: diagnostics,
     ...generated
   };
   writeFileSync(join(getArticleDirectory(), `${id}.json`), JSON.stringify(article, null, 2), {
     encoding: "utf8",
     mode: 0o600
   });
+  for (const duplicateId of identity.duplicateIds) {
+    try {
+      const duplicatePath = join(getArticleDirectory(), `${duplicateId}.json`);
+      if (existsSync(duplicatePath)) unlinkSync(duplicatePath);
+    } catch (error) {
+      console.warn("Failed to remove superseded live article snapshot:", error);
+    }
+  }
+  writeArticleAnalysisLog({
+    slug,
+    status: "saved",
+    articleId: id,
+    commentCount: diagnostics.commentCount,
+    frameCount: diagnostics.frameCount,
+    transcriptCharacters: diagnostics.transcriptCharacters,
+    durationMs: diagnostics.durationMs,
+    visionAnalyzed: diagnostics.visionAnalyzed,
+    warnings: diagnostics.warnings
+  });
+  if (isFinal) liveArticleSessionIds.delete(slug);
   const lastMessage = messages[messages.length - 1];
   if (lastMessage) lastArticleMessageIds.set(slug, lastMessage.messageId);
   mainWindow?.webContents.send("articles:new", article);
+  if (media.warnings.length) {
+    mainWindow?.webContents.send("articles:status", {
+      slug,
+      message: "記事を保存しました。メディア解析の注意： " + media.warnings.join(" ")
+    });
+  }
   return article;
 }
-
 async function runLiveArticleCycle(): Promise<void> {
-  if (articleCycleRunning || !chatReceiver.getStatus().serverRunning) return;
+  if (articleCycleRunning) return;
   articleCycleRunning = true;
   try {
     const state = readState();
     if (!state.settings.autoGenerateArticles || state.channels.length === 0) return;
-    const results = await checkKickChannels(state.channels.map(channel => channel.name));
-    for (const result of results) {
+    const activeRecordingChannels = state.channels.filter(channel => recordingManager.isRecording(channel.name));
+    let results: KickChannelCheck[];
+    try {
+      results = await checkKickChannels(state.channels.map(channel => channel.name));
+    } catch (error) {
+      if (activeRecordingChannels.length === 0) throw error;
+      // 録画プロセスが継続している場合は、その状態を生放送中の根拠として使用する。
+      // Kick APIが一時的に停止していても、ローカル録画の映像・音声解析を止めない。
+      results = activeRecordingChannels.map(channel => {
+        const slug = channel.name.toLowerCase();
+        return liveArticleMetadata.get(slug) ?? {
+          slug,
+          broadcasterUserId: null,
+          found: true,
+          isLive: true,
+          streamTitle: channel.name,
+          viewerCount: 0,
+          startedAt: null
+        };
+      });
+      mainWindow?.webContents.send("articles:status", {
+        slug: "",
+        message: "Kick APIに接続できないため、録画中チャンネルはローカル録画の状態でAI記事を継続します。"
+      });
+    }
+    const liveResults = results.map(result =>
+      recordingManager.isRecording(result.slug) && !result.isLive
+        ? { ...result, found: true, isLive: true }
+        : result
+    );
+    for (const result of liveResults) {
       if (result.isLive) {
         liveArticleChannels.add(result.slug);
         liveArticleMetadata.set(result.slug, result);
         const messages = chatReceiver.listMessages(result.slug, 5000, chatReceiver.getOutputDirectory() || getRecordingOutputDirectory());
         const lastMessage = messages[messages.length - 1];
-        if (!lastMessage || lastArticleMessageIds.get(result.slug) === lastMessage.messageId) continue;
+        const activeVideoPath = recordingManager.getActiveRecordingPath(result.slug);
+        const commentsUnchanged = !lastMessage || lastArticleMessageIds.get(result.slug) === lastMessage.messageId;
+        if (commentsUnchanged && !activeVideoPath) continue;
         try {
           await createKickArticle(result.slug, result, false);
         } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          writeArticleAnalysisLog({ slug: result.slug, status: "error", message });
           mainWindow?.webContents.send("articles:status", {
             slug: result.slug,
-            message: error instanceof Error ? error.message : String(error)
+            message
           });
         }
       } else if (result.found && liveArticleChannels.has(result.slug)) {
@@ -677,9 +903,11 @@ async function runLiveArticleCycle(): Promise<void> {
         try {
           await createKickArticle(result.slug, finalMetadata, true);
         } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          writeArticleAnalysisLog({ slug: result.slug, status: "error", message });
           mainWindow?.webContents.send("articles:status", {
             slug: result.slug,
-            message: error instanceof Error ? error.message : String(error)
+            message
           });
         }
       }
@@ -691,13 +919,18 @@ async function runLiveArticleCycle(): Promise<void> {
     });
   } finally {
     articleCycleRunning = false;
+    if (!chatReceiver.getStatus().serverRunning &&
+        !recordingManager.hasActiveRecordings() &&
+        liveArticleChannels.size === 0) {
+      stopLiveArticleTimer();
+    }
   }
 }
 
 function startLiveArticleTimer(): void {
   if (articleTimer) clearInterval(articleTimer);
   void runLiveArticleCycle();
-  articleTimer = setInterval(() => { void runLiveArticleCycle(); }, 3 * 60 * 1000);
+  articleTimer = setInterval(() => { void runLiveArticleCycle(); }, 60 * 1000);
   articleTimer.unref();
 }
 
@@ -765,7 +998,10 @@ function normalizeState(input: unknown): AppState {
         ? Math.max(30, Math.min(3600, Math.round(settings.monitorIntervalSeconds)))
         : 60,
       notifyOnLive: settings.notifyOnLive !== false,
-      autoGenerateArticles: settings.autoGenerateArticles !== false
+      autoGenerateArticles: settings.autoGenerateArticles !== false,
+      ffmpegPath: typeof settings.ffmpegPath === "string" ? settings.ffmpegPath.slice(0, 4096) : "",
+      whisperCliPath: typeof settings.whisperCliPath === "string" ? settings.whisperCliPath.slice(0, 4096) : "",
+      whisperModelPath: typeof settings.whisperModelPath === "string" ? settings.whisperModelPath.slice(0, 4096) : ""
     }
   };
 }
@@ -969,7 +1205,14 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("app:save-state", (event, state: unknown) => {
     assertTrustedSender(event);
-    return writeState(state);
+    const result = writeState(state);
+    if (readState().settings.autoGenerateArticles &&
+        (recordingManager.hasActiveRecordings() || chatReceiver.getStatus().serverRunning)) {
+      startLiveArticleTimer();
+    } else if (!readState().settings.autoGenerateArticles) {
+      stopLiveArticleTimer();
+    }
+    return result;
   });
 
   ipcMain.handle("app:select-output-directory", async event => {
@@ -985,6 +1228,28 @@ function registerIpcHandlers(): void {
   ipcMain.handle("ollama:get-status", async event => {
     assertTrustedSender(event);
     return getOllamaStatus();
+  });
+
+  ipcMain.handle("media:get-status", event => {
+    assertTrustedSender(event);
+    return getMediaToolStatus(readState().settings, app.getPath("userData"), process.resourcesPath);
+  });
+
+  ipcMain.handle("media:select-tool", async (event, input: unknown) => {
+    assertTrustedSender(event);
+    if (!mainWindow) return null;
+    if (input !== "ffmpeg" && input !== "whisperCli" && input !== "whisperModel") {
+      throw new Error("選択するメディア解析ツールの種類が不正です。");
+    }
+    const isModel = input === "whisperModel";
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: isModel ? "Whisper.cppの日本語モデルを選択" : (input === "ffmpeg" ? "FFmpegを選択" : "Whisper.cpp CLIを選択"),
+      properties: ["openFile"],
+      filters: isModel
+        ? [{ name: "Whisperモデル", extensions: ["bin"] }, { name: "すべてのファイル", extensions: ["*"] }]
+        : [{ name: "Windows実行ファイル", extensions: ["exe"] }, { name: "すべてのファイル", extensions: ["*"] }]
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
   });
 
   ipcMain.handle("ollama:generate-article", async (event, input: unknown) => {
@@ -1083,14 +1348,17 @@ function registerIpcHandlers(): void {
     assertTrustedSender(event);
     await chatReceiver.startServer(getRecordingOutputDirectory());
     const status = await chatReceiver.startTunnel(app.getPath("userData"));
-    startLiveArticleTimer();
+    if (readState().settings.autoGenerateArticles) startLiveArticleTimer();
     return status;
   });
 
   ipcMain.handle("chat:stop", event => {
     assertTrustedSender(event);
-    stopLiveArticleTimer();
-    return chatReceiver.stop();
+    const status = chatReceiver.stop();
+    if (!recordingManager.hasActiveRecordings() && liveArticleChannels.size === 0) {
+      stopLiveArticleTimer();
+    }
+    return status;
   });
 
   ipcMain.handle("chat:subscribe", async (event, slugs: unknown) => {
@@ -1202,8 +1470,19 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("articles:generate", async (event, slug: unknown) => {
     assertTrustedSender(event);
-    const results = await checkKickChannels([slug]);
-    return createKickArticle(slug, results[0], false);
+    try {
+      const results = await checkKickChannels([slug]);
+      return await createKickArticle(slug, results[0], false);
+    } catch (error) {
+      if (typeof slug === "string" && /^[a-zA-Z0-9_]{1,25}$/.test(slug)) {
+        writeArticleAnalysisLog({
+          slug,
+          status: "error",
+          message: error instanceof Error ? error.message : String(error)
+        });
+      }
+      throw error;
+    }
   });
 
   ipcMain.handle("recording:start", (event, slug: unknown) => {

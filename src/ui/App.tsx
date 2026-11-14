@@ -4,7 +4,8 @@ type OllamaStatus = { connected: boolean; baseUrl: string; models: Array<{ name:
 type ChatStatus = { serverRunning: boolean; tunnelRunning: boolean; localUrl: string; publicUrl: string; receivedCount: number; lastMessageAt: string | null; message: string };
 type ChatSubscriptionStatus = { slug: string; broadcasterUserId: number | null; subscribed: boolean; subscriptionId: string | null; createdAt: string | null };
 type KickRecorderSavedChatMessage = { messageId: string; slug: string; broadcaster: string; user: string; text: string; timestamp: string; receivedAt: string; badges: string[]; emotes: Array<{ emoteId: string; start: number; end: number }> };
-type KickRecorderArticle = { id: string; slug: string; broadcaster: string; streamTitle: string; startedAt: string | null; generatedAt: string; commentCount: number; isFinal: boolean; title: string; summary: string; paragraphs: string[]; topics: string[]; provider: string; model: string };
+type KickRecorderArticle = { id: string; slug: string; broadcaster: string; streamTitle: string; startedAt: string | null; generatedAt: string; commentCount: number; isFinal: boolean; title: string; summary: string; paragraphs: string[]; topics: string[]; provider: string; model: string; mediaSources?: string[]; visualSummary?: string; transcript?: string; analyzedAt?: string; analysis?: { frameCount: number; transcriptCharacters: number; commentCount: number; durationMs: number; visionAnalyzed: boolean; warnings: string[] } };
+type MediaToolStatus = { ffmpegAvailable: boolean; ffmpegPath: string; whisperAvailable: boolean; whisperCliPath: string; whisperModelAvailable: boolean; whisperModelPath: string; visionModelRequired: string; setupNotes: string[] };
 
 type Channel = {
   id: number;
@@ -23,6 +24,9 @@ type AppSettings = {
   monitorIntervalSeconds: number;
   notifyOnLive: boolean;
   autoGenerateArticles: boolean;
+  ffmpegPath: string;
+  whisperCliPath: string;
+  whisperModelPath: string;
 };
 
 type PersistedState = {
@@ -64,7 +68,7 @@ type RecordingEvent = {
   endedAt?: string;
 };
 
-const APP_VERSION = "0.1.0-beta.15";
+const APP_VERSION = "0.1.0-beta.19";
 const STORAGE_KEY = "kick-recorder-state-v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -74,7 +78,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   autoMonitorEnabled: true,
   monitorIntervalSeconds: 60,
   notifyOnLive: true,
-  autoGenerateArticles: true
+  autoGenerateArticles: true,
+  ffmpegPath: "",
+  whisperCliPath: "",
+  whisperModelPath: ""
 };
 
 function normalizeState(value: unknown): PersistedState {
@@ -113,7 +120,10 @@ function normalizeState(value: unknown): PersistedState {
         ? Math.max(30, Math.min(3600, Math.round(settings.monitorIntervalSeconds)))
         : 60,
       notifyOnLive: settings.notifyOnLive !== false,
-      autoGenerateArticles: settings.autoGenerateArticles !== false
+      autoGenerateArticles: settings.autoGenerateArticles !== false,
+      ffmpegPath: typeof settings.ffmpegPath === "string" ? settings.ffmpegPath : "",
+      whisperCliPath: typeof settings.whisperCliPath === "string" ? settings.whisperCliPath : "",
+      whisperModelPath: typeof settings.whisperModelPath === "string" ? settings.whisperModelPath : ""
     }
   };
 }
@@ -160,6 +170,11 @@ export default function App() {
   const [chatViewMessage, setChatViewMessage] = useState("");
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus>({ connected: false, baseUrl: "http://127.0.0.1:11434", models: [], message: "未確認" });
   const [ollamaChecking, setOllamaChecking] = useState(false);
+  const [mediaToolStatus, setMediaToolStatus] = useState<MediaToolStatus>({
+    ffmpegAvailable: false, ffmpegPath: "", whisperAvailable: false, whisperCliPath: "",
+    whisperModelAvailable: false, whisperModelPath: "", visionModelRequired: "qwen2.5vl:3b",
+    setupNotes: ["FFmpeg・Whisper.cppのパスを設定してください。"]
+  });
   const [channelChecks, setChannelChecks] = useState<Record<string, ChannelCheck>>({});
   const [isCheckingChannels, setIsCheckingChannels] = useState(false);
   const [lastChannelCheck, setLastChannelCheck] = useState("");
@@ -211,6 +226,7 @@ export default function App() {
     if (window.kickRecorder) {
       setIsDesktop(true);
       void window.kickRecorder.getOllamaStatus().then(setOllamaStatus).catch(() => undefined);
+      void window.kickRecorder.getMediaToolStatus().then(setMediaToolStatus).catch(() => undefined);
       unsubscribeUpdate = window.kickRecorder.onUpdateStatus(status => {
         if (active) setUpdateStatus(status);
       });
@@ -544,6 +560,29 @@ export default function App() {
       setOllamaStatus({ connected: false, baseUrl: "http://127.0.0.1:11434", models: [], message: error instanceof Error ? error.message : "接続に失敗しました。" });
     } finally {
       setOllamaChecking(false);
+    }
+  }
+
+  async function chooseMediaTool(kind: "ffmpeg" | "whisperCli" | "whisperModel") {
+    if (!window.kickRecorder) return;
+    try {
+      const selectedPath = await window.kickRecorder.selectMediaTool(kind);
+      if (!selectedPath) return;
+      setSettings(previous => ({
+        ...previous,
+        ...(kind === "ffmpeg" ? { ffmpegPath: selectedPath } :
+          kind === "whisperCli" ? { whisperCliPath: selectedPath } : { whisperModelPath: selectedPath })
+      }));
+      const pathSettings = {
+        ...settings,
+        ...(kind === "ffmpeg" ? { ffmpegPath: selectedPath } :
+          kind === "whisperCli" ? { whisperCliPath: selectedPath } : { whisperModelPath: selectedPath })
+      };
+      // The IPC status reads persisted state; save the selected path before refreshing it.
+      await window.kickRecorder.saveState({ channels, settings: pathSettings });
+      setMediaToolStatus(await window.kickRecorder.getMediaToolStatus());
+    } catch (error) {
+      setArticleMessage(error instanceof Error ? error.message : "メディア解析ツールの設定に失敗しました。");
     }
   }
 
@@ -933,11 +972,11 @@ export default function App() {
 
       {tab === "articles" && <section className="panel">
         <div className="panel-heading">
-          <div><h2>AI配信記事</h2><p>保存されたKickチャットをOllamaで日本語記事にします</p></div>
+          <div><h2>AI配信記事</h2><p>配信映像・音声・KickコメントをPC内AIでまとめて記事化</p></div>
           <span className={ollamaStatus.connected ? "api-state connected" : "api-state"}>{ollamaStatus.connected ? "Ollama接続済み" : "Ollama未接続"}</span>
         </div>
         <div className="article-toolbar">
-          <span className="settings-help">保存した視聴者コメントとKickの番組情報を元に生成します。映像・音声の内容を直接解析する機能ではありません。ライブ受信中は約3分ごとに新着コメントから記事スナップショットを保存し、配信終了検出時には最終記事を作成します。</span>
+          <span className="settings-help">録画中の映像フレーム・音声の文字起こし・Kick公式WebhookコメントをPC内で統合します。録画中はチャット受信サーバーを起動していなくても約60秒ごとに映像・音声を解析して記事を更新します。チャット受信が有効なら視聴者コメントも統合し、配信終了時に最終記事を作成します。</span>
           <div className="update-actions">
             {channels.map(channel => <button key={channel.id} className="small-action" onClick={() => void generateArticleNow(channel.name)} disabled={!isDesktop || !ollamaStatus.connected || Boolean(articleBusySlug)}>
               {articleBusySlug === channel.name ? "生成中..." : `${channel.name} の記事を生成`}
@@ -956,6 +995,16 @@ export default function App() {
                     <span className="api-state connected">{article.isFinal ? "最終記事" : "ライブ記事"}</span>
                   </div>
                   {article.summary && <p className="article-summary">{article.summary}</p>}
+                  {article.mediaSources && article.mediaSources.length > 0 && <div className="article-topics">{article.mediaSources.map(source => <span key={source}>{source}</span>)}</div>}
+                  {article.visualSummary && <p className="article-summary">映像から確認できた内容：{article.visualSummary}</p>}
+                  {article.transcript && <details className="article-transcript"><summary>音声文字起こしを表示</summary><p>{article.transcript}</p></details>}
+                  {article.analysis && <details className="article-transcript">
+                    <summary>解析ログ：映像 {article.analysis.frameCount}枚・音声 {article.analysis.transcriptCharacters.toLocaleString("ja-JP")}文字・コメント {article.analysis.commentCount.toLocaleString("ja-JP")}件</summary>
+                    <p>解析時間：約{(article.analysis.durationMs / 1000).toFixed(1)}秒
+映像AI：{article.analysis.visionAnalyzed ? "解析済み" : "未解析"}
+保存ログ：Articles/AnalysisLogs/{article.slug}.jsonl
+{article.analysis.warnings.length > 0 ? "注意事項：\n" + article.analysis.warnings.join("\n") : "注意事項：なし"}</p>
+                  </details>}
                   <div className="article-body">{article.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
                   {article.topics.length > 0 && <div className="article-topics">{article.topics.map(topic => <span key={topic}>{topic}</span>)}</div>}
                   <small className="article-meta">生成：{article.provider} / {article.model}</small>
@@ -978,10 +1027,36 @@ export default function App() {
           {ollamaStatus.connected
             ? <p className="settings-help">検出したモデル：{ollamaStatus.models.length ? ollamaStatus.models.map(model => model.name).join("、") : "なし"}</p>
             : <div className="notice">{ollamaStatus.message || "Ollamaを起動してから接続確認してください。"}<br />モデルの導入コマンド：ollama pull qwen2.5:3b</div>}
-          <div className="notice">配信記事タブから手動生成できるほか、チャット受信中は約3分ごとに新しいコメントからライブ記事を自動保存します。配信終了を検出した際には最終記事を作成します。Ollamaとモデルが必要です。</div>
+          <div className="notice">配信中は録画開始を検知して約60秒ごとのAI記事生成を自動開始します。チャット受信サーバーは映像・音声の記事生成には不要で、起動していればコメントも記事へ追加します。映像・音声解析には下記ツールが必要です。</div>
+        </div>
+
+        <div className="settings-subsection">
+          <div className="settings-subheading">
+            <h3>ライブ映像・音声のローカル解析</h3>
+            <span className={mediaToolStatus.ffmpegAvailable && mediaToolStatus.whisperAvailable && mediaToolStatus.whisperModelAvailable && ollamaStatus.models.some(model => model.name.toLowerCase().startsWith("qwen2.5vl")) && ollamaStatus.models.some(model => model.name.toLowerCase().startsWith("qwen2.5:3b")) ? "api-state connected" : "api-state"}>
+              {mediaToolStatus.ffmpegAvailable && mediaToolStatus.whisperAvailable && mediaToolStatus.whisperModelAvailable && ollamaStatus.models.some(model => model.name.toLowerCase().startsWith("qwen2.5vl")) && ollamaStatus.models.some(model => model.name.toLowerCase().startsWith("qwen2.5:3b")) ? "音声・映像ツール準備完了" : "セットアップが必要"}
+            </span>
+          </div>
+          <p className="settings-help">FFmpegで録画中ファイルから時系列の映像フレームを最大3枚と直近約60秒の音声を抽出し、Whisper.cppで文字起こしします。映像はOllamaの qwen2.5vl:3b、記事本文は qwen2.5:3b で解析します。処理はPC内で完結します。</p>
+          <div className="setting-row">
+            <div><strong>FFmpeg</strong><small>{mediaToolStatus.ffmpegAvailable ? mediaToolStatus.ffmpegPath : "未設定：ffmpeg.exeを選択してください"}</small></div>
+            <button className="small-action" onClick={() => void chooseMediaTool("ffmpeg")} disabled={!isDesktop}>ffmpeg.exeを選択</button>
+          </div>
+          <div className="setting-row">
+            <div><strong>Whisper.cpp CLI</strong><small>{mediaToolStatus.whisperAvailable ? mediaToolStatus.whisperCliPath : "未設定：whisper-cli.exeを選択してください"}</small></div>
+            <button className="small-action" onClick={() => void chooseMediaTool("whisperCli")} disabled={!isDesktop}>whisper-cli.exeを選択</button>
+          </div>
+          <div className="setting-row">
+            <div><strong>日本語音声モデル</strong><small>{mediaToolStatus.whisperModelAvailable ? mediaToolStatus.whisperModelPath : "未設定：ggml-base.binを選択してください"}</small></div>
+            <button className="small-action" onClick={() => void chooseMediaTool("whisperModel")} disabled={!isDesktop}>ggml-base.binを選択</button>
+          </div>
+          <div className="notice">
+            無料セットアップ：Ollamaで <code>ollama pull qwen2.5vl:3b</code> を実行。FFmpegはWindows用ビルドを取得し、Whisper.cppは公式Windows x64バイナリを用意してください。音声モデルの <code>ggml-base.bin</code> も別途配置します。配信中の映像・音声解析には録画開始が必要です。
+          </div>
+          {mediaToolStatus.setupNotes.map(note => <p className="settings-help" key={note}>{note}</p>)}
         </div>
         <div className="setting-row">
-          <div><strong>配信中の記事を自動生成</strong><small>チャット受信中、約3分ごとに新しいコメントから記事を生成し、配信終了時に最終記事を保存します</small></div>
+          <div><strong>配信中の記事を自動生成</strong><small>録画中は約60秒ごとに映像・音声を使って記事を更新します。コメント受信は任意で、受信中ならコメントも統合します</small></div>
           <label className="setting-control"><input type="checkbox" checked={settings.autoGenerateArticles} onChange={e => setSettings(prev => ({ ...prev, autoGenerateArticles: e.target.checked }))} /><span>{settings.autoGenerateArticles ? "有効" : "無効"}</span></label>
         </div>
         <div className="setting-row">

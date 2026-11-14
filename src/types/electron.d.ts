@@ -19,6 +19,9 @@ type KickRecorderAppState = {
     monitorIntervalSeconds: number;
     notifyOnLive: boolean;
     autoGenerateArticles: boolean;
+    ffmpegPath: string;
+    whisperCliPath: string;
+    whisperModelPath: string;
   };
 };
 
@@ -74,7 +77,22 @@ type KickRecorderChatStatus = { serverRunning: boolean; tunnelRunning: boolean; 
 type KickRecorderChatSubscriptionStatus = { slug: string; broadcasterUserId: number | null; subscribed: boolean; subscriptionId: string | null; createdAt: string | null };
 type KickRecorderSavedChatMessage = { messageId: string; slug: string; broadcaster: string; user: string; text: string; timestamp: string; receivedAt: string; badges: string[]; emotes: Array<{ emoteId: string; start: number; end: number }> };
 type KickRecorderChatEvent = { type: "status"; status: KickRecorderChatStatus } | { type: "message"; message: KickRecorderSavedChatMessage };
-type KickRecorderArticle = { id: string; slug: string; broadcaster: string; streamTitle: string; startedAt: string | null; generatedAt: string; commentCount: number; isFinal: boolean; title: string; summary: string; paragraphs: string[]; topics: string[]; provider: string; model: string };
+type KickRecorderArticle = {
+  id: string; slug: string; broadcaster: string; streamTitle: string; startedAt: string | null;
+  generatedAt: string; commentCount: number; isFinal: boolean; title: string; summary: string;
+  paragraphs: string[]; topics: string[]; provider: string; model: string;
+  mediaSources?: string[]; visualSummary?: string; transcript?: string; analyzedAt?: string;
+  analysis?: {
+    frameCount: number; transcriptCharacters: number; commentCount: number;
+    durationMs: number; visionAnalyzed: boolean; warnings: string[];
+  };
+};
+type KickRecorderMediaToolStatus = {
+  ffmpegAvailable: boolean; ffmpegPath: string;
+  whisperAvailable: boolean; whisperCliPath: string;
+  whisperModelAvailable: boolean; whisperModelPath: string;
+  visionModelRequired: string; setupNotes: string[];
+};
 
 declare global {
   interface Window {
@@ -85,6 +103,8 @@ declare global {
       notifyLive: (slug: string) => Promise<{ ok: boolean }>;
       getAppInfo: () => Promise<KickRecorderAppInfo>;
       getOllamaStatus: () => Promise<{ connected: boolean; baseUrl: string; models: Array<{ name: string; size: number }>; message?: string }>;
+      getMediaToolStatus: () => Promise<KickRecorderMediaToolStatus>;
+      selectMediaTool: (kind: "ffmpeg" | "whisperCli" | "whisperModel") => Promise<string | null>;
       generateOllamaArticle: (input: { title?: string; broadcaster?: string; startedAt?: string; comments: Array<{ user?: string; text: string; timestamp?: string }> }) => Promise<{ title: string; summary: string; paragraphs: string[]; topics: string[]; provider: string; model: string }>;
       getKickCredentialsStatus: () => Promise<KickRecorderCredentialsStatus>;
       saveKickCredentials: (credentials: { clientId: string; clientSecret: string }) => Promise<{ ok: boolean; clientId: string }>;
