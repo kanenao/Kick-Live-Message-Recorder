@@ -9,7 +9,6 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
-  readFileSync,
   rmSync,
   statSync,
   writeFileSync
@@ -19,6 +18,7 @@ import { tmpdir } from "node:os";
 import { createInterface } from "node:readline";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { isPathInsideDirectory } from "./recording";
+import { resolveVideoTimelineAnchor, type VideoTimelineSyncSource } from "./recording-timeline";
 
 const execFileAsync = promisify(execFile);
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mkv", ".ts", ".webm", ".m4v", ".mov"]);
@@ -371,76 +371,10 @@ export type CommentVideoPreviewResult = {
   totalComments: number;
   malformedLines: number;
   outsideVideoCount: number;
-  syncSource: "recording-metadata" | "filename" | "file-mtime";
+  syncSource: VideoTimelineSyncSource;
   estimatedVideoStartAt: string;
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: ResolvedCommentPosition }>;
 };
-
-type VideoTimelineAnchor = {
-  startMs: number;
-  source: CommentVideoPreviewResult["syncSource"];
-};
-
-function resolveVideoTimelineAnchor(
-  videoPath: string,
-  outputDirectory: string,
-  videoModifiedAtMs: number,
-  durationSeconds: number
-): VideoTimelineAnchor {
-  const videoBase = basename(videoPath, extname(videoPath));
-  const metadataPath = join(resolve(outputDirectory), "RecordingMetadata", videoBase + ".json");
-  try {
-    if (existsSync(metadataPath)) {
-      const metadataStats = lstatSync(metadataPath);
-      if (metadataStats.isFile() && !metadataStats.isSymbolicLink()) {
-        const metadata = JSON.parse(readFileSync(metadataPath, "utf8")) as Record<string, unknown>;
-        const metadataStartMs = typeof metadata.recordingStartedAtEpochMs === "number" &&
-          Number.isFinite(metadata.recordingStartedAtEpochMs)
-          ? metadata.recordingStartedAtEpochMs
-          : typeof metadata.recordingStartedAt === "string"
-            ? Date.parse(metadata.recordingStartedAt)
-            : Number.NaN;
-        if (
-          metadata.schemaVersion === 1 &&
-          metadata.recordingKind === "LIVE" &&
-          metadata.filePrefix === videoBase &&
-          Number.isFinite(metadataStartMs)
-        ) {
-          return { startMs: metadataStartMs, source: "recording-metadata" };
-        }
-      }
-    }
-  } catch {
-    // 古い・破損したメタデータは無視し、従来の時刻推定へフォールバックする。
-  }
-
-  const filenameTimestamp = videoBase.match(/_(\d{8})_(\d{6})(?:_retry\d+)?$/);
-  const filenameStartMs = filenameTimestamp
-    ? (() => {
-        const stamp = filenameTimestamp[1] + filenameTimestamp[2];
-        const year = Number(stamp.slice(0, 4));
-        const month = Number(stamp.slice(4, 6)) - 1;
-        const day = Number(stamp.slice(6, 8));
-        const hour = Number(stamp.slice(8, 10));
-        const minute = Number(stamp.slice(10, 12));
-        const second = Number(stamp.slice(12, 14));
-        const parsed = new Date(year, month, day, hour, minute, second);
-        return parsed.getFullYear() === year && parsed.getMonth() === month &&
-          parsed.getDate() === day && parsed.getHours() === hour &&
-          parsed.getMinutes() === minute && parsed.getSeconds() === second
-          ? parsed.getTime()
-          : Number.NaN;
-      })()
-    : Number.NaN;
-
-  if (Number.isFinite(filenameStartMs)) {
-    return { startMs: filenameStartMs, source: "filename" };
-  }
-  return {
-    startMs: videoModifiedAtMs - durationSeconds * 1000,
-    source: "file-mtime"
-  };
-}
 
 /**
  * 選択された録画・コメントログを読み取り、実データを使った生成前プレビューを返す。
@@ -496,7 +430,7 @@ export async function previewCommentVideo(
   const ffprobePath = findTool(process.platform === "win32" ? "ffprobe.exe" : "ffprobe");
   const info = await probeVideo(ffprobePath, videoPath);
   const videoStats = statSync(videoPath);
-  const timelineAnchor = resolveVideoTimelineAnchor(videoPath, root, videoStats.mtimeMs, info.duration);
+  const timelineAnchor = resolveVideoTimelineAnchor(videoPath, root, videoStats.mtimeMs, info.duration, basename(channelDirectory));
   const estimatedVideoStartMs = timelineAnchor.startMs;
   const delaySeconds = boundedNumber(values.delaySeconds, 0, -300, 300);
   const previewCandidates: Array<{ seconds: number; content: string; username: string; color: string; position?: ResolvedCommentPosition }> = [];
@@ -718,8 +652,9 @@ export class KickCommentVideoGenerator {
       const videoStats = statSync(options.videoPath);
       // 新しいLIVE録画は録画プロセス起動時刻のサイドカーを優先し、古い動画は従来方式へ戻す。
       // VODコメントは取得時に保存したtimeInSecondsを優先する。
-      const outputRoot = dirname(dirname(dirname(options.chatPaths[0])));
-      const timelineAnchor = resolveVideoTimelineAnchor(options.videoPath, outputRoot, videoStats.mtimeMs, info.duration);
+      const channelDirectory = dirname(options.chatPaths[0]);
+      const outputRoot = dirname(dirname(channelDirectory));
+      const timelineAnchor = resolveVideoTimelineAnchor(options.videoPath, outputRoot, videoStats.mtimeMs, info.duration, basename(channelDirectory));
       const estimatedVideoStartMs = timelineAnchor.startMs;
       const comments: ParsedComment[] = [];
       let readCount = 0;
