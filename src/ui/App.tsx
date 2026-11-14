@@ -108,6 +108,20 @@ type RecordingEvent = {
   isVod?: boolean;
 };
 type CommentLogFile = { path: string; name: string; channelSlug: string; kind: "LIVE" | "VOD"; size: number; modifiedAt: string };
+type LibraryCommentMessage = {
+  eventId: string;
+  senderUsername: string;
+  content: string;
+  createdAt: string;
+  usernameColor: string | null;
+};
+type RecordingLibraryChannel = {
+  slug: string;
+  displayName: string;
+  videos: RecordingFile[];
+  logs: CommentLogFile[];
+  latestAt: string;
+};
 type StreamArticle = {
   id: string; slug: string; displayName: string; headline: string; streamTitle?: string; category: string; startedAt: string;
   durationSeconds: number; commentCount: number; uniqueCommenters: number; keywords: string[];
@@ -600,6 +614,15 @@ export default function App() {
   const [deletingRecordingPath, setDeletingRecordingPath] = useState<string | null>(null);
   const [recordingMessage, setRecordingMessage] = useState("");
   const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
+  const [librarySearch, setLibrarySearch] = useState("");
+  const [libraryTypeFilter, setLibraryTypeFilter] = useState<"all" | "videos" | "comments">("all");
+  const [isLoadingLibraryLogs, setIsLoadingLibraryLogs] = useState(false);
+  const [expandedLibraryVideosChannel, setExpandedLibraryVideosChannel] = useState<string | null>(null);
+  const [libraryCommentsChannel, setLibraryCommentsChannel] = useState<string | null>(null);
+  const [libraryComments, setLibraryComments] = useState<LibraryCommentMessage[]>([]);
+  const [isLoadingLibraryComments, setIsLoadingLibraryComments] = useState(false);
+  const [libraryCommentsError, setLibraryCommentsError] = useState("");
+  const libraryCommentRequestRef = useRef(0);
   const [commentLogFiles, setCommentLogFiles] = useState<CommentLogFile[]>([]);
   const [selectedCommentVideoPath, setSelectedCommentVideoPath] = useState("");
   const [selectedCommentLogPaths, setSelectedCommentLogPaths] = useState<string[]>([]);
@@ -682,6 +705,64 @@ export default function App() {
     }
     return [...unique.values()];
   }, [channels, recordingOnlyChannels]);
+  const recordingLibraryChannels = useMemo<RecordingLibraryChannel[]>(() => {
+    const grouped = new Map<string, { slug: string; videos: RecordingFile[]; logs: CommentLogFile[] }>();
+    const getGroup = (rawSlug: string) => {
+      const slug = rawSlug.trim().toLowerCase();
+      if (!/^[a-zA-Z0-9_-]{1,40}$/.test(slug)) return null;
+      let group = grouped.get(slug);
+      if (!group) {
+        group = { slug, videos: [], logs: [] };
+        grouped.set(slug, group);
+      }
+      return group;
+    };
+
+    for (const log of commentLogFiles) {
+      const group = getGroup(log.channelSlug);
+      if (group) group.logs.push(log);
+    }
+    for (const file of recordingFiles) {
+      const baseName = file.name.replace(/\.[^.]+$/, "");
+      const match = baseName.match(/^([a-zA-Z0-9_-]+?)(?:_VOD)?_\d{8}_\d{6}(?:_retry\d+)?(?:_comments)?$/i);
+      const fallback = match ? null : baseName.match(/^([a-zA-Z0-9_-]{1,40})$/);
+      const slug = match?.[1] ?? fallback?.[1];
+      if (!slug) continue;
+      const group = getGroup(slug);
+      if (group) group.videos.push(file);
+    }
+
+    return [...grouped.values()].map(group => {
+      const knownChannel = [...channels, ...recordingOnlyChannels]
+        .find(channel => channel.name.toLowerCase() === group.slug);
+      const timestamps = [...group.videos, ...group.logs]
+        .map(item => Date.parse(item.modifiedAt))
+        .filter(value => Number.isFinite(value));
+      return {
+        ...group,
+        displayName: channelChecks[group.slug]?.displayName || knownChannel?.name || group.slug,
+        videos: [...group.videos].sort((a, b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt)),
+        logs: [...group.logs].sort((a, b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt)),
+        latestAt: timestamps.length ? new Date(Math.max(...timestamps)).toISOString() : ""
+      };
+    }).sort((a, b) => Date.parse(b.latestAt) - Date.parse(a.latestAt));
+  }, [recordingFiles, commentLogFiles, channels, recordingOnlyChannels, channelChecks]);
+
+  const filteredRecordingLibraryChannels = useMemo(() => {
+    const query = librarySearch.trim().toLocaleLowerCase("ja-JP");
+    return recordingLibraryChannels.filter(group => {
+      if (libraryTypeFilter === "videos" && group.videos.length === 0) return false;
+      if (libraryTypeFilter === "comments" && group.logs.length === 0) return false;
+      if (!query) return true;
+      const searchable = [
+        group.slug, group.displayName,
+        ...group.videos.map(file => file.name),
+        ...group.logs.map(file => file.name)
+      ].join(" ").toLocaleLowerCase("ja-JP");
+      return searchable.includes(query);
+    });
+  }, [recordingLibraryChannels, librarySearch, libraryTypeFilter]);
+
   const liveChannelCards = useMemo(() => {
     const watchedChannels = [
       ...channels.map(channel => ({ channel, isRecordingOnly: false })),
@@ -851,6 +932,20 @@ export default function App() {
   }, [tab, isDesktop, libraryRefreshKey, settings.outputDirectory]);
 
   useEffect(() => {
+    if (tab !== "library" || !isDesktop || !window.kickRecorder) return;
+    let active = true;
+    setIsLoadingLibraryLogs(true);
+    void window.kickRecorder.listCommentLogFiles().then(logs => {
+      if (active) setCommentLogFiles(logs);
+    }).catch(error => {
+      if (active) setRecordingMessage(error instanceof Error ? error.message : "コメントログ一覧を取得できませんでした。");
+    }).finally(() => {
+      if (active) setIsLoadingLibraryLogs(false);
+    });
+    return () => { active = false; };
+  }, [tab, isDesktop, libraryRefreshKey, settings.outputDirectory]);
+
+  useEffect(() => {
     if (!isDesktop || !window.kickRecorder) return;
     return window.kickRecorder.onLiveArticleCaptureStatus(status => setLiveArticleCaptureStatus(status));
   }, [isDesktop]);
@@ -974,6 +1069,43 @@ export default function App() {
       setStorageError("ブラウザー内に設定を保存できませんでした。");
     }
   }, [channels, recordingOnlyChannels, settings, isReady]);
+
+  async function openRecordingFolder() {
+    if (!window.kickRecorder) return;
+    try {
+      await window.kickRecorder.openRecordingFolder();
+      setRecordingMessage("");
+    } catch (error) {
+      setRecordingMessage(error instanceof Error ? error.message : "保存場所を開けませんでした。");
+    }
+  }
+
+  async function toggleLibraryComments(channelSlug: string) {
+    if (!window.kickRecorder) return;
+    if (libraryCommentsChannel === channelSlug) {
+      libraryCommentRequestRef.current += 1;
+      setLibraryCommentsChannel(null);
+      setLibraryComments([]);
+      setLibraryCommentsError("");
+      setIsLoadingLibraryComments(false);
+      return;
+    }
+    const requestId = ++libraryCommentRequestRef.current;
+    setLibraryCommentsChannel(channelSlug);
+    setLibraryComments([]);
+    setLibraryCommentsError("");
+    setIsLoadingLibraryComments(true);
+    try {
+      const messages = await window.kickRecorder.listRecentCommentMessages(channelSlug, 100);
+      if (requestId === libraryCommentRequestRef.current) setLibraryComments(messages);
+    } catch (error) {
+      if (requestId === libraryCommentRequestRef.current) {
+        setLibraryCommentsError(error instanceof Error ? error.message : "コメントを読み込めませんでした。");
+      }
+    } finally {
+      if (requestId === libraryCommentRequestRef.current) setIsLoadingLibraryComments(false);
+    }
+  }
 
   function addChannel() {
     const raw = newChannel.trim()
@@ -1609,24 +1741,32 @@ export default function App() {
           </div>
         </section>}
 
-        {settings.showRecordingPreview && activeRecordingChannels.length > 0 && <section className="panel live-preview-panel">
+        {activeRecordingChannels.length > 0 && <section className="panel live-preview-panel">
           <div className="panel-heading">
             <div><h2>録画中の映像プレビュー</h2><p>Kick公式プレーヤーで現在録画している配信を表示します</p></div>
-            <span className="live-status live">● LIVE · {activeRecordingChannels.length}件</span>
+            <div className="panel-heading-actions">
+              <span className="live-status live">● LIVE · {activeRecordingChannels.length}件</span>
+              <button className="small-action" onClick={() => setSettings(previous => ({ ...previous, showRecordingPreview: !previous.showRecordingPreview }))}>
+                プレビュー{settings.showRecordingPreview ? "OFF" : "ON"}
+              </button>
+            </div>
           </div>
           <div className="live-preview-frame">
-            <iframe
+            {settings.showRecordingPreview
+              ? <iframe
               key={previewChannel?.name.toLowerCase()}
               src={previewChannel ? `https://player.kick.com/${encodeURIComponent(previewChannel.name)}?autoplay=true&muted=true` : "about:blank"}
               title={previewChannel ? `${previewChannel.name} のライブ映像` : "録画中の映像"}
               allow="autoplay; fullscreen; picture-in-picture"
               allowFullScreen
-              loading="eager"
-            />
+              loading="eager" />
+              : <div className="preview-disabled-note">プレビューはOFFです。録画とコメント取得は継続しています。</div>}
           </div>
           <div className="live-preview-footer">
             <strong>{previewChannel?.name}</strong>
-            <span>音声はミュート状態で開始します。プレーヤー内の音量ボタンから変更できます。</span>
+            <span>{settings.showRecordingPreview
+              ? "音声はミュート状態で開始します。プレーヤー内の音量ボタンから変更できます。"
+              : "プレビューOFFです。録画とコメント取得は継続しています。"}</span>
             {activeRecordingChannels.length > 1 && <label>表示チャンネル
               <select value={previewChannel?.name ?? ""} onChange={event => {
                 const selected = activeRecordingChannels.find(channel => channel.name === event.target.value);
@@ -1693,24 +1833,32 @@ export default function App() {
           <div><h2>録画専用チャンネル</h2><p>配信監視・自動録画は行わず、必要なときに録画を開始するチャンネルを登録します</p></div>
           <span className="count-pill">登録数：{recordingOnlyChannels.length}件</span>
         </div>
-        {settings.showRecordingPreview && activeRecordingChannels.length > 0 && <section className="panel live-preview-panel">
+        {activeRecordingChannels.length > 0 && <section className="panel live-preview-panel">
           <div className="panel-heading">
             <div><h2>録画中の映像プレビュー</h2><p>Kick公式プレーヤーで現在録画している配信を表示します</p></div>
-            <span className="live-status live">● LIVE · {activeRecordingChannels.length}件</span>
+            <div className="panel-heading-actions">
+              <span className="live-status live">● LIVE · {activeRecordingChannels.length}件</span>
+              <button className="small-action" onClick={() => setSettings(previous => ({ ...previous, showRecordingPreview: !previous.showRecordingPreview }))}>
+                プレビュー{settings.showRecordingPreview ? "OFF" : "ON"}
+              </button>
+            </div>
           </div>
           <div className="live-preview-frame">
-            <iframe
+            {settings.showRecordingPreview
+              ? <iframe
               key={previewChannel?.name.toLowerCase()}
               src={previewChannel ? `https://player.kick.com/${encodeURIComponent(previewChannel.name)}?autoplay=true&muted=true` : "about:blank"}
               title={previewChannel ? `${previewChannel.name} のライブ映像` : "録画中の映像"}
               allow="autoplay; fullscreen; picture-in-picture"
               allowFullScreen
-              loading="eager"
-            />
+              loading="eager" />
+              : <div className="preview-disabled-note">プレビューはOFFです。録画とコメント取得は継続しています。</div>}
           </div>
           <div className="live-preview-footer">
             <strong>{previewChannel?.name}</strong>
-            <span>音声はミュート状態で開始します。プレーヤー内の音量ボタンから変更できます。</span>
+            <span>{settings.showRecordingPreview
+              ? "音声はミュート状態で開始します。プレーヤー内の音量ボタンから変更できます。"
+              : "プレビューOFFです。録画とコメント取得は継続しています。"}</span>
             {activeRecordingChannels.length > 1 && <label>表示チャンネル
               <select value={previewChannel?.name ?? ""} onChange={event => {
                 const selected = activeRecordingChannels.find(channel => channel.name === event.target.value);
@@ -1774,33 +1922,105 @@ export default function App() {
         {!isDesktop && <div className="notice">録画機能はWindowsデスクトップ版で利用できます。</div>}
       </section>}
 
-      {tab === "library" && <section className="panel">
-        <div className="panel-heading">
-          <div><h2>録画ライブラリ</h2><p>このPCに保存されたKick配信映像</p></div>
-          <button className="small-action" onClick={() => setLibraryRefreshKey(value => value + 1)} disabled={!isDesktop || isLoadingRecordings || deletingRecordingPath !== null}>一覧を更新</button>
+      {tab === "library" && <section className="recording-library-page">
+        <div className="recording-library-page-header">
+          <div>
+            <span className="eyebrow">RECORDING LIBRARY</span>
+            <h2>録画ライブラリ</h2>
+            <p>配信者別に保存された動画とコメントログをまとめて管理します。</p>
+          </div>
+          <div className="recording-library-page-actions">
+            <button className="small-action" onClick={() => void openRecordingFolder()} disabled={!isDesktop}>保存場所を開く</button>
+            <button className="primary-small" onClick={() => setLibraryRefreshKey(value => value + 1)} disabled={!isDesktop || isLoadingRecordings || isLoadingLibraryLogs || deletingRecordingPath !== null}>一覧を更新</button>
+          </div>
         </div>
+
+        <div className="recording-library-stats">
+          <div className="recording-library-stat"><span>配信者</span><strong>{recordingLibraryChannels.length.toLocaleString("ja-JP")}</strong></div>
+          <div className="recording-library-stat"><span>録画動画</span><strong>{recordingFiles.length.toLocaleString("ja-JP")}</strong></div>
+          <div className="recording-library-stat"><span>コメントログ</span><strong>{commentLogFiles.length.toLocaleString("ja-JP")}</strong></div>
+        </div>
+
+        <div className="recording-library-filter-row">
+          <label>
+            <span>検索</span>
+            <input value={librarySearch} onChange={event => setLibrarySearch(event.target.value)} placeholder="配信者名・チャンネル名・動画名・ログ名で検索" />
+          </label>
+          <label>
+            <span>表示する種類</span>
+            <select value={libraryTypeFilter} onChange={event => setLibraryTypeFilter(event.target.value as "all" | "videos" | "comments")}>
+              <option value="all">すべて</option>
+              <option value="videos">録画動画あり</option>
+              <option value="comments">コメントログあり</option>
+            </select>
+          </label>
+        </div>
+
         {recordingMessage && <div className="api-message" role="status">{recordingMessage}</div>}
         {!isDesktop
-          ? <div className="empty-state"><div className="empty-icon">▤</div><strong>Windowsデスクトップ版で利用できます</strong><span>ブラウザープレビューではPC内の録画ファイルを読み取れません。</span></div>
-          : isLoadingRecordings
-            ? <div className="empty-state"><strong>録画一覧を読み込み中...</strong></div>
-            : recordingFiles.length === 0
-              ? <div className="empty-state"><div className="empty-icon">▤</div><strong>保存された録画はありません</strong><span>ダッシュボードで配信を録画すると、ここに表示されます。</span></div>
-              : <div className="recording-library-list">
-                  {recordingFiles.map(file => <div className="recording-file-row" key={file.path}>
-                    <div className="recording-file-icon">▶</div>
-                    <div className="recording-file-info">
-                      <strong>{file.name}</strong>
-                      <small>{new Date(file.modifiedAt).toLocaleString("ja-JP")} ・ {file.extension} ・ {(file.size / (1024 * 1024)).toFixed(1)} MB</small>
-                    </div>
-                    <button className="primary-small" onClick={() => void openRecordingFile(file.path)}>再生</button>
-                    <button className="small-action" onClick={() => void revealRecordingFile(file.path)}>保存先を表示</button>
-                    <button className="danger-small" onClick={() => void deleteRecordingFromLibrary(file.path, file.name)} disabled={deletingRecordingPath !== null}>
-                      {deletingRecordingPath === file.path ? "削除中..." : "削除"}
-                    </button>
-                  </div>)}
-                </div>}
-        <div className="data-path-note">保存先：{settings.outputDirectory || "アプリ既定のビデオフォルダー"}</div>
+          ? <div className="empty-state"><div className="empty-icon">▤</div><strong>Windowsデスクトップ版で利用できます</strong><span>ブラウザープレビューではPC内の動画・コメントログを読み取れません。</span></div>
+          : isLoadingRecordings || isLoadingLibraryLogs
+            ? <div className="empty-state"><strong>録画・コメント一覧を読み込み中...</strong></div>
+            : recordingLibraryChannels.length === 0
+              ? <div className="empty-state"><div className="empty-icon">▤</div><strong>保存された録画・コメントはありません</strong><span>Kick配信の録画またはコメント取得を行うと、配信者別にここへ表示されます。</span></div>
+              : filteredRecordingLibraryChannels.length === 0
+                ? <div className="empty-state"><strong>一致する配信者がありません</strong><span>検索語または表示する種類を変更してください。</span></div>
+                : <div className="recording-channel-list">
+                    {filteredRecordingLibraryChannels.map(group => <article className="recording-channel-card" key={group.slug}>
+                      <div className="recording-channel-summary">
+                        <div className="recording-channel-avatar">{group.displayName.slice(0, 1).toUpperCase()}</div>
+                        <div className="recording-channel-info">
+                          <strong>{group.displayName}</strong>
+                          <small>@{group.slug}</small>
+                          <small>動画 {group.videos.length}件 ・ コメント {group.logs.length}件{group.latestAt ? " ・ " + new Date(group.latestAt).toLocaleString("ja-JP") : ""}</small>
+                        </div>
+                        <div className="recording-channel-actions">
+                          <button className="primary-small" onClick={() => setExpandedLibraryVideosChannel(current => current === group.slug ? null : group.slug)} disabled={group.videos.length === 0}>
+                            {expandedLibraryVideosChannel === group.slug ? "録画一覧を閉じる" : "録画を見る"}
+                          </button>
+                          <button className="small-action" onClick={() => void toggleLibraryComments(group.slug)} disabled={group.logs.length === 0 || isLoadingLibraryComments}>
+                            {libraryCommentsChannel === group.slug ? "コメントを閉じる" : "コメントを見る"}
+                          </button>
+                        </div>
+                      </div>
+
+                      {expandedLibraryVideosChannel === group.slug && <div className="recording-library-expanded">
+                        <div className="recording-library-expanded-title">保存された動画 <span>{group.videos.length}件</span></div>
+                        {group.videos.map(file => <div className="recording-library-video-row" key={file.path}>
+                          <div className="recording-file-icon">▶</div>
+                          <div className="recording-file-info">
+                            <strong>{file.name}</strong>
+                            <small>{new Date(file.modifiedAt).toLocaleString("ja-JP")} ・ {file.extension} ・ {(file.size / (1024 * 1024)).toFixed(1)} MB</small>
+                          </div>
+                          <button className="primary-small" onClick={() => void openRecordingFile(file.path)}>再生</button>
+                          <button className="small-action" onClick={() => void revealRecordingFile(file.path)}>場所を表示</button>
+                          <button className="danger-small" onClick={() => void deleteRecordingFromLibrary(file.path, file.name)} disabled={deletingRecordingPath !== null}>
+                            {deletingRecordingPath === file.path ? "削除中..." : "削除"}
+                          </button>
+                        </div>)}
+                      </div>}
+
+                      {libraryCommentsChannel === group.slug && <div className="recording-library-comments">
+                        <div className="recording-library-expanded-title">保存済みコメント <span>{isLoadingLibraryComments ? "読み込み中..." : "直近 " + libraryComments.length + "件"}</span></div>
+                        {libraryCommentsError
+                          ? <div className="empty-inline">{libraryCommentsError}</div>
+                          : isLoadingLibraryComments
+                            ? <div className="empty-inline">コメントログを読み込んでいます...</div>
+                            : libraryComments.length === 0
+                              ? <div className="empty-inline">このチャンネルのコメントログに表示できるコメントがありません。</div>
+                              : <div className="recording-library-comment-list">
+                                  {libraryComments.map((message, index) => <article className="recording-library-comment-row" key={message.eventId || message.createdAt + ":" + index}>
+                                    <div className="recording-library-comment-meta">
+                                      <strong style={message.usernameColor ? { color: message.usernameColor } : undefined}>{message.senderUsername}</strong>
+                                      <time>{new Date(message.createdAt).toLocaleString("ja-JP")}</time>
+                                    </div>
+                                    <p>{message.content}</p>
+                                  </article>)}
+                                </div>}
+                      </div>}
+                    </article>)}
+                  </div>}
+        <div className="data-path-note">保存先：{settings.outputDirectory || "アプリ既定のビデオフォルダー"} ・ コメントログ：Chat／チャンネル名</div>
       </section>}
 
       {tab === "comment-video" && <section className="panel comment-video-panel">
@@ -2216,7 +2436,7 @@ export default function App() {
         <div className="settings-subsection">
           <div className="settings-subheading"><h3>配信プレビュー</h3><span className={settings.showRecordingPreview ? "api-state connected" : "api-state"}>{settings.showRecordingPreview ? "表示：ON" : "表示：OFF"}</span></div>
           <div className="setting-row">
-            <div><strong>録画中の映像プレビューを表示</strong><small>ダッシュボードと録画専用画面のプレーヤー表示を切り替えます。OFFにしても録画・コメント取得は継続します。</small></div>
+            <div><strong>録画中の映像プレビューを表示</strong><small>設定画面に加えて、ダッシュボードと録画専用画面からも即時切替できます。OFF時はプレーヤーを停止し、録画・コメント取得は継続します。</small></div>
             <label className="setting-control"><input type="checkbox" checked={settings.showRecordingPreview} onChange={e => setSettings(prev => ({ ...prev, showRecordingPreview: e.target.checked }))} /><span>{settings.showRecordingPreview ? "有効" : "無効"}</span></label>
           </div>
         </div>
