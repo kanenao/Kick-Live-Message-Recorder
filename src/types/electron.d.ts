@@ -82,6 +82,10 @@ type KickRecorderArticle = {
   generatedAt: string; commentCount: number; isFinal: boolean; title: string; summary: string;
   paragraphs: string[]; topics: string[]; provider: string; model: string;
   mediaSources?: string[]; visualSummary?: string; transcript?: string; analyzedAt?: string;
+  analysis?: {
+    frameCount: number; transcriptCharacters: number; commentCount: number;
+    durationMs: number; visionAnalyzed: boolean; warnings: string[];
+  };
 };
 type KickRecorderMediaToolStatus = {
   ffmpegAvailable: boolean; ffmpegPath: string;
