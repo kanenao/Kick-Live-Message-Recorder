@@ -161,9 +161,6 @@ jobs:
         run: |
           $version = node -p "require('./package.json').version"
           $refName = $env:GITHUB_REF_NAME
-          if ($env:GITHUB_REF.StartsWith("refs/heads/release/")) {
-            $refName = $refName.Substring("release/".Length)
-          }
           if ($refName -ne "v$version") {
             throw "リリース参照 $refName と package.json のバージョン v$version が一致しません。"
           }
