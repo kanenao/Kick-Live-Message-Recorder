@@ -1,4 +1,4 @@
-import { createReadStream, existsSync, lstatSync, readdirSync, statSync } from "node:fs";
+import { createReadStream, lstatSync, readdirSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 
