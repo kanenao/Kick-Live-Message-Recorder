@@ -6,6 +6,7 @@ import { formatAudioTranscript, transcribeVideoAudio, transcribeWavBase64, type 
 import type { LiveAudioChunk } from "./live-video-frames";
 import type { KickChatMessage } from "./chat";
 import { parseAiArticleResponse } from "./ai-response";
+import { readArticlePreviewDataUrl, saveArticlePreviewFrame } from "./article-preview";
 
 export type LiveArticle = {
   id: string;
@@ -36,6 +37,10 @@ export type LiveArticle = {
   videoSummary?: string;
   videoScenes?: string[];
   videoAnalyzedAt?: string | null;
+  videoPreviewAvailable?: boolean;
+  videoPreviewTimeSeconds?: number;
+  videoPreviewUpdatedAt?: string;
+  videoPreviewDataUrl?: string;
   audioAnalyzed?: boolean;
   audioSegmentCount?: number;
   audioSummary?: string;
@@ -311,6 +316,15 @@ export class LiveStreamArticleManager {
     const session = this.sessions.get(slugInput.toLowerCase());
     if (!session || session.finishing) return;
     session.videoFrames = frames.slice(-8);
+    const latestFrame = session.videoFrames[session.videoFrames.length - 1];
+    if (latestFrame && latestFrame.timeSeconds !== session.article.videoPreviewTimeSeconds) {
+      try {
+        Object.assign(session.article, saveArticlePreviewFrame(session.directory, session.article.id, latestFrame));
+        this.persist(session);
+      } catch (error) {
+        console.warn("Failed to save live article broadcast preview:", error);
+      }
+    }
     session.videoFrameTotalCount = (session.videoFrameTotalCount ?? 0) + 1;
     const count = session.videoFrameTotalCount;
     if (count > (session.article.videoFrameCount ?? 0)) session.article.videoAnalyzed = false;
@@ -487,6 +501,14 @@ export class LiveStreamArticleManager {
     }
     const directory = join(root, "Articles", slug);
     mkdirSync(directory, { recursive: true });
+    if (videoFrames.length > 0 && !article.videoPreviewAvailable) {
+      const coverFrame = videoFrames[Math.floor(videoFrames.length / 2)];
+      try {
+        Object.assign(article, saveArticlePreviewFrame(directory, article.id, coverFrame));
+      } catch (error) {
+        console.warn("Failed to save archived article broadcast preview:", error);
+      }
+    }
     const session: LiveSession = {
       article, directory, commenters: new Set(), uniqueCommenterBaseline: article.uniqueCommenters,
       keywordCounts: new Map((article.keywords ?? []).map(word => [word, 1])),
@@ -969,7 +991,12 @@ export class LiveStreamArticleManager {
     const filePath = join(session.directory, `${article.id}.json`);
     const temporaryPath = filePath + ".tmp";
     try {
-      writeFileSync(temporaryPath, JSON.stringify(article, null, 2), "utf8");
+      if (article.videoPreviewAvailable && !article.videoPreviewDataUrl) {
+        article.videoPreviewDataUrl = readArticlePreviewDataUrl(session.directory, article.id);
+      }
+      const savedArticle = { ...article };
+      delete savedArticle.videoPreviewDataUrl;
+      writeFileSync(temporaryPath, JSON.stringify(savedArticle, null, 2), "utf8");
       // Replace the previous saved checkpoint.
       renameSync(temporaryPath, filePath);
     } catch (error) {
