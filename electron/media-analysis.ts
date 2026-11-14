@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { delimiter, join } from "node:path";
 
 export type MediaToolSettings = {
@@ -27,6 +27,7 @@ export type LiveMediaAnalysis = {
 };
 
 type ProcessResult = { code: number; stdout: string; stderr: string };
+type OutputResult = { ok: boolean; detail: string };
 
 function existingFile(candidates: Array<string | undefined>): string {
   for (const candidate of candidates) {
@@ -137,9 +138,67 @@ function runCommand(
     child.stdout.on("data", chunk => { stdout = (stdout + String(chunk)).slice(-12000); });
     child.stderr.on("data", chunk => { stderr = (stderr + String(chunk)).slice(-12000); });
     child.once("error", error => finish(error));
-    child.once("close", (code) => finish(undefined, { code: code ?? -1, stdout, stderr }));
+    child.once("close", code => finish(undefined, { code: code ?? -1, stdout, stderr }));
     child.stdin.end();
   });
+}
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
+function outputSize(path: string): number {
+  try {
+    return existsSync(path) && statSync(path).isFile() ? statSync(path).size : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * A live recording file may be observed while yt-dlp is still appending HLS
+ * segments. Retry once after a short pause when the current file edge is not
+ * yet decodable. Each attempt starts with a fresh output file, so a partial
+ * JPEG/WAV from a failed attempt cannot be mistaken for a successful result.
+ */
+async function runFfmpegOutput(
+  executable: string,
+  args: string[],
+  outputPath: string,
+  minimumBytes: number,
+  timeoutMs: number
+): Promise<OutputResult> {
+  let lastDetail = "";
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try { if (existsSync(outputPath)) unlinkSync(outputPath); } catch { /* overwritten with -y below */ }
+    try {
+      const processResult = await runCommand(executable, args, timeoutMs);
+      const size = outputSize(outputPath);
+      if (size >= minimumBytes) {
+        return {
+          ok: true,
+          detail: processResult.code === 0 ? "" : "FFmpegは警告付きで出力しました：" + processResult.stderr.trim().slice(-350)
+        };
+      }
+      lastDetail = processResult.stderr.trim().slice(-500) ||
+        (processResult.code === 0 ? "出力ファイルが空、または小さすぎます。" : "終了コード " + processResult.code);
+    } catch (error) {
+      lastDetail = error instanceof Error ? error.message : String(error);
+    }
+    if (attempt === 0) await wait(1_200);
+  }
+  return { ok: false, detail: lastDetail || "FFmpegが有効な出力を作成できませんでした。" };
+}
+
+function ffmpegInputArgs(offsetSeconds: number, videoPath: string): string[] {
+  return [
+    "-hide_banner", "-loglevel", "error",
+    "-fflags", "+genpts+discardcorrupt",
+    "-analyzeduration", "10M",
+    "-probesize", "10M",
+    "-sseof", String(offsetSeconds),
+    "-i", videoPath
+  ];
 }
 
 export async function analyzeLiveRecordingMedia(input: {
@@ -165,6 +224,12 @@ export async function analyzeLiveRecordingMedia(input: {
     return result;
   }
 
+  const initialSize = outputSize(input.videoPath);
+  if (initialSize < 64 * 1024) {
+    result.warnings.push("録画ファイルがまだ小さいため、映像・音声の解析を次の周期へ延期します。");
+    return result;
+  }
+
   const status = getMediaToolStatus(input.tools, input.userDataDirectory, input.resourcesDirectory);
   if (!status.ffmpegAvailable) {
     result.warnings.push("FFmpegが見つからないため、映像・音声を抽出できません。設定画面でffmpeg.exeを指定してください。");
@@ -174,37 +239,43 @@ export async function analyzeLiveRecordingMedia(input: {
   const tempDirectory = join(input.outputDirectory, "MediaAnalysis", ".work");
   mkdirSync(tempDirectory, { recursive: true });
   const suffix = Date.now().toString(36) + "-" + process.pid;
+  const filePrefix = input.slug + "-" + suffix;
   const frameOffsets = [-55, -30, -8];
   const framePaths = frameOffsets.map((_, index) =>
-    join(tempDirectory, input.slug + "-" + suffix + "-frame-" + index + ".jpg")
+    join(tempDirectory, filePrefix + "-frame-" + index + ".jpg")
   );
-  const audioPath = join(tempDirectory, input.slug + "-" + suffix + ".wav");
-  const transcriptPrefix = join(tempDirectory, input.slug + "-" + suffix);
+  const audioPath = join(tempDirectory, filePrefix + ".wav");
+  const transcriptPrefix = join(tempDirectory, filePrefix);
   const transcriptPath = transcriptPrefix + ".txt";
 
   try {
-    const frameResults = await Promise.all(framePaths.map(async (framePath, index) => {
-      try {
-        const frame = await runCommand(status.ffmpegPath, [
-          "-hide_banner", "-loglevel", "error",
-          "-sseof", String(frameOffsets[index]), "-i", input.videoPath,
-          "-frames:v", "1", "-vf", "scale=1280:-2",
-          "-q:v", "4", "-y", framePath
-        ], 25_000);
-        if (frame.code !== 0 && frame.stderr.trim()) {
-          result.warnings.push("映像フレーム抽出： " + frame.stderr.trim().slice(-300));
+    // Do not launch three decoders against a growing file at once. Sequential
+    // extraction reduces disk contention and avoids competing read positions.
+    for (let index = 0; index < framePaths.length; index += 1) {
+      const framePath = framePaths[index];
+      const args = [
+        ...ffmpegInputArgs(frameOffsets[index], input.videoPath),
+        "-map", "0:v:0",
+        "-frames:v", "1",
+        "-vf", "scale=1280:-2",
+        "-q:v", "4",
+        "-y", framePath
+      ];
+      const frame = await runFfmpegOutput(status.ffmpegPath, args, framePath, 1024, 25_000);
+      if (frame.ok) {
+        if (frame.detail) result.warnings.push("映像フレーム " + (index + 1) + "： " + frame.detail);
+        try {
+          result.frameBase64s.push(readFileSync(framePath).toString("base64"));
+        } catch (error) {
+          result.warnings.push("映像フレームを読み込めませんでした：" + (error instanceof Error ? error.message : String(error)));
         }
-        if (existsSync(framePath) && statSync(framePath).size > 1024) {
-          return readFileSync(framePath).toString("base64");
-        }
-      } catch (error) {
-        result.warnings.push("映像フレーム抽出に失敗しました：" + (error instanceof Error ? error.message : String(error)));
+      } else {
+        result.warnings.push("映像フレーム " + (index + 1) + " の抽出に失敗しました：" + frame.detail);
       }
-      return "";
-    }));
-    result.frameBase64s = frameResults.filter(Boolean);
+    }
+
     if (result.frameBase64s.length === 0) {
-      result.warnings.push("録画中ファイルから映像フレームを取得できませんでした。録画が安定してから再試行します。");
+      result.warnings.push("録画中ファイルから映像フレームを取得できませんでした。録画が安定してから次の周期に再試行します。");
     } else if (result.frameBase64s.length < framePaths.length) {
       result.warnings.push("映像フレームは一部のみ取得できました。取得できた画面だけを解析します。");
     }
@@ -212,17 +283,20 @@ export async function analyzeLiveRecordingMedia(input: {
     if (!status.whisperAvailable || !status.whisperModelAvailable) {
       result.warnings.push("音声文字起こしにはWhisper.cpp本体とggml-base.binが必要です。設定画面で両方を指定してください。");
     } else {
-      try {
-        const audio = await runCommand(status.ffmpegPath, [
-          "-hide_banner", "-loglevel", "error",
-          "-sseof", "-75", "-i", input.videoPath,
-          "-t", "60", "-vn", "-ac", "1", "-ar", "16000",
-          "-c:a", "pcm_s16le", "-y", audioPath
-        ], 35_000);
-        if (audio.code !== 0 && audio.stderr.trim()) {
-          result.warnings.push("音声抽出： " + audio.stderr.trim().slice(-500));
-        }
-        if (existsSync(audioPath) && statSync(audioPath).size > 16_000) {
+      const audioArgs = [
+        ...ffmpegInputArgs(-75, input.videoPath),
+        "-map", "0:a:0?",
+        "-vn",
+        "-t", "60",
+        "-ac", "1",
+        "-ar", "16000",
+        "-c:a", "pcm_s16le",
+        "-y", audioPath
+      ];
+      const audio = await runFfmpegOutput(status.ffmpegPath, audioArgs, audioPath, 16_000, 35_000);
+      if (audio.ok) {
+        if (audio.detail) result.warnings.push("音声抽出： " + audio.detail);
+        try {
           const transcription = await runCommand(status.whisperCliPath, [
             "-m", status.whisperModelPath,
             "-f", audioPath,
@@ -239,22 +313,32 @@ export async function analyzeLiveRecordingMedia(input: {
           } else if (transcription.stdout.trim()) {
             result.transcript = transcription.stdout.trim().slice(0, 12_000);
           }
-          if (transcription.code !== 0 && !result.transcript) {
-            result.warnings.push("Whisper.cppの文字起こしに失敗しました：" + transcription.stderr.trim().slice(-700));
+          if (transcription.code !== 0) {
+            result.warnings.push("Whisper.cppは終了コード " + transcription.code + " を返しました：" + transcription.stderr.trim().slice(-500));
           }
           if (!result.transcript) result.warnings.push("今回の音声区間から文字起こし結果を取得できませんでした。");
-        } else {
-          result.warnings.push("音声データを抽出できませんでした。無音・録画開始直後・ファイル書き込み中の可能性があります。");
+        } catch (error) {
+          result.warnings.push("音声文字起こしに失敗しました：" + (error instanceof Error ? error.message : String(error)));
         }
-      } catch (error) {
-        result.warnings.push("音声文字起こしに失敗しました：" + (error instanceof Error ? error.message : String(error)));
+      } else {
+        result.warnings.push("音声データを抽出できませんでした：" + audio.detail);
       }
     }
   } finally {
-    for (const path of [...framePaths, audioPath, transcriptPath]) {
-      try { if (existsSync(path)) unlinkSync(path); } catch { /* temporary data cleanup is best effort */ }
-    }
+    // Whisper may create .txt/.srt/.vtt/.json/.csv sidecars depending on build.
+    // Remove every file produced for this sampling cycle, not just the WAV/JPEG.
+    try {
+      for (const name of readdirSync(tempDirectory)) {
+        if (!name.startsWith(filePrefix)) continue;
+        const path = join(tempDirectory, name);
+        try { if (existsSync(path) && statSync(path).isFile()) unlinkSync(path); } catch { /* cleanup is best effort */ }
+      }
+    } catch { /* cleanup is best effort */ }
   }
 
+  const finalSize = outputSize(input.videoPath);
+  if (finalSize < initialSize) {
+    result.warnings.push("解析中に録画ファイルのサイズが変わりました。録画ファイルの切り替えが発生した可能性があります。");
+  }
   return result;
 }
