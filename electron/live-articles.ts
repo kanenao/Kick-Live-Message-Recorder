@@ -512,7 +512,7 @@ export class LiveStreamArticleManager {
       // excerpts across the whole recording so long streams are not cut at 60 minutes.
       pendingAudioSegments: sampleAudioSegmentsAcrossDuration(audioSegments, 80),
       audioQueue: [],
-      audioTranscriptionInFlight: false, lastAnalysisAt: 0, analysisInFlight: false,
+      audioTranscriptionInFlight: false, lastAnalysisAt: 0, analysisInFlight: false, analysisTimer: null,
       finishing: true, videoFrames
     };
     for (let pass = 0; pass < 8; pass += 1) {
