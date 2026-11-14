@@ -7,6 +7,7 @@ import type { LiveAudioChunk } from "./live-video-frames";
 import type { KickChatMessage } from "./chat";
 import { parseAiArticleResponse } from "./ai-response";
 import { saveArticlePreviewFrame } from "./article-preview";
+import { getAudioTranscriptionRetryDelayMs, isRetryableAudioTranscriptionError } from "./audio-retry-policy";
 
 export type LiveArticle = {
   id: string;
@@ -89,8 +90,9 @@ type LiveSession = {
   keywordCounts: Map<string, number>;
   pendingComments: CommentSample[];
   pendingAudioSegments: AudioTranscriptSegment[];
-  audioQueue: Array<{ timeSeconds: number; wavBase64: string }>;
+  audioQueue: Array<{ timeSeconds: number; wavBase64: string; retryCount: number }>;
   audioTranscriptionInFlight: boolean;
+  audioRetryTimer: ReturnType<typeof setTimeout> | null;
   lastAnalysisAt: number;
   analysisInFlight: boolean;
   analysisTimer: ReturnType<typeof setTimeout> | null;
@@ -282,6 +284,7 @@ export class LiveStreamArticleManager {
       pendingAudioSegments: [],
       audioQueue: [],
       audioTranscriptionInFlight: false,
+      audioRetryTimer: null,
       forceAi
     };
     this.sessions.set(slug, session);
@@ -346,17 +349,20 @@ export class LiveStreamArticleManager {
     if (!session || session.finishing || config.provider !== "ollama" || config.audioEnabled === false) return;
     if (session.audioQueue.length >= 16) {
       session.article.audioError = "音声認識が追いつかず、一部の音声区間を取りこぼしました。AIの更新間隔やPC負荷を確認してください。";
-      session.audioQueue.shift();
+      // Keep the failed segment at the queue head while a connection retry is pending.
+      if (session.audioRetryTimer) session.audioQueue.pop();
+      else session.audioQueue.shift();
     }
     session.audioQueue.push({
       timeSeconds: Math.max(0, Number.isFinite(chunk.timeSeconds) ? chunk.timeSeconds : 0),
-      wavBase64: chunk.wavBase64
+      wavBase64: chunk.wavBase64,
+      retryCount: 0
     });
     void this.processAudioQueue(session);
   }
 
   private async processAudioQueue(session: LiveSession): Promise<void> {
-    if (session.audioTranscriptionInFlight) return;
+    if (session.audioTranscriptionInFlight || session.audioRetryTimer) return;
     const config = this.getConfig();
     if (config.provider !== "ollama" || config.audioEnabled === false) return;
     session.audioTranscriptionInFlight = true;
@@ -395,7 +401,29 @@ export class LiveStreamArticleManager {
             this.persist(session);
           }
         } catch (error) {
-          session.article.audioError = error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500);
+          const detail = error instanceof Error ? error.message.slice(0, 420) : String(error).slice(0, 420);
+          if (isRetryableAudioTranscriptionError(error) && !session.finishing) {
+            const retryCount = Math.min(16, chunk.retryCount + 1);
+            const delayMs = getAudioTranscriptionRetryDelayMs(retryCount);
+            // Retain the failed WAV at the head of the queue so the timeline stays ordered.
+            if (session.audioQueue.length >= 16) session.audioQueue.pop();
+            session.audioQueue.unshift({ ...chunk, retryCount });
+            session.article.audioError =
+              `${detail} 音声区間を約${Math.ceil(delayMs / 1000)}秒後に自動再試行します（${retryCount}回目）。`;
+            this.persist(session);
+            if (!session.audioRetryTimer) {
+              session.audioRetryTimer = setTimeout(() => {
+                session.audioRetryTimer = null;
+                if (!session.finishing) void this.processAudioQueue(session);
+              }, delayMs);
+            }
+            break;
+          }
+
+          session.article.audioError = session.finishing
+            ? `${detail} 配信終了時の最終処理中に失敗したため、残りの音声区間は再試行せず終了しました。`
+            : detail;
+          // A permanent model/configuration error cannot recover by repeating the same request.
           session.audioQueue = [];
           this.persist(session);
           break;
@@ -403,7 +431,7 @@ export class LiveStreamArticleManager {
       }
     } finally {
       session.audioTranscriptionInFlight = false;
-      if (session.audioQueue.length > 0 && !session.finishing) {
+      if (session.audioQueue.length > 0 && !session.finishing && !session.audioRetryTimer) {
         void this.processAudioQueue(session);
       }
     }
@@ -516,7 +544,9 @@ export class LiveStreamArticleManager {
       // excerpts across the whole recording so long streams are not cut at 60 minutes.
       pendingAudioSegments: sampleAudioSegmentsAcrossDuration(audioSegments, 80),
       audioQueue: [],
-      audioTranscriptionInFlight: false, lastAnalysisAt: 0, analysisInFlight: false, analysisTimer: null,
+      audioTranscriptionInFlight: false,
+      audioRetryTimer: null,
+      lastAnalysisAt: 0, analysisInFlight: false, analysisTimer: null,
       finishing: true, videoFrames
     };
     for (let pass = 0; pass < 8; pass += 1) {
@@ -581,6 +611,10 @@ export class LiveStreamArticleManager {
     const session = this.sessions.get(slug);
     if (!session) return;
     session.finishing = true;
+    if (session.audioRetryTimer) {
+      clearTimeout(session.audioRetryTimer);
+      session.audioRetryTimer = null;
+    }
     if (session.analysisTimer) {
       clearTimeout(session.analysisTimer);
       session.analysisTimer = null;
