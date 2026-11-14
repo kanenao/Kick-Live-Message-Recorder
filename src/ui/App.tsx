@@ -4,7 +4,7 @@ type OllamaStatus = { connected: boolean; baseUrl: string; models: Array<{ name:
 type ChatStatus = { serverRunning: boolean; tunnelRunning: boolean; localUrl: string; publicUrl: string; receivedCount: number; lastMessageAt: string | null; message: string };
 type ChatSubscriptionStatus = { slug: string; broadcasterUserId: number | null; subscribed: boolean; subscriptionId: string | null; createdAt: string | null };
 type KickRecorderSavedChatMessage = { messageId: string; slug: string; broadcaster: string; user: string; text: string; timestamp: string; receivedAt: string; badges: string[]; emotes: Array<{ emoteId: string; start: number; end: number }> };
-type KickRecorderArticle = { id: string; slug: string; broadcaster: string; streamTitle: string; startedAt: string | null; generatedAt: string; commentCount: number; isFinal: boolean; title: string; summary: string; paragraphs: string[]; topics: string[]; provider: string; model: string; mediaSources?: string[]; visualSummary?: string; transcript?: string; analyzedAt?: string };
+type KickRecorderArticle = { id: string; slug: string; broadcaster: string; streamTitle: string; startedAt: string | null; generatedAt: string; commentCount: number; isFinal: boolean; title: string; summary: string; paragraphs: string[]; topics: string[]; provider: string; model: string; mediaSources?: string[]; visualSummary?: string; transcript?: string; analyzedAt?: string; analysis?: { frameCount: number; transcriptCharacters: number; commentCount: number; durationMs: number; visionAnalyzed: boolean; warnings: string[] } };
 type MediaToolStatus = { ffmpegAvailable: boolean; ffmpegPath: string; whisperAvailable: boolean; whisperCliPath: string; whisperModelAvailable: boolean; whisperModelPath: string; visionModelRequired: string; setupNotes: string[] };
 
 type Channel = {
@@ -998,6 +998,13 @@ export default function App() {
                   {article.mediaSources && article.mediaSources.length > 0 && <div className="article-topics">{article.mediaSources.map(source => <span key={source}>{source}</span>)}</div>}
                   {article.visualSummary && <p className="article-summary">映像から確認できた内容：{article.visualSummary}</p>}
                   {article.transcript && <details className="article-transcript"><summary>音声文字起こしを表示</summary><p>{article.transcript}</p></details>}
+                  {article.analysis && <details className="article-transcript">
+                    <summary>解析ログ：映像 {article.analysis.frameCount}枚・音声 {article.analysis.transcriptCharacters.toLocaleString("ja-JP")}文字・コメント {article.analysis.commentCount.toLocaleString("ja-JP")}件</summary>
+                    <p>解析時間：約{(article.analysis.durationMs / 1000).toFixed(1)}秒
+映像AI：{article.analysis.visionAnalyzed ? "解析済み" : "未解析"}
+保存ログ：Articles/AnalysisLogs/{article.slug}.jsonl
+{article.analysis.warnings.length > 0 ? "注意事項：\n" + article.analysis.warnings.join("\n") : "注意事項：なし"}</p>
+                  </details>}
                   <div className="article-body">{article.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
                   {article.topics.length > 0 && <div className="article-topics">{article.topics.map(topic => <span key={topic}>{topic}</span>)}</div>}
                   <small className="article-meta">生成：{article.provider} / {article.model}</small>
