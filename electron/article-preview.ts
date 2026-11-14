@@ -1,6 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { isPathInsideDirectory } from "./recording";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
+
+function isPathInsideDirectory(candidatePath: string, directoryPath: string): boolean {
+  const relativePath = relative(resolve(directoryPath), resolve(candidatePath));
+  return relativePath === "" || (relativePath !== ".." && !relativePath.startsWith(".." + sep) && !isAbsolute(relativePath));
+}
 
 export type ArticlePreviewFrame = {
   timeSeconds: number;
