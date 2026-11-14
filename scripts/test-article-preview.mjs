@@ -25,12 +25,11 @@ try {
   assert.equal(saved.videoPreviewAvailable, true);
   assert.equal(saved.videoPreviewTimeSeconds, 83);
   assert.match(saved.videoPreviewUpdatedAt, /^\d{4}-/);
-  assert.equal(saved.videoPreviewDataUrl, "data:image/jpeg;base64," + base64);
+  assert.equal(readArticlePreviewDataUrl(directory, articleId), "data:image/jpeg;base64," + base64);
 
   const filePath = join(directory, articleId + ".preview.jpg");
   assert.equal(statSync(filePath).size, bytes.length);
   assert.deepEqual(readFileSync(filePath), bytes);
-  assert.equal(readArticlePreviewDataUrl(directory, articleId), saved.videoPreviewDataUrl);
 
   assert.throws(
     () => saveArticlePreviewFrame(directory, "../outside", { timeSeconds: 1, imageBase64: base64 }),
