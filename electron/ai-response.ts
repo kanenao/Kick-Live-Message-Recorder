@@ -13,10 +13,8 @@ function readContentText(value: unknown): string {
   for (const part of value) {
     const record = asRecord(part);
     if (!record) continue;
-    if (typeof record.text === "string") {
+    if (record.type !== "refusal" && typeof record.text === "string") {
       chunks.push(record.text);
-    } else if (typeof record.refusal === "string") {
-      chunks.push(record.refusal);
     }
   }
   return chunks.join("\n");
@@ -77,7 +75,7 @@ export function describeEmptyAiResponse(payload: UnknownRecord): string {
   const errorMessage = typeof error?.message === "string" ? error.message : "";
   const message = asRecord(payload.message);
   const doneReason = typeof message?.done_reason === "string" ? message.done_reason : "";
-  const refusal = Array.isArray(payload.output) && payload.output.some(item => {
+  const outputRefusal = Array.isArray(payload.output) && payload.output.some(item => {
     const record = asRecord(item);
     if (!record || !Array.isArray(record.content)) return false;
     return record.content.some(part => {
@@ -85,6 +83,13 @@ export function describeEmptyAiResponse(payload: UnknownRecord): string {
       return Boolean(partRecord && (partRecord.type === "refusal" || typeof partRecord.refusal === "string"));
     });
   });
+  const choices = Array.isArray(payload.choices) ? payload.choices : [];
+  const choiceRefusal = choices.some(choice => {
+    const record = asRecord(choice);
+    const message = asRecord(record?.message);
+    return typeof message?.refusal === "string" && message.refusal.length > 0;
+  });
+  const refusal = outputRefusal || choiceRefusal;
 
   if (refusal) {
     return "AIモデルが記事生成を拒否したため、記事本文を取得できませんでした。AIモデルの設定と送信内容を確認してください。";
