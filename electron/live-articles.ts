@@ -6,7 +6,7 @@ import { formatAudioTranscript, transcribeVideoAudio, transcribeWavBase64, type 
 import type { LiveAudioChunk } from "./live-video-frames";
 import type { KickChatMessage } from "./chat";
 import { parseAiArticleResponse } from "./ai-response";
-import { readArticlePreviewDataUrl, saveArticlePreviewFrame } from "./article-preview";
+import { saveArticlePreviewFrame } from "./article-preview";
 
 export type LiveArticle = {
   id: string;
@@ -40,7 +40,6 @@ export type LiveArticle = {
   videoPreviewAvailable?: boolean;
   videoPreviewTimeSeconds?: number;
   videoPreviewUpdatedAt?: string;
-  videoPreviewDataUrl?: string;
   audioAnalyzed?: boolean;
   audioSegmentCount?: number;
   audioSummary?: string;
@@ -991,12 +990,7 @@ export class LiveStreamArticleManager {
     const filePath = join(session.directory, `${article.id}.json`);
     const temporaryPath = filePath + ".tmp";
     try {
-      if (article.videoPreviewAvailable && !article.videoPreviewDataUrl) {
-        article.videoPreviewDataUrl = readArticlePreviewDataUrl(session.directory, article.id);
-      }
-      const savedArticle = { ...article };
-      delete savedArticle.videoPreviewDataUrl;
-      writeFileSync(temporaryPath, JSON.stringify(savedArticle, null, 2), "utf8");
+      writeFileSync(temporaryPath, JSON.stringify(article, null, 2), "utf8");
       // Replace the previous saved checkpoint.
       renameSync(temporaryPath, filePath);
     } catch (error) {
