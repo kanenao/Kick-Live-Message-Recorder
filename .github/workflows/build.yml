@@ -2,7 +2,7 @@ name: β版ビルド・自動更新配布
 
 on:
   push:
-    branches: [main, "release/*"]
+    branches: [main, "release/*", "feature/beta51-ai-article-live"]
     tags: ["v*"]
   pull_request:
     branches: [main]
