@@ -33,14 +33,13 @@ for (const [branch, expected] of branchCases) {
 }
 
 const shouldPublishRef = ref =>
-  (ref.startsWith("refs/tags/v") && ref.includes("-beta")) ||
-  (ref.startsWith("refs/heads/release/") && ref.includes("-beta"));
+  ref.startsWith("refs/tags/v") && ref.includes("-beta");
 
 const refCases = [
   ["refs/tags/v0.1.0-beta.51", true],
   ["refs/tags/v1.0.0", false],
   ["refs/tags/v1.0.0-rc.1", false],
-  ["refs/heads/release/v0.1.0-beta.51", true],
+  ["refs/heads/release/v0.1.0-beta.51", false],
   ["refs/heads/release/v1.0.0", false],
   ["refs/heads/feature/beta51-ai-article-live", false]
 ];
