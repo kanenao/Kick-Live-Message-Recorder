@@ -97,6 +97,8 @@ type KickRecorderCommentVideoPreview = {
   totalComments: number;
   malformedLines: number;
   outsideVideoCount: number;
+  syncSource: "recording-metadata" | "filename" | "file-mtime";
+  estimatedVideoStartAt: string;
   comments: Array<{ seconds: number; content: string; username: string; color: string }>;
 };
 
