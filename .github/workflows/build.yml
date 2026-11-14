@@ -26,6 +26,8 @@ jobs:
         run: node scripts/test-release-tag-policy.mjs
       - name: 録画タイムライン同期テスト
         run: node --experimental-strip-types scripts/test-recording-timeline.mjs
+      - name: AI記事応答形式テスト
+        run: node --experimental-strip-types scripts/test-ai-response.mjs
       - name: 型チェック
         run: npm run typecheck
       - name: アプリをビルド
