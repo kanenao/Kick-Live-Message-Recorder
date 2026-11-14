@@ -104,8 +104,6 @@ export function startLiveVideoFrameCapture(
   let audioStopped = false;
   let audioGeneration = 0;
   let audioDirectory = "";
-  let audioListPath = "";
-  let audioPollTimer: ReturnType<typeof setInterval> | null = null;
   let audioSegmentCount = 0;
   let audioFinishedResolve: (() => void) | null = null;
   let audioFinished: Promise<void> = Promise.resolve();
