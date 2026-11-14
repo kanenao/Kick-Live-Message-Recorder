@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   deleteArticlePreview,
+  hasArticlePreview,
   readArticlePreviewDataUrl,
   saveArticlePreviewFrame
 } from "../electron/article-preview.ts";
@@ -30,6 +31,7 @@ try {
   const filePath = join(directory, articleId + ".preview.jpg");
   assert.equal(statSync(filePath).size, bytes.length);
   assert.deepEqual(readFileSync(filePath), bytes);
+  assert.equal(hasArticlePreview(directory, articleId), true);
 
   assert.throws(
     () => saveArticlePreviewFrame(directory, "../outside", { timeSeconds: 1, imageBase64: base64 }),
@@ -42,6 +44,7 @@ try {
   assert.equal(readArticlePreviewDataUrl(directory, "../outside"), undefined);
 
   deleteArticlePreview(directory, articleId);
+  assert.equal(hasArticlePreview(directory, articleId), false);
   assert.equal(readArticlePreviewDataUrl(directory, articleId), undefined);
   console.log("配信AI新聞の放送画面保存テスト成功（JPEG検証・保存・再読込・記事ID保護・削除）");
 } finally {
