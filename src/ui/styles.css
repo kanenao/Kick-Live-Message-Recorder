@@ -310,3 +310,57 @@
 
 .article-original-stream-title{margin:0 0 10px!important;color:#9ba8b6!important;font-size:10px!important;line-height:1.65!important;font-family:inherit!important}
 .article-original-stream-title strong{display:inline-block;margin-right:5px;color:#7f8d9b;font-size:9px;letter-spacing:.04em}
+
+
+/* Channel-oriented recording library layout. */
+.preview-disabled-note{display:grid;place-items:center;width:100%;height:100%;min-height:170px;padding:24px;color:#9ba9bd;font-size:12px;text-align:center;background:radial-gradient(ellipse at 50% 45%,#1c2940 0%,#0c111b 72%)}
+.recording-library-page{display:flex;flex-direction:column;gap:16px;min-width:0}
+.recording-library-page-header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px}
+.recording-library-page-header h2{margin:5px 0 4px;color:#edf1f7;font-size:19px}
+.recording-library-page-header p{margin:0;color:#8190a5;font-size:11px}
+.recording-library-page-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.recording-library-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.recording-library-stat{display:flex;flex-direction:column;gap:7px;min-height:72px;padding:14px 16px;border:1px solid #2b3441;border-radius:10px;background:linear-gradient(135deg,#171d29,#121722)}
+.recording-library-stat span{color:#8392a9;font-size:10px}
+.recording-library-stat strong{color:#e7edf7;font-size:21px;font-variant-numeric:tabular-nums}
+.recording-library-filter-row{display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:12px}
+.recording-library-filter-row label{display:flex;flex-direction:column;gap:7px;min-width:0;color:#8290a4;font-size:10px}
+.recording-library-filter-row input,.recording-library-filter-row select{width:100%;min-width:0;min-height:38px;padding:9px 11px;border:1px solid #2c3a51;border-radius:8px;background:#0e1728;color:#e7edf7;font:inherit;font-size:11px}
+.recording-library-filter-row input::placeholder{color:#66758d}
+.recording-channel-list{display:flex;flex-direction:column;gap:8px;max-height:680px;overflow:auto;padding-right:2px}
+.recording-channel-card{overflow:hidden;border:1px solid #2b3545;border-radius:14px;background:linear-gradient(110deg,#151e2e,#101725)}
+.recording-channel-summary{display:flex;align-items:center;gap:14px;min-height:96px;padding:14px}
+.recording-channel-avatar{display:grid;place-items:center;flex:0 0 112px;height:70px;border-radius:9px;background:linear-gradient(135deg,#263a5a,#17243a);color:#a8c3ec;font-size:25px;font-weight:700}
+.recording-channel-info{display:flex;flex:1;flex-direction:column;gap:4px;min-width:0}
+.recording-channel-info strong{overflow:hidden;color:#e5ebf5;font-size:13px;text-overflow:ellipsis;white-space:nowrap}
+.recording-channel-info small{overflow-wrap:anywhere;color:#8090aa;font-size:9px}
+.recording-channel-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.recording-channel-actions button{white-space:nowrap}
+.recording-library-expanded,.recording-library-comments{padding:12px 14px;border-top:1px solid #293447;background:#0d1420}
+.recording-library-expanded-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;color:#aebbd0;font-size:11px;font-weight:700}
+.recording-library-expanded-title span{color:#8091aa;font-size:10px;font-weight:500}
+.recording-library-video-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid #222d3c}
+.recording-library-video-row:first-of-type{border-top:0}
+.recording-library-video-row .recording-file-info{flex:1}
+.recording-library-video-row .recording-file-info strong{font-size:11px}
+.recording-library-video-row .recording-file-info small{font-size:9px}
+.recording-library-video-row button{white-space:nowrap}
+.recording-library-comment-list{max-height:360px;overflow:auto}
+.recording-library-comment-row{padding:10px 2px;border-top:1px solid #222d3c}
+.recording-library-comment-row:first-child{border-top:0}
+.recording-library-comment-meta{display:flex;align-items:center;gap:10px}
+.recording-library-comment-meta strong{font-size:10px}
+.recording-library-comment-meta time{margin-left:auto;color:#7f8da2;font-size:9px;font-variant-numeric:tabular-nums}
+.recording-library-comment-row p{margin:6px 0 0;color:#dce4ef;font-size:11px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:760px){
+  .recording-library-page-header{align-items:flex-start;flex-direction:column}
+  .recording-library-stats{grid-template-columns:1fr}
+  .recording-library-filter-row{grid-template-columns:1fr}
+  .recording-channel-summary{align-items:flex-start;flex-wrap:wrap}
+  .recording-channel-avatar{flex-basis:64px;width:64px;height:64px}
+  .recording-channel-info{flex:1 1 calc(100% - 90px)}
+  .recording-channel-actions{width:100%;justify-content:flex-start;padding-left:78px}
+  .recording-library-video-row{flex-wrap:wrap}
+  .recording-library-video-row .recording-file-info{flex-basis:calc(100% - 50px)}
+  .recording-library-video-row button{margin-left:44px}
+}
