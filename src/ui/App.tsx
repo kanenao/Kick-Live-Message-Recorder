@@ -155,7 +155,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.1.2-alpha.54";
+const APP_VERSION = "0.2.0-alpha.55";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -183,6 +183,16 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.2.0-alpha.55",
+    title: "LIVE配信記事・映像／音声の復旧機能を拡張",
+    changes: [
+      "配信AI新聞の記事カードに放送画面を掲載し、LIVE中は約25秒ごとに代表フレームを更新。録画済み配信も動画から代表画像を抽出",
+      "LIVE映像のFFmpeg異常終了を検出し、古い接続を安全に解除して、配信状態の再確認後に段階的な自動再接続",
+      "Ollamaの一時的な接続切れ・タイムアウト・HTTP 429／5xxでは音声区間を保持し、5秒から最大60秒の間隔で自動再試行",
+      "映像・音声・コメントを利用するLIVE配信記事の取得継続性と復旧処理を強化"
+    ]
+  },
   {
     version: "0.1.2-alpha.54",
     title: "LIVE音声認識の自動復旧を改善",
