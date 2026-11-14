@@ -100,6 +100,25 @@ try {
     source: "file-mtime"
   }, "videos without metadata must remain compatible");
 
+  const vodBase = "samplechannel_VOD_20261114_030800";
+  writeMetadata(vodBase, makeMetadata(vodBase, { recordingKind: "VOD" }));
+  const vodResult = resolveVideoTimelineAnchor(
+    join(root, vodBase + ".mp4"), root, modifiedAt, 60, "samplechannel"
+  );
+  assert.deepEqual(vodResult, {
+    startMs: new Date(2026, 10, 14, 3, 8, 0).getTime(),
+    source: "filename"
+  }, "VOD metadata must not be treated as a LIVE recording anchor");
+
+  const invalidDateBase = "samplechannel_20261340_256199";
+  const invalidDateResult = resolveVideoTimelineAnchor(
+    join(root, invalidDateBase + ".mp4"), root, modifiedAt, 75, "samplechannel"
+  );
+  assert.deepEqual(invalidDateResult, {
+    startMs: modifiedAt - 75_000,
+    source: "file-mtime"
+  }, "invalid filename timestamps must fall back to file mtime");
+
   const corruptBase = "corrupt-video";
   writeFileSync(join(metadataDirectory, corruptBase + ".json"), "{ broken", "utf8");
   const corruptResult = resolveVideoTimelineAnchor(
