@@ -63,6 +63,9 @@ type RecordingEvent = {
 type CommentLogFile = {
   path: string; name: string; channelSlug: string; kind: "LIVE" | "VOD"; size: number; modifiedAt: string;
 };
+type LibraryCommentMessage = {
+  eventId: string; senderUsername: string; content: string; createdAt: string; usernameColor: string | null;
+};
 type CommentVideoOptions = {
   videoPath: string; chatPath?: string; chatPaths?: string[]; delaySeconds?: number; fontFamily?: "ms-pgothic" | "meiryo" | "yu-gothic" | "arial"; fontSize?: number;
   displaySeconds?: number; speedPercent?: number; rowLimit?: number; collisionGap?: number; opacity?: number;
@@ -243,6 +246,7 @@ const api = {
     ipcRenderer.invoke("recording:open", filePath),
   revealRecording: (filePath: string): Promise<{ ok: true }> =>
     ipcRenderer.invoke("recording:reveal", filePath),
+  openRecordingFolder: (): Promise<{ ok: true }> => ipcRenderer.invoke("recording:open-folder"),
   getAiArticleStatus: (): Promise<AiArticleStatus> => ipcRenderer.invoke("ai-article:get-status"),
   saveAiArticleKey: (apiKey: string): Promise<{ ok: true }> => ipcRenderer.invoke("ai-article:save-key", apiKey),
   clearAiArticleKey: (): Promise<{ ok: true }> => ipcRenderer.invoke("ai-article:clear-key"),
@@ -272,6 +276,8 @@ const api = {
   generateStreamArticle: (input: { videoPath: string; slug: string; displayName?: string; category?: string; headline?: string; chatPaths?: string[] }): Promise<StreamArticle> =>
     ipcRenderer.invoke("articles:generate", input),
   listCommentLogFiles: (): Promise<CommentLogFile[]> => ipcRenderer.invoke("comment-video:list-logs"),
+  listRecentCommentMessages: (channelSlug: string, limit = 100): Promise<LibraryCommentMessage[]> =>
+    ipcRenderer.invoke("library:recent-comments", channelSlug, limit),
   previewCommentVideo: (input: { videoPath: string; chatPaths: string[]; delaySeconds?: number }): Promise<CommentVideoPreviewResult> =>
     ipcRenderer.invoke("comment-video:preview", input),
   startCommentVideo: (options: CommentVideoOptions): Promise<{ ok: true; outputPath: string }> => ipcRenderer.invoke("comment-video:start", options),
