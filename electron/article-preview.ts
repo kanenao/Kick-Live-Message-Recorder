@@ -11,7 +11,6 @@ export type ArticlePreviewFields = {
   videoPreviewAvailable: true;
   videoPreviewTimeSeconds: number;
   videoPreviewUpdatedAt: string;
-  videoPreviewDataUrl: string;
 };
 
 const MAX_PREVIEW_BYTES = 3_000_000;
@@ -70,9 +69,20 @@ export function saveArticlePreviewFrame(
   return {
     videoPreviewAvailable: true,
     videoPreviewTimeSeconds: Math.max(0, Math.floor(frame.timeSeconds)),
-    videoPreviewUpdatedAt: new Date().toISOString(),
-    videoPreviewDataUrl: asDataUrl(buffer)
+    videoPreviewUpdatedAt: new Date().toISOString()
   };
+}
+
+export function hasArticlePreview(directoryInput: string, articleId: string): boolean {
+  let filePath: string;
+  try { filePath = getPreviewPath(directoryInput, articleId); } catch { return false; }
+  if (!existsSync(filePath)) return false;
+  try {
+    const stats = statSync(filePath);
+    return stats.isFile() && stats.size >= 100 && stats.size <= MAX_PREVIEW_BYTES;
+  } catch {
+    return false;
+  }
 }
 
 export function readArticlePreviewDataUrl(directoryInput: string, articleId: string): string | undefined {
