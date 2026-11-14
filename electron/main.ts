@@ -23,6 +23,7 @@ import { KickCommentVideoGenerator, listCommentLogFiles, previewCommentVideo } f
 import { listRecentCommentMessages } from "./recording-library";
 import { deleteStreamArticle, generateStreamArticle, listStreamArticles } from "./articles";
 import { LiveStreamArticleManager } from "./live-articles";
+import { readArticlePreviewDataUrl } from "./article-preview";
 import { startLiveVideoFrameCapture, type LiveVideoFrameStatus } from "./live-video-frames";
 import type { VideoFrameSample } from "./video-frames";
 import { deleteRecordingFile, isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
@@ -1438,6 +1439,17 @@ function registerIpcHandlers(): void {
   ipcMain.handle("articles:list", (event, slug?: unknown) => {
     assertTrustedSender(event);
     return listStreamArticles(getRecordingOutputDirectory(), slug);
+  });
+
+  ipcMain.handle("articles:preview", (event, slugInput: unknown, idInput: unknown) => {
+    assertTrustedSender(event);
+    if (typeof slugInput !== "string" || !/^[a-zA-Z0-9_-]{1,40}$/.test(slugInput) ||
+        typeof idInput !== "string" || !idInput.startsWith(slugInput.toLowerCase() + "_") ||
+        !/^[0-9]{8}(?:_[0-9]{6}|T[0-9]{6}Z)$/.test(idInput.slice(slugInput.length + 1))) {
+      throw new Error("記事の放送画面を読み込むためのIDが不正です。");
+    }
+    const directory = join(getRecordingOutputDirectory(), "Articles", slugInput.toLowerCase());
+    return readArticlePreviewDataUrl(directory, idInput) ?? null;
   });
 
   ipcMain.handle("articles:delete", (event, slug: unknown, id: unknown) => {
