@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync } from "node:
 import { join, basename } from "node:path";
 import { tmpdir } from "node:os";
 import type { VideoFrameSample } from "./video-frames";
-import { classifyLiveCaptureExit, getLiveAudioCaptureOffsetSeconds, isPermanentLiveAudioCaptureError, nextLiveAudioCaptureRetryDelayMs } from "./live-capture-policy";
+import { classifyLiveCaptureExit, getLiveAudioCaptureOffsetSeconds, hasLiveAudioCaptureProgressStalled, isPermanentLiveAudioCaptureError, LIVE_AUDIO_CAPTURE_STALL_TIMEOUT_MS, LIVE_AUDIO_CAPTURE_WATCHDOG_INTERVAL_MS, nextLiveAudioCaptureRetryDelayMs } from "./live-capture-policy";
 
 export type LiveAudioChunk = { timeSeconds: number; wavBase64: string };
 
@@ -234,8 +234,9 @@ export function startLiveVideoFrameCapture(
                 "-i", currentStreamUrl, "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "16000",
                 "-c:a", "pcm_s16le", "-f", "segment", "-segment_time", "45",
                 "-segment_format", "wav", "-reset_timestamps", "1",
+                "-progress", "pipe:1", "-nostats",
                 "-segment_list", listPath, "-segment_list_type", "csv", outputPattern
-              ], { windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });
+              ], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
             } catch (error) {
               const detail = error instanceof Error ? error.message : String(error);
               if (isPermanentLiveAudioCaptureError(detail)) {
@@ -251,10 +252,34 @@ export function startLiveVideoFrameCapture(
             }
             audioChild = audioProcess;
             let audioStderr = "";
+            let progressBuffer = "";
+            let lastProgressAt = Date.now();
+            let lastOutputTimeUs = -1;
+            let audioStalled = false;
+            audioProcess.stdout?.on("data", chunk => {
+              const combined = (progressBuffer + String(chunk)).slice(-8192);
+              const lines = combined.split(/\r?\n/);
+              progressBuffer = lines.pop() ?? "";
+              for (const line of lines) {
+                const match = line.match(/^out_time_(?:us|ms)=(\d+)$/);
+                if (!match) continue;
+                const outputTimeUs = Number(match[1]);
+                if (Number.isFinite(outputTimeUs) && outputTimeUs > lastOutputTimeUs) {
+                  lastOutputTimeUs = outputTimeUs;
+                  lastProgressAt = Date.now();
+                }
+              }
+            });
             audioProcess.stderr?.on("data", chunk => {
               audioStderr = (audioStderr + String(chunk)).slice(-3000);
             });
             const pollTimer = setInterval(() => flushAudioSegments(listPath, generationOffsetSeconds), 2500);
+            const watchdogTimer = setInterval(() => {
+              if (hasLiveAudioCaptureProgressStalled(lastProgressAt, Date.now())) {
+                audioStalled = true;
+                audioProcess.kill();
+              }
+            }, LIVE_AUDIO_CAPTURE_WATCHDOG_INTERVAL_MS);
             const exit = await new Promise<{ code: number | null; error?: string }>(resolvePromise => {
               let settled = false;
               const settle = (result: { code: number | null; error?: string }): void => {
@@ -270,15 +295,18 @@ export function startLiveVideoFrameCapture(
               audioProcess.once("close", code => settle({ code, error: processError }));
             });
             clearInterval(pollTimer);
+            clearInterval(watchdogTimer);
             if (audioChild === audioProcess) audioChild = null;
             flushAudioSegments(listPath, generationOffsetSeconds);
             try { if (existsSync(listPath)) unlinkSync(listPath); } catch { /* Best-effort temporary-file cleanup. */ }
             if (cancelled || finished || audioStopped) break;
             if (audioSegmentCount > segmentCountBefore) retryAttempt = 0;
-            const detail = exit.error
-              ? "FFmpeg音声プロセスの実行エラー：" + exit.error
-              : "LIVE音声ストリームの取得が終了しました（終了コード：" + String(exit.code ?? "不明") + "）。" +
-                (audioStderr ? " " + audioStderr.slice(-700) : "");
+            const detail = audioStalled
+              ? "LIVE音声FFmpegの進捗が" + Math.floor(LIVE_AUDIO_CAPTURE_STALL_TIMEOUT_MS / 1000) + "秒以上停止したため、音声接続だけを再起動しました。"
+              : exit.error
+                ? "FFmpeg音声プロセスの実行エラー：" + exit.error
+                : "LIVE音声ストリームの取得が終了しました（終了コード：" + String(exit.code ?? "不明") + "）。" +
+                  (audioStderr ? " " + audioStderr.slice(-700) : "");
             if (isPermanentLiveAudioCaptureError(detail)) {
               onAudioError?.("LIVE音声を再接続できない状態です：" + detail.slice(0, 450));
               break;

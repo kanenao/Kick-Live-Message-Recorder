@@ -40,3 +40,18 @@ export function getLiveAudioCaptureOffsetSeconds(
     : 0;
   return base + elapsed;
 }
+
+
+export const LIVE_AUDIO_CAPTURE_STALL_TIMEOUT_MS = 90_000;
+export const LIVE_AUDIO_CAPTURE_WATCHDOG_INTERVAL_MS = 15_000;
+
+export function hasLiveAudioCaptureProgressStalled(
+  lastProgressAtMs: number,
+  nowMs: number,
+  timeoutMs = LIVE_AUDIO_CAPTURE_STALL_TIMEOUT_MS
+): boolean {
+  if (!Number.isFinite(lastProgressAtMs) || !Number.isFinite(nowMs) || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return false;
+  }
+  return nowMs - lastProgressAtMs >= timeoutMs;
+}
