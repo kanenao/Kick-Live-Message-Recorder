@@ -147,6 +147,178 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: β版バージョン以外の公開を禁止
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          if ($version -notmatch '^\\d+\\.\\d+\\.\\d+-beta\\.\\d+
+          if ($env:GITHUB_REF.StartsWith("refs/heads/release/")) {
+            $refName = $refName.Substring("release/".Length)
+          }
+          if ($refName -ne "v$version") {
+            throw "リリース参照 $refName と package.json のバージョン v$version が一致しません。"
+          }
+      - name: GitHub Releases用のバージョンタグを確認
+        id: release_tag
+        if: ${{ startsWith(github.ref, 'refs/heads/release/') }}
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          $tag = "v$version"
+          $existingRemote = git ls-remote --tags origin "refs/tags/$tag"
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHubのタグ情報を確認できませんでした。"
+          }
+          if ($existingRemote) {
+            git fetch --tags origin
+            if ($LASTEXITCODE -ne 0) { throw "既存タグを取得できませんでした。" }
+            $tagCommit = git rev-list -n 1 $tag
+            if (-not $tagCommit) { throw "既存タグ $tag を読み取れませんでした。" }
+            "should_publish=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            Write-Host "既存タグ $tag のReleaseアセットを更新します。"
+          } else {
+            git tag $tag
+            if ($LASTEXITCODE -ne 0) { throw "タグを作成できませんでした。" }
+            git push origin $tag
+            if ($LASTEXITCODE -ne 0) { throw "GitHubへタグをpushできませんでした。" }
+            "should_publish=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          }
+      - name: 同一タグの重複Releaseを整理
+        if: ${{ startsWith(github.ref, 'refs/heads/release/') }}
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = node -p "require('./package.json').version"
+          $tag = "v$version"
+          $headers = @{
+            Authorization = "Bearer $env:GITHUB_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+          $uri = "https://api.github.com/repos/kanenao/Kick-Live-Message-Recorder/releases?per_page=100"
+          $releases = Invoke-RestMethod -Headers $headers -Uri $uri
+          $matches = @($releases | Where-Object { $_.tag_name -eq $tag })
+          if ($matches.Count -gt 1) {
+            $installerName = "Kick-Recorder-Setup-$version.exe"
+            $keep = $matches | Where-Object {
+              ($_.assets.name -contains $installerName) -and ($_.assets.name -contains "latest.yml")
+            } | Select-Object -First 1
+            if (-not $keep) {
+              throw "タグ $tag のReleaseが重複していますが、インストーラーとlatest.ymlを持つReleaseを特定できません。"
+            }
+            foreach ($release in $matches) {
+              if ($release.id -ne $keep.id) {
+                Invoke-RestMethod -Method Delete -Headers $headers -Uri "https://api.github.com/repos/kanenao/Kick-Live-Message-Recorder/releases/$($release.id)"
+                Write-Host "重複Release $($release.id) を削除しました。"
+              }
+            }
+          } else {
+            Write-Host "同一タグの重複Releaseはありません。"
+          }
+      - name: GitHub Releaseを1件だけ先に作成
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = node -p "require('./package.json').version"
+          $tag = "v$version"
+          $repo = "kanenao/Kick-Live-Message-Recorder"
+          gh release view $tag --repo $repo *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --repo $repo --title $version --notes "Kick Recorder $version" --prerelease
+            if ($LASTEXITCODE -ne 0) { throw "GitHub Releaseを作成できませんでした。" }
+          } else {
+            Write-Host "GitHub Release $tag はすでに存在します。"
+          }
+      - name: 依存パッケージをインストール
+        run: npm install --no-audit --no-fund --no-package-lock
+      - name: yt-dlp Windows版を取得してアプリへ同梱
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "vendor/win-x64" | Out-Null
+          $target = "vendor/win-x64/yt-dlp.exe"
+          Invoke-WebRequest -Uri "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" -OutFile $target
+          if ((Get-Item $target).Length -lt 10000000) {
+            throw "yt-dlp.exe のダウンロードサイズが不正です。"
+          }
+          & $target --version
+          if ($LASTEXITCODE -ne 0) { throw "yt-dlp.exe を実行できませんでした。" }
+
+      - name: FFmpeg LGPL版を取得してアプリへ同梱
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "vendor/win-x64" | Out-Null
+          $archiveName = "ffmpeg-n9.0-latest-win64-lgpl-9.0.zip"
+          $archivePath = Join-Path $env:RUNNER_TEMP $archiveName
+          $archiveUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/$archiveName"
+          Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath
+          if ((Get-Item $archivePath).Length -lt 80000000) {
+            throw "FFmpegアーカイブのサイズが不正です。"
+          }
+
+          $extractPath = Join-Path $env:RUNNER_TEMP "ffmpeg-extract"
+          if (Test-Path $extractPath) { Remove-Item -Recurse -Force $extractPath }
+          Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
+          $ffmpegSource = Get-ChildItem -Path $extractPath -Filter "ffmpeg.exe" -File -Recurse | Select-Object -First 1
+          if (-not $ffmpegSource) { throw "FFmpegアーカイブ内にffmpeg.exeがありません。" }
+
+          $ffmpegTarget = "vendor/win-x64/ffmpeg.exe"
+          Copy-Item -LiteralPath $ffmpegSource.FullName -Destination $ffmpegTarget -Force
+          if ((Get-Item $ffmpegTarget).Length -lt 20000000) {
+            throw "ffmpeg.exe のサイズが不正です。"
+          }
+          & $ffmpegTarget -version
+          if ($LASTEXITCODE -ne 0) { throw "同梱するffmpeg.exeを実行できませんでした。" }
+
+          $ffprobeSource = Get-ChildItem -Path $extractPath -Filter "ffprobe.exe" -File -Recurse | Select-Object -First 1
+          if (-not $ffprobeSource) { throw "FFmpegアーカイブ内にffprobe.exeがありません。" }
+          $ffprobeTarget = "vendor/win-x64/ffprobe.exe"
+          Copy-Item -LiteralPath $ffprobeSource.FullName -Destination $ffprobeTarget -Force
+          if ((Get-Item $ffprobeTarget).Length -lt 1000000) {
+            throw "ffprobe.exe のサイズが不正です。"
+          }
+          & $ffprobeTarget -version
+          if ($LASTEXITCODE -ne 0) { throw "同梱するffprobe.exeを実行できませんでした。" }
+
+          $licenseTarget = "vendor/win-x64/FFmpeg-LGPL-2.1.txt"
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FFmpeg/FFmpeg/n9.0/COPYING.LGPLv2.1" -OutFile $licenseTarget
+          if ((Get-Item $licenseTarget).Length -lt 10000) {
+            throw "FFmpeg LGPLライセンス文書を取得できませんでした。"
+          }
+
+          @"
+          FFmpeg 9.0 Windows x64 (LGPL static build)
+          Binary distribution: BtbN/FFmpeg-Builds
+          Build archive: $archiveName
+          FFmpeg source: https://github.com/FFmpeg/FFmpeg/tree/n9.0
+          Build scripts and package information: https://github.com/BtbN/FFmpeg-Builds
+          License: GNU Lesser General Public License version 2.1 or later.
+          The accompanying FFmpeg-LGPL-2.1.txt contains the LGPL v2.1 license text.
+          "@ | Set-Content -Path "vendor/win-x64/FFmpeg-NOTICE.txt" -Encoding UTF8
+
+      - name: Releases用の同梱ファイルを再確認
+        shell: pwsh
+        run: |
+          $required = @("vendor/win-x64/yt-dlp.exe", "vendor/win-x64/ffmpeg.exe", "vendor/win-x64/ffprobe.exe")
+          foreach ($path in $required) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "インストーラーへ同梱するファイルがありません: $path"
+            }
+            $size = (Get-Item -LiteralPath $path).Length
+            if ($size -lt 10000000) {
+              throw "同梱ファイルのサイズが不正です: $path ($size bytes)"
+            }
+            Write-Host "$path : $size bytes"
+          }
+      - name: β版インストーラーと更新情報をGitHub Releasesへ公開
+        if: ${{ startsWith(github.ref, 'refs/tags/v') || steps.release_tag.outputs.should_publish == 'true' }}
+        run: npm run publish:win
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+) {
+            throw "現在はβ版のみ公開します。package.json のバージョンがβ版形式ではありません: $version"
+          }
       - name: バージョンとタグの一致を確認
         shell: pwsh
         run: |
