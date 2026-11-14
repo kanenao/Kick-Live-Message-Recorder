@@ -90,7 +90,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path "vendor/win-x64" | Out-Null
           $archiveName = "ffmpeg-n9.0-latest-win64-lgpl-9.0.zip"
           $archivePath = Join-Path $env:RUNNER_TEMP $archiveName
-          $archiveUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/$archiveName"
+          $archiveUrl = "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/latest/$archiveName"
           Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath
           if ((Get-Item $archivePath).Length -lt 80000000) {
             throw "FFmpegアーカイブのサイズが不正です。"
@@ -128,10 +128,10 @@ jobs:
 
           @"
           FFmpeg 9.0 Windows x64 (LGPL static build)
-          Binary distribution: BtbN/FFmpeg-Builds
+          Binary distribution: FFmpeg-Builds/FFmpeg-Builds
           Build archive: $archiveName
           FFmpeg source: https://github.com/FFmpeg/FFmpeg/tree/n9.0
-          Build scripts and package information: https://github.com/BtbN/FFmpeg-Builds
+          Build scripts and package information: https://github.com/FFmpeg-Builds/FFmpeg-Builds
           License: GNU Lesser General Public License version 2.1 or later.
           The accompanying FFmpeg-LGPL-2.1.txt contains the LGPL v2.1 license text.
           "@ | Set-Content -Path "vendor/win-x64/FFmpeg-NOTICE.txt" -Encoding UTF8
@@ -244,7 +244,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path "vendor/win-x64" | Out-Null
           $archiveName = "ffmpeg-n9.0-latest-win64-lgpl-9.0.zip"
           $archivePath = Join-Path $env:RUNNER_TEMP $archiveName
-          $archiveUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/$archiveName"
+          $archiveUrl = "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/latest/$archiveName"
           Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath
           if ((Get-Item $archivePath).Length -lt 80000000) {
             throw "FFmpegアーカイブのサイズが不正です。"
@@ -282,10 +282,10 @@ jobs:
 
           @"
           FFmpeg 9.0 Windows x64 (LGPL static build)
-          Binary distribution: BtbN/FFmpeg-Builds
+          Binary distribution: FFmpeg-Builds/FFmpeg-Builds
           Build archive: $archiveName
           FFmpeg source: https://github.com/FFmpeg/FFmpeg/tree/n9.0
-          Build scripts and package information: https://github.com/BtbN/FFmpeg-Builds
+          Build scripts and package information: https://github.com/FFmpeg-Builds/FFmpeg-Builds
           License: GNU Lesser General Public License version 2.1 or later.
           The accompanying FFmpeg-LGPL-2.1.txt contains the LGPL v2.1 license text.
           "@ | Set-Content -Path "vendor/win-x64/FFmpeg-NOTICE.txt" -Encoding UTF8
