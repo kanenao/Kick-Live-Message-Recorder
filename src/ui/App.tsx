@@ -1876,11 +1876,11 @@ export default function App() {
           </div>
           {vodDownloadStatus && <div className="api-message" role="status">{vodDownloadStatus}</div>}
           <div className="add-channel vod-chat-actions">
-            <button className="primary-small" onClick={() => void downloadPastBroadcastChat()} disabled={!isDesktop || vodChatActive}>過去配信のコメントを取得（JSONL・TXT）</button>
+            <button className="primary-small" onClick={() => void downloadPastBroadcastChat()} disabled={!isDesktop || vodChatActive}>過去配信のコメントを取得（JSONL・TXT・ASS）</button>
             {vodChatActive && <button className="remove" onClick={() => void stopPastBroadcastChat()}>コメント取得を停止</button>}
           </div>
           {vodChatStatus && <div className="api-message" role="status">{vodChatStatus}</div>}
-          <div className="notice">公開状態で取得可能なVODが対象です。コメントは配信開始からの経過時刻・投稿者名・本文を保持し、ChatフォルダーにJSONLとTXTで保存します。Kick側の非公開設定やアクセス制限、API仕様変更により取得できない場合があります。</div>
+          <div className="notice">公開状態で取得可能なVODが対象です。コメントは配信開始からの経過時刻・投稿者名・本文を保持し、ChatフォルダーにJSONL・TXT・ASSで保存します。ASSはニコ生風の右から左へ流れる字幕です。Kick側の非公開設定やアクセス制限、API仕様変更により取得できない場合があります。</div>
         </section>
         <div className="setting-row">
           <div><strong>録画専用チャンネルの録画・コメント取得</strong><small>チャンネル一覧の「録画＋コメント取得」から映像とコメントを同時に開始できます。ONならアプリ起動時もコメントへ自動接続します。</small></div>
