@@ -658,6 +658,7 @@ function getArticleIdentity(
   if (!id) {
     const recentUnfinished = readSavedArticles().find(article =>
       article.slug === slug &&
+      article.startedAt === null &&
       !article.isFinal &&
       Date.now() - Date.parse(article.generatedAt) >= 0 &&
       Date.now() - Date.parse(article.generatedAt) < 12 * 60 * 60 * 1000
