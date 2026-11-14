@@ -125,6 +125,13 @@ assert.equal(plainArticle.headline, "配信の振り返り");
 assert.equal(plainArticle.paragraphs.length, 2);
 assert.ok(plainArticle.summary.includes("冒頭"));
 
+// Long unformatted prose is split into paragraphs instead of being silently cut at 1,000 chars.
+const longPlainArticle = parseAiArticleResponse({
+  response: "長文の段落です。" .repeat(140)
+}, "元配信タイトル");
+assert.ok(longPlainArticle.paragraphs.length > 1);
+assert.ok(longPlainArticle.paragraphs.join("").length > 1000);
+
 // Fenced JSON may include a short preamble or reasoning text.
 const fence = String.fromCharCode(96).repeat(3);
 const fenced = normalizeAiJsonText("結果はこちらです。\n" + fence + "json\n" + articleJson + "\n" + fence + "\n以上です。");
