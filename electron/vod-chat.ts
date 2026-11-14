@@ -13,6 +13,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { createVodChatAssHeader, VodChatAssComposer } from "./vod-chat-ass";
 
 const execFileAsync = promisify(execFile);
 type JsonRecord = Record<string, unknown>;
@@ -361,18 +362,19 @@ function timestampForFilename(date: Date): string {
   ].join("");
 }
 
-function getOutputPaths(directory: string, identity: VodIdentity): { jsonl: string; txt: string } {
+function getOutputPaths(directory: string, identity: VodIdentity): { jsonl: string; txt: string; ass: string } {
   const channelDirectory = join(directory, "Chat", identity.slug);
   mkdirSync(channelDirectory, { recursive: true });
   const base = "VOD_" + identity.videoId + "_" + timestampForFilename(new Date());
   let name = base;
   let suffix = 1;
-  while (existsSync(join(channelDirectory, name + ".jsonl")) || existsSync(join(channelDirectory, name + ".txt"))) {
+  while (existsSync(join(channelDirectory, name + ".jsonl")) || existsSync(join(channelDirectory, name + ".txt")) || existsSync(join(channelDirectory, name + ".ass"))) {
     name = base + "_" + suffix++;
   }
   return {
     jsonl: join(channelDirectory, name + ".jsonl"),
-    txt: join(channelDirectory, name + ".txt")
+    txt: join(channelDirectory, name + ".txt"),
+    ass: join(channelDirectory, name + ".ass")
   };
 }
 
@@ -423,8 +425,8 @@ export class KickVodChatDownloader {
         videoId: identity.videoId,
         pages: result.pages,
         messageCount: result.messageCount,
-        filePaths: [result.jsonlPath, result.txtPath],
-        message: "過去コメントを取得しました（" + result.messageCount.toLocaleString("ja-JP") + "件）。JSONLとTXTを保存しました。"
+        filePaths: [result.jsonlPath, result.txtPath, result.assPath],
+        message: "過去コメントを取得しました（" + result.messageCount.toLocaleString("ja-JP") + "件）。JSONL・TXT・ASSを保存しました。"
       });
     }).catch(error => {
       const stopped = controller.signal.aborted;
@@ -457,7 +459,7 @@ export class KickVodChatDownloader {
     identity: VodIdentity,
     outputDirectory: string,
     signal: AbortSignal
-  ): Promise<{ pages: number; messageCount: number; jsonlPath: string; txtPath: string }> {
+  ): Promise<{ pages: number; messageCount: number; jsonlPath: string; txtPath: string; assPath: string }> {
     const temporaryDirectory = mkdtempSync(join(tmpdir(), "kick-vod-chat-"));
     const pageFiles: string[] = [];
     let pages = 0;
@@ -548,7 +550,10 @@ export class KickVodChatDownloader {
       const outputPaths = getOutputPaths(outputDirectory, identity);
       const jsonlTemp = join(temporaryDirectory, "result.jsonl");
       const txtTemp = join(temporaryDirectory, "result.txt");
+      const assTemp = join(temporaryDirectory, "result.ass");
+      const assComposer = new VodChatAssComposer(metadata.durationSeconds);
       writeFileSync(jsonlTemp, "", "utf8");
+      writeFileSync(assTemp, createVodChatAssHeader(identity.slug, metadata.title), "utf8");
       writeFileSync(txtTemp, [
         "Kick VOD コメント履歴",
         "チャンネル: " + identity.slug,
@@ -561,6 +566,7 @@ export class KickVodChatDownloader {
       ].join("\n"), "utf8");
 
       let lastTimestamp = Number.NEGATIVE_INFINITY;
+      let assBatch: string[] = [];
       for (const pagePath of [...pageFiles].reverse()) {
         if (signal.aborted) throw new Error("コメント取得を停止しました。");
         const lines = readFileSync(pagePath, "utf8").split(/\r?\n/).filter(Boolean);
@@ -574,6 +580,12 @@ export class KickVodChatDownloader {
           }
           lastTimestamp = timestamp;
           jsonLines.push(JSON.stringify(message));
+          const assDialogue = assComposer.createDialogue(message);
+          if (assDialogue) assBatch.push(assDialogue);
+          if (assBatch.length >= 1500) {
+            appendFileSync(assTemp, assBatch.join("\n") + "\n", "utf8");
+            assBatch = [];
+          }
           const safeContent = message.content.replace(/[\r\n]+/g, " ");
           textLines.push("[" + message.timeText + "] " + message.senderUsername + ": " + safeContent);
         }
@@ -584,13 +596,16 @@ export class KickVodChatDownloader {
       }
 
       if (signal.aborted) throw new Error("コメント取得を停止しました。");
+      if (assBatch.length > 0) appendFileSync(assTemp, assBatch.join("\n") + "\n", "utf8");
       renameSync(jsonlTemp, outputPaths.jsonl);
       renameSync(txtTemp, outputPaths.txt);
+      renameSync(assTemp, outputPaths.ass);
       return {
         pages,
         messageCount,
         jsonlPath: outputPaths.jsonl,
-        txtPath: outputPaths.txt
+        txtPath: outputPaths.txt,
+        assPath: outputPaths.ass
       };
     } finally {
       rmSync(temporaryDirectory, { recursive: true, force: true });
