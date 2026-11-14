@@ -155,7 +155,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.1.0-alpha.52";
+const APP_VERSION = "0.1.1-alpha.53";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -183,6 +183,15 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.1.1-alpha.53",
+    title: "LIVE映像キャプチャの自動復旧を改善",
+    changes: [
+      "LIVE映像解析のFFmpegが途中終了した場合、取得済みフレームがあっても異常終了として検出",
+      "古いキャプチャ接続だけを安全に解除し、音声側プロセスと再接続タイマーを後処理",
+      "未登録チャンネルの記事専用LIVEでもLIVE状態を再確認し、10・20・40・60秒の段階的な待機時間で再接続"
+    ]
+  },
   {
     version: "0.1.0-alpha.52",
     title: "配信AI新聞に放送画面を掲載",
