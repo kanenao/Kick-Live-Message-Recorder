@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getRecordingChannelSlug } from "../shared/recording-library";
 
 type Channel = {
   id: number;
@@ -723,10 +724,7 @@ export default function App() {
       if (group) group.logs.push(log);
     }
     for (const file of recordingFiles) {
-      const baseName = file.name.replace(/\.[^.]+$/, "");
-      const match = baseName.match(/^([a-zA-Z0-9_-]+?)(?:_VOD)?_\d{8}_\d{6}(?:_retry\d+)?(?:_comments(?:_\d+)?)?$/i);
-      const fallback = match ? null : baseName.match(/^([a-zA-Z0-9_-]{1,40})$/);
-      const slug = match?.[1] ?? fallback?.[1];
+      const slug = getRecordingChannelSlug(file.name);
       if (!slug) continue;
       const group = getGroup(slug);
       if (group) group.videos.push(file);
