@@ -264,11 +264,12 @@ export function startLiveVideoFrameCapture(
                 settled = true;
                 resolvePromise(result);
               };
+              let processError: string | undefined;
               audioProcess.once("error", error => {
-                settle({ code: null, error: error.message });
+                processError = error.message;
                 audioProcess.kill();
               });
-              audioProcess.once("close", code => settle({ code }));
+              audioProcess.once("close", code => settle({ code, error: processError }));
             });
             clearInterval(pollTimer);
             if (audioChild === audioProcess) audioChild = null;

@@ -155,7 +155,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.2.0-alpha.55";
+const APP_VERSION = "0.2.1-alpha.56";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -183,6 +183,16 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.2.1-alpha.56",
+    title: "LIVE音声ストリームの自動再接続を強化",
+    changes: [
+      "LIVE音声のFFmpeg取得プロセスが通信切断・異常終了した場合、配信映像の取得を止めずに音声だけを再接続",
+      "yt-dlpで音声ストリームURLを取り直し、5秒・10秒・20秒・40秒・最大60秒の待機時間で自動復旧",
+      "再接続ごとに音声区間の時刻基準を再計算し、45秒WAV区間を配信経過時間へ合わせて保存",
+      "音声再接続タイマー・URL解決プロセス・FFmpeg・一時WAVファイルを停止時に後片付け"
+    ]
+  },
   {
     version: "0.2.0-alpha.55",
     title: "LIVE配信記事・映像／音声の復旧機能を拡張",
