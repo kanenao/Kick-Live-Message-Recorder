@@ -36,7 +36,7 @@ assert.equal(getLiveAudioCaptureOffsetSeconds(-5, 10_000, 8_000), 0);
 assert.equal(LIVE_AUDIO_CAPTURE_STALL_TIMEOUT_MS, 90_000);
 assert.equal(hasLiveAudioCaptureProgressStalled(10_000, 99_999), false);
 assert.equal(hasLiveAudioCaptureProgressStalled(10_000, 100_000), true);
-assert.equal(hasLiveAudioCaptureProgressStalled(10_000, 160_000, 120_000), false);
+assert.equal(hasLiveAudioCaptureProgressStalled(10_000, 100_000, 120_000), false);
 assert.equal(hasLiveAudioCaptureProgressStalled(Number.NaN, 200_000), false);
 
 
