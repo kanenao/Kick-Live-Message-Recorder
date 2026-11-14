@@ -26,7 +26,9 @@ assert.equal((workflowText.match(/α版インストーラーと更新情報をGi
 const tagCases = [
   ["v0.1.0-alpha.51", true],
   ["v0.1.0-alpha.52", true],
-  ["v1.0.0-alpha.1", true],
+  ["v0.1.1-alpha.53", true],
+  ["v0.2.0-alpha.54", true],
+  ["v1.0.0-alpha.55", true],
   ["v1.0.0-beta.50", false],
   ["v0.1.0-beta.51", false],
   ["v1.0.0", false],
@@ -54,7 +56,9 @@ const shouldPublishRef = ref =>
 
 const refCases = [
   ["refs/tags/v0.1.0-alpha.52", true],
-  ["refs/tags/v1.0.0-alpha.1", true],
+  ["refs/tags/v0.1.1-alpha.53", true],
+  ["refs/tags/v0.2.0-alpha.54", true],
+  ["refs/tags/v1.0.0-alpha.55", true],
   ["refs/tags/v0.1.0-beta.50", false],
   ["refs/tags/v1.0.0", false],
   ["refs/tags/v1.0.0-rc.1", false],
