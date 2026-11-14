@@ -1,9 +1,9 @@
-name: β版ビルド・自動更新配布
+name: α版ビルド・自動更新配布
 
 on:
   push:
-    branches: [main, "release/*-beta*", "feature/beta51-ai-article-live", "feature/beta52-broadcast-newspaper-layout"]
-    tags: ["v*-beta*"]
+    branches: [main, "release/*-alpha*", "feature/alpha52-broadcast-newspaper-layout"]
+    tags: ["v*-alpha*"]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -22,7 +22,7 @@ jobs:
           node-version: 22
       - name: 依存パッケージをインストール
         run: npm install --no-audit --no-fund --no-package-lock
-      - name: β版専用タグの振り分けテスト
+      - name: α版専用タグの振り分けテスト
         run: node scripts/test-release-tag-policy.mjs
       - name: READMEバージョン表記テスト
         run: node scripts/test-readme-version.mjs
@@ -63,7 +63,7 @@ jobs:
           NODE
 
   windows-installer:
-    name: Windows β版インストーラーを作成
+    name: Windows α版インストーラーを作成
     runs-on: windows-latest
     needs: quality
     if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
@@ -143,19 +143,19 @@ jobs:
       - name: インストーラーを保存
         uses: actions/upload-artifact@v4
         with:
-          name: Kick-Recorder-beta-windows
+          name: Kick-Recorder-alpha-windows
           path: release/*.exe
           if-no-files-found: error
           retention-days: 14
 
   publish-release:
-    name: β版GitHub Releasesへ自動更新版を公開
+    name: α版GitHub Releasesへ自動更新版を公開
     runs-on: windows-latest
     concurrency:
       group: kick-recorder-release-${{ github.ref }}
       cancel-in-progress: false
     needs: quality
-    if: ${{ startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-beta') }}
+    if: ${{ startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-alpha') }}
     permissions:
       contents: write
     steps:
@@ -163,12 +163,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: β版バージョン以外の公開を禁止
+      - name: α版バージョン以外の公開を禁止
         shell: pwsh
         run: |
           $version = node -p "require('./package.json').version"
-          if ($version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$') {
-            throw "現在はβ版のみ公開します。package.json のバージョンがβ版形式ではありません: $version"
+          if ($version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+$') {
+            throw "現在はα版のみ公開します。package.json のバージョンがα版形式ではありません: $version"
           }
       - name: バージョンとタグの一致を確認
         shell: pwsh
@@ -179,7 +179,7 @@ jobs:
             throw "リリース参照 $refName と package.json のバージョン v$version が一致しません。"
           }
       - name: 同一タグの重複Releaseを整理
-        if: ${{ startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-beta') }}
+        if: ${{ startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-alpha') }}
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -306,8 +306,8 @@ jobs:
             }
             Write-Host "$path : $size bytes"
           }
-      - name: β版インストーラーと更新情報をGitHub Releasesへ公開
-        if: ${{ startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-beta') }}
+      - name: α版インストーラーと更新情報をGitHub Releasesへ公開
+        if: ${{ startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-alpha') }}
         run: npm run publish:win
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
