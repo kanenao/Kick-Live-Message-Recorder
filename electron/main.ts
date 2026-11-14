@@ -19,7 +19,7 @@ import { join } from "node:path";
 import { autoUpdater } from "electron-updater";
 import { KickChatReceiver } from "./chat";
 import { KickVodChatDownloader } from "./vod-chat";
-import { KickCommentVideoGenerator, listCommentLogFiles, previewCommentVideo } from "./comment-video";
+import { KickCommentVideoGenerator, listCommentLogFiles, listRecentCommentMessages, previewCommentVideo } from "./comment-video";
 import { deleteStreamArticle, generateStreamArticle, listStreamArticles } from "./articles";
 import { LiveStreamArticleManager } from "./live-articles";
 import { startLiveVideoFrameCapture, type LiveVideoFrameStatus } from "./live-video-frames";
@@ -1358,6 +1358,15 @@ function registerIpcHandlers(): void {
     return listRecordingFiles(getRecordingOutputDirectory());
   });
 
+  ipcMain.handle("recording:open-folder", async event => {
+    assertTrustedSender(event);
+    const directory = getRecordingOutputDirectory();
+    mkdirSync(directory, { recursive: true });
+    const error = await shell.openPath(directory);
+    if (error) throw new Error("録画の保存先フォルダーを開けませんでした：" + error);
+    return { ok: true as const };
+  });
+
   ipcMain.handle("articles:live:start", async (event, channelInput: unknown) => {
     assertTrustedSender(event);
     if (manualArticleSession) {
@@ -1455,6 +1464,11 @@ function registerIpcHandlers(): void {
   ipcMain.handle("comment-video:list-logs", event => {
     assertTrustedSender(event);
     return listCommentLogFiles(getRecordingOutputDirectory());
+  });
+
+  ipcMain.handle("library:recent-comments", async (event, channelSlug: unknown, limit?: unknown) => {
+    assertTrustedSender(event);
+    return listRecentCommentMessages(getRecordingOutputDirectory(), channelSlug, limit);
   });
 
   ipcMain.handle("comment-video:preview", async (event, input: unknown) => {
