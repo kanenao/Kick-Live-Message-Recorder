@@ -151,7 +151,14 @@ jobs:
         shell: pwsh
         run: |
           $version = node -p "require('./package.json').version"
-          if ($version -notmatch '^\\d+\\.\\d+\\.\\d+-beta\\.\\d+
+          if ($version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$') {
+            throw "現在はβ版のみ公開します。package.json のバージョンがβ版形式ではありません: $version"
+          }
+      - name: バージョンとタグの一致を確認
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          $refName = $env:GITHUB_REF_NAME
           if ($env:GITHUB_REF.StartsWith("refs/heads/release/")) {
             $refName = $refName.Substring("release/".Length)
           }
