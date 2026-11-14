@@ -25,6 +25,7 @@ import { deleteStreamArticle, generateStreamArticle, listStreamArticles } from "
 import { LiveStreamArticleManager } from "./live-articles";
 import { readArticlePreviewDataUrl } from "./article-preview";
 import { startLiveVideoFrameCapture, type LiveVideoFrameStatus } from "./live-video-frames";
+import { detachCaptureIfCurrent, nextManualCaptureRetryDelayMs } from "./live-capture-policy";
 import type { VideoFrameSample } from "./video-frames";
 import { deleteRecordingFile, isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
 
@@ -656,20 +657,75 @@ type ManualArticleSession = {
   previousChatSlugs: string[];
   ownsArticleSession: boolean;
 };
-const liveArticleFrameCaptures = new Map<string, { stop: () => Promise<void>; frames: VideoFrameSample[] }>();
+type LiveArticleFrameCapture = { stop: () => Promise<void>; frames: VideoFrameSample[] };
+const liveArticleFrameCaptures = new Map<string, LiveArticleFrameCapture>();
+const liveArticleCaptureRetryTimers = new Map<string, NodeJS.Timeout>();
+const liveArticleCaptureRetryAttempts = new Map<string, number>();
 let manualArticleSession: ManualArticleSession | null = null;
+
+function clearArticleFrameCaptureRetry(slug: string): void {
+  const timer = liveArticleCaptureRetryTimers.get(slug);
+  if (timer) clearTimeout(timer);
+  liveArticleCaptureRetryTimers.delete(slug);
+  liveArticleCaptureRetryAttempts.delete(slug);
+}
+
+function scheduleManualArticleFrameCaptureRetry(slug: string): void {
+  if (isQuitting || liveArticleCaptureRetryTimers.has(slug) ||
+      !manualArticleSession || manualArticleSession.metadata.slug !== slug ||
+      !liveArticleManager.hasSession(slug)) return;
+  const attempt = (liveArticleCaptureRetryAttempts.get(slug) ?? 0) + 1;
+  liveArticleCaptureRetryAttempts.set(slug, attempt);
+  const delayMs = nextManualCaptureRetryDelayMs(attempt);
+  const timer = setTimeout(() => {
+    liveArticleCaptureRetryTimers.delete(slug);
+    if (isQuitting || liveArticleFrameCaptures.has(slug) ||
+        !manualArticleSession || manualArticleSession.metadata.slug !== slug ||
+        !liveArticleManager.hasSession(slug)) return;
+    void checkKickChannels([slug], false).then(results => {
+      if (!manualArticleSession || manualArticleSession.metadata.slug !== slug ||
+          !liveArticleManager.hasSession(slug)) return;
+      const channel = results.find(result => result.slug === slug);
+      if (channel?.found && channel.isLive) {
+        startArticleFrameCapture(slug);
+      } else {
+        scheduleManualArticleFrameCaptureRetry(slug);
+      }
+    }).catch(error => {
+      console.warn("Manual LIVE article capture reconnect check failed:", error);
+      scheduleManualArticleFrameCaptureRetry(slug);
+    });
+  }, delayMs);
+  liveArticleCaptureRetryTimers.set(slug, timer);
+  mainWindow?.webContents.send("articles:live-capture-status", {
+    slug, status: "starting", frameCount: 0,
+    message: `LIVE映像の接続が切れました。約${Math.ceil(delayMs / 1000)}秒後に再接続を確認します（試行 ${attempt}）。`
+  });
+}
 
 function startArticleFrameCapture(slugInput: string): void {
   const slug = slugInput.toLowerCase();
   if (liveArticleFrameCaptures.has(slug)) return;
+  clearArticleFrameCaptureRetry(slug);
   const frames: VideoFrameSample[] = [];
+  let capture: LiveArticleFrameCapture | null = null;
   try {
     const stop = startLiveVideoFrameCapture(slug, frame => {
+      if (capture) {
+        const retryTimer = liveArticleCaptureRetryTimers.get(slug);
+        if (retryTimer) clearTimeout(retryTimer);
+        liveArticleCaptureRetryTimers.delete(slug);
+        liveArticleCaptureRetryAttempts.delete(slug);
+      }
       frames.push(frame);
       if (frames.length > 8) frames.shift();
       liveArticleManager.updateVideoFrames(slug, [...frames]);
     }, status => {
       mainWindow?.webContents.send("articles:live-capture-status", { slug, ...status });
+      if (status.status !== "completed" && status.status !== "error") return;
+      if (!capture || !detachCaptureIfCurrent(liveArticleFrameCaptures, slug, capture)) return;
+      void capture.stop().catch(error => console.warn("LIVE article capture cleanup failed:", error));
+      if (status.status === "error") scheduleManualArticleFrameCaptureRetry(slug);
     }, (() => {
       const captureSettings = readState().settings;
       return captureSettings.aiArticleProvider === "ollama" && captureSettings.aiArticleAudioEnabled
@@ -678,18 +734,21 @@ function startArticleFrameCapture(slugInput: string): void {
     })(), audioError => {
       liveArticleManager.onAudioCaptureError(slug, audioError);
     }, liveArticleManager.getElapsedSeconds(slug));
-    liveArticleFrameCaptures.set(slug, { stop, frames });
+    capture = { stop, frames };
+    liveArticleFrameCaptures.set(slug, capture);
   } catch (error) {
     const status: LiveVideoFrameStatus = {
       status: "error", frameCount: 0,
       message: error instanceof Error ? error.message : String(error)
     };
     mainWindow?.webContents.send("articles:live-capture-status", { slug, ...status });
+    scheduleManualArticleFrameCaptureRetry(slug);
   }
 }
 
 function stopArticleFrameCapture(slugInput: string): Promise<void> {
   const slug = slugInput.toLowerCase();
+  clearArticleFrameCaptureRetry(slug);
   const capture = liveArticleFrameCaptures.get(slug);
   if (!capture) return Promise.resolve();
   liveArticleFrameCaptures.delete(slug);
