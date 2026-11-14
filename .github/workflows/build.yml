@@ -24,6 +24,8 @@ jobs:
         run: npm install --no-audit --no-fund --no-package-lock
       - name: β版専用タグの振り分けテスト
         run: node scripts/test-release-tag-policy.mjs
+      - name: READMEバージョン表記テスト
+        run: node scripts/test-readme-version.mjs
       - name: 録画タイムライン同期テスト
         run: node --experimental-strip-types scripts/test-recording-timeline.mjs
       - name: AI記事応答形式テスト
