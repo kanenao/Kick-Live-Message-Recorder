@@ -345,6 +345,77 @@ export function listCommentLogFiles(outputDirectory: string): CommentLogFile[] {
   return files.sort((a, b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt)).slice(0, 1000);
 }
 
+
+export type LibraryCommentMessage = {
+  eventId: string;
+  senderUsername: string;
+  content: string;
+  createdAt: string;
+  usernameColor: string | null;
+};
+
+export async function listRecentCommentMessages(
+  outputDirectory: string,
+  channelSlugInput: unknown,
+  limitInput: unknown = 100
+): Promise<LibraryCommentMessage[]> {
+  if (typeof channelSlugInput !== "string" || !/^[a-zA-Z0-9_-]{1,40}$/.test(channelSlugInput)) {
+    throw new Error("チャンネル名が正しくありません。");
+  }
+  const channelSlug = channelSlugInput.toLowerCase();
+  const limit = typeof limitInput === "number" && Number.isFinite(limitInput)
+    ? Math.max(1, Math.min(200, Math.round(limitInput)))
+    : 100;
+  const logs = listCommentLogFiles(outputDirectory)
+    .filter(file => file.channelSlug.toLowerCase() === channelSlug)
+    .slice(0, 30)
+    .reverse();
+  const messages: LibraryCommentMessage[] = [];
+
+  for (const log of logs) {
+    try {
+      const reader = createInterface({
+        input: createReadStream(log.path, { encoding: "utf8" }),
+        crlfDelay: Infinity
+      });
+      try {
+        for await (const line of reader) {
+          if (!line || line.length > 64 * 1024) continue;
+          let value: unknown;
+          try { value = JSON.parse(line) as unknown; } catch { continue; }
+          if (!value || typeof value !== "object") continue;
+          const item = value as Record<string, unknown>;
+          const senderUsername = typeof item.senderUsername === "string"
+            ? item.senderUsername.trim().slice(0, 100)
+            : "";
+          const content = typeof item.content === "string" ? item.content.trim().slice(0, 4000) : "";
+          const createdAt = typeof item.createdAt === "string" ? item.createdAt : "";
+          if (!senderUsername || !content || !Number.isFinite(Date.parse(createdAt))) continue;
+          if (typeof item.channelSlug === "string" && item.channelSlug.toLowerCase() !== channelSlug) continue;
+          messages.push({
+            eventId: typeof item.eventId === "string" ? item.eventId.slice(0, 160) : createdAt + ":" + messages.length,
+            senderUsername,
+            content,
+            createdAt,
+            usernameColor: typeof item.usernameColor === "string" && /^#[0-9a-f]{3,8}$/i.test(item.usernameColor)
+              ? item.usernameColor
+              : null
+          });
+          if (messages.length > limit * 3) messages.splice(0, messages.length - limit * 3);
+        }
+      } finally {
+        reader.close();
+      }
+    } catch {
+      // 一覧取得後にログが移動・削除された場合は、他のファイルの読み取りを続ける。
+    }
+  }
+
+  return messages
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .slice(0, limit);
+}
+
 async function* readLinesFromFiles(filePaths: string[], signal: AbortSignal): AsyncGenerator<string> {
   for (const filePath of filePaths) {
     if (signal.aborted) throw new Error("生成を停止しました。");
