@@ -11,7 +11,8 @@ const cases = [
   ["sample_channel_20261114_123456_comments_10.mp4", "sample_channel"],
   ["SAMPLE_20261114_123456.MP4", "sample"],
   ["sample_channel.mp4", "sample_channel"],
-  ["not-a-recorder-output.txt", null],
+  ["not a recorder output.txt", null],
+  ["not-a-recorder-output.txt", "not-a-recorder-output"],
   ["../sample_20261114_123456.mp4", null],
   ["sample_20261114_12345.mp4", null]
 ];
