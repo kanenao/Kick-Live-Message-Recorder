@@ -28,6 +28,8 @@ jobs:
         run: node scripts/test-readme-version.mjs
       - name: 録画タイムライン同期テスト
         run: node --experimental-strip-types scripts/test-recording-timeline.mjs
+      - name: 録画ライブラリのコメント読込テスト
+        run: node --experimental-strip-types scripts/test-library-comments.mjs
       - name: AI記事応答形式テスト
         run: node --experimental-strip-types scripts/test-ai-response.mjs
       - name: 型チェック
