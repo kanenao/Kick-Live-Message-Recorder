@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join, basename } from "node:path";
 import { tmpdir } from "node:os";
 import type { VideoFrameSample } from "./video-frames";
+import { classifyLiveCaptureExit } from "./live-capture-policy";
 
 export type LiveAudioChunk = { timeSeconds: number; wavBase64: string };
 
@@ -283,10 +284,13 @@ export function startLiveVideoFrameCapture(
       child.once("close", code => {
         if (cancelled || finished) return;
         finished = true;
-        if (frameCount > 0) {
+        const exitStatus = classifyLiveCaptureExit(code, frameCount);
+        if (exitStatus === "completed") {
           publish("completed", `LIVE映像の取得が終了しました。代表フレーム累計${frameCount}枚を取得しました。`);
         } else {
-          publish("error", "LIVE映像から画像を取得できませんでした。" + (stderr ? " " + stderr.slice(-800) : ` 終了コード：${code ?? "不明"}`));
+          publish("error", "LIVE映像の接続が予期せず終了しました。" +
+            (stderr ? " " + stderr.slice(-800) : ` 終了コード：${code ?? "不明"}`) +
+            (frameCount > 0 ? `（終了前に${frameCount}枚取得）` : ""));
         }
       });
     } catch (error) {
