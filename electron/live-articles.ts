@@ -88,6 +88,7 @@ type LiveSession = {
   audioTranscriptionInFlight: boolean;
   lastAnalysisAt: number;
   analysisInFlight: boolean;
+  analysisTimer: ReturnType<typeof setTimeout> | null;
   finishing: boolean;
   videoFrames?: VideoFrameSample[];
   videoFrameTotalCount?: number;
@@ -289,7 +290,7 @@ export class LiveStreamArticleManager {
       article, directory: articleRoot, commenters: new Set(),
       uniqueCommenterBaseline: previous?.uniqueCommenters ?? 0,
       keywordCounts: new Map((previous?.keywords ?? []).map(word => [word, 1])),
-      pendingComments: [], lastAnalysisAt: 0, analysisInFlight: false, finishing: false,
+      pendingComments: [], lastAnalysisAt: 0, analysisInFlight: false, analysisTimer: null, finishing: false,
       videoFrameTotalCount: previous?.videoFrameCount ?? 0,
       pendingAudioSegments: [],
       audioQueue: [],
@@ -576,6 +577,10 @@ export class LiveStreamArticleManager {
     const session = this.sessions.get(slug);
     if (!session) return;
     session.finishing = true;
+    if (session.analysisTimer) {
+      clearTimeout(session.analysisTimer);
+      session.analysisTimer = null;
+    }
     session.article.durationSeconds = Math.max(0, Math.floor((Date.now() - Date.parse(session.article.startedAt)) / 1000));
     session.article.viewerCount = 0;
     const audioDrainDeadline = Date.now() + 240_000;
@@ -792,6 +797,10 @@ export class LiveStreamArticleManager {
     const config = this.getConfig();
     const key = config.provider === "ollama" ? "local" : this.getApiKey();
     if ((!config.enabled && !session.forceAi && !force) || !key) return;
+    if (session.analysisTimer) {
+      clearTimeout(session.analysisTimer);
+      session.analysisTimer = null;
+    }
     session.analysisInFlight = true;
     session.lastAnalysisAt = Date.now();
     const batch = session.pendingComments.splice(0, final ? 120 : 80);
@@ -800,6 +809,11 @@ export class LiveStreamArticleManager {
     const videoFramesForAnalysis = session.videoFrames?.length && !article.videoAnalyzed
       ? session.videoFrames
       : [];
+    // Tie the saved frame counter to the exact snapshot sent to AI. New frames
+    // can arrive while the asynchronous model request is still running.
+    const videoFrameTotalCountForAnalysis = videoFramesForAnalysis.length
+      ? (session.videoFrameTotalCount ?? videoFramesForAnalysis.length)
+      : (article.videoFrameCount ?? 0);
     this.persist(session);
     const userInput = {
       broadcaster: article.displayName,
@@ -944,8 +958,8 @@ export class LiveStreamArticleManager {
       }
       if (videoFramesForAnalysis.length) {
         if (!result.videoSummary) throw new Error("映像の分析結果が返されませんでした。画像対応モデル（例：qwen2.5vl:3b）を選択してください。");
-        article.videoAnalyzed = true;
-        article.videoFrameCount = session.videoFrameTotalCount ?? videoFramesForAnalysis.length;
+        article.videoFrameCount = videoFrameTotalCountForAnalysis;
+        article.videoAnalyzed = (session.videoFrameTotalCount ?? videoFrameTotalCountForAnalysis) <= videoFrameTotalCountForAnalysis;
         article.videoSummary = result.videoSummary;
         article.videoScenes = result.videoScenes;
         article.videoAnalyzedAt = new Date().toISOString();
@@ -964,10 +978,18 @@ export class LiveStreamArticleManager {
         article.aiError = article.aiError || "AI最終分析を完了できませんでした。";
       }
       const intervalMs = Math.max(30, Math.min(600, this.getConfig().intervalSeconds)) * 1000;
-      if (!session.finishing && !final && !session.analysisInFlight &&
-          (session.pendingAudioSegments.length > 0 || session.pendingComments.length >= 12) &&
-          Date.now() - session.lastAnalysisAt >= intervalMs) {
-        void this.analyze(session, false, session.forceAi === true);
+      const hasPendingVisualAnalysis = Boolean(session.videoFrames?.length) && !article.videoAnalyzed;
+      const hasPendingAnalysis = session.pendingAudioSegments.length > 0 ||
+        session.pendingComments.length >= 12 ||
+        hasPendingVisualAnalysis;
+      if (!session.finishing && !final && hasPendingAnalysis) {
+        const waitMs = Math.max(0, intervalMs - (Date.now() - session.lastAnalysisAt));
+        if (session.analysisTimer) clearTimeout(session.analysisTimer);
+        session.analysisTimer = setTimeout(() => {
+          session.analysisTimer = null;
+          if (session.finishing || session.analysisInFlight) return;
+          void this.analyze(session, false, session.forceAi === true);
+        }, waitMs);
       }
     }
   }
