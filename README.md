@@ -65,9 +65,11 @@ Kickの配信を監視・録画し、リアルタイムコメントを保存で�
 
 - [最新のβ版をダウンロード（GitHub Releases）](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/latest)
 - [β51の開発状況を見る](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/feature/beta51-ai-article-live)
-- [更新履歴](CHANGELOG.md)
+- [更新履歴（β51開発ブランチ）](https://github.com/kanenao/Kick-Live-Message-Recorder/blob/feature/beta51-ai-article-live/CHANGELOG.md)
 
-β版の公開は v*-beta* タグを使用します。通常版・製品版のタグは現在のβ版配布ワークフローでは公開対象になりません。ブランチへのpushは検証ビルドであり、それだけでGitHub Releasesへ公開されることはありません。
+β51開発ブランチでは、β版の公開対象を v*-beta* タグに限定するチェックを導入しています。通常版・製品版のタグはこのβ版ワークフローの対象外です。開発ブランチへのpushは検証ビルドであり、それだけでGitHub Releasesへ公開されることはありません。
+
+注意：GitHubの既定ブランチ main にはβ15時点の古いソースコードが残っています。現在の開発ソースは上記のβ51開発ブランチです。公開済みアプリを利用する場合は、GitHub Releasesのインストーラーを使用してください。
 
 ## 無料AI記事生成（Ollama）
 
