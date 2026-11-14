@@ -5,7 +5,7 @@ import { extractVideoFrames, getVideoDurationSeconds, type VideoFrameSample } fr
 import { formatAudioTranscript, transcribeVideoAudio, transcribeWavBase64, type AudioTranscriptSegment } from "./audio-transcription";
 import type { LiveAudioChunk } from "./live-video-frames";
 import type { KickChatMessage } from "./chat";
-import { describeEmptyAiResponse, extractAiResponseText, normalizeAiJsonText } from "./ai-response";
+import { parseAiArticleResponse } from "./ai-response";
 
 export type LiveArticle = {
   id: string;
@@ -166,30 +166,8 @@ function isCommentWithinArticleWindow(
     createdMs <= startedMs + (durationSeconds + paddingSeconds) * 1000;
 }
 
-function parseAnalysis(payload: Record<string, unknown>): AnalysisResult {
-  const raw = extractAiResponseText(payload);
-  if (!raw) throw new Error(describeEmptyAiResponse(payload));
-  let parsed: unknown;
-  try { parsed = JSON.parse(normalizeAiJsonText(raw)); } catch { throw new Error("AI記事の形式を読み取れませんでした。回答は受信しましたが、JSONとして解析できませんでした。"); }
-  if (!parsed || typeof parsed !== "object") throw new Error("AI記事の内容が不正です。");
-  const value = parsed as Record<string, unknown>;
-  const strings = (input: unknown, maxItems: number, maxLength: number): string[] =>
-    Array.isArray(input) ? input.filter((item): item is string => typeof item === "string")
-      .map(item => item.trim().slice(0, maxLength)).filter(Boolean).slice(0, maxItems) : [];
-  const result: AnalysisResult = {
-    headline: safeText(value.headline, 160),
-    summary: safeText(value.summary, 500),
-    paragraphs: strings(value.paragraphs, 5, 1000),
-    highlights: strings(value.highlights, 5, 240),
-    keywords: strings(value.keywords, 8, 40),
-    videoSummary: safeText(value.videoSummary, 1000),
-    videoScenes: strings(value.videoScenes, 8, 300),
-    audioSummary: safeText(value.audioSummary, 1200)
-  };
-  if (!result.headline || !result.summary || result.paragraphs.length < 2) {
-    throw new Error("AIが記事に必要な項目を返しませんでした。");
-  }
-  return result;
+function parseAnalysis(payload: Record<string, unknown>, fallbackHeadline: string): AnalysisResult {
+  return parseAiArticleResponse(payload, fallbackHeadline);
 }
 
 export type OllamaModelPullStatus = {
@@ -873,7 +851,7 @@ export class LiveStreamArticleManager {
               ].join("\n") },
               { role: "user", content: JSON.stringify(userInput), ...(videoFramesForAnalysis.length ? { images: videoFramesForAnalysis.map(frame => frame.imageBase64) } : {}) }
             ],
-            options: { temperature: 0.2, num_ctx: videoFramesForAnalysis.length || audioBatch.length ? 24576 : 8192 }
+            options: { temperature: 0.2, num_ctx: videoFramesForAnalysis.length || audioBatch.length ? 24576 : 8192, num_predict: 4096 }
           }),
           signal: AbortSignal.timeout(videoFramesForAnalysis.length ? 240_000 : 120_000)
         });
@@ -885,7 +863,7 @@ export class LiveStreamArticleManager {
           throw new Error(`Ollama APIエラー（HTTP ${response.status}）：${detail.slice(0, 300)}`);
         }
         const payload = await response.json() as Record<string, unknown>;
-        result = parseAnalysis(payload);
+        result = parseAnalysis(payload, article.streamTitle || article.headline);
       } else {
         const response = await fetch("https://api.openai.com/v1/responses", {
         method: "POST",
@@ -893,7 +871,7 @@ export class LiveStreamArticleManager {
         body: JSON.stringify({
           model: safeText(config.model, 100) || "gpt-6-luna",
           store: false,
-          max_output_tokens: videoFramesForAnalysis.length || audioBatch.length ? 2800 : 1800,
+          max_output_tokens: videoFramesForAnalysis.length || audioBatch.length ? 4500 : 3000,
           instructions: [
             "あなたは配信内容を新聞記事として編集する日本語ニュース編集者です。映像・音声・コメント・配信メタデータを別々の情報源として確認し、相互に照合して記事へ統合してください。",
             videoFramesForAnalysis.length
