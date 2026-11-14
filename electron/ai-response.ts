@@ -70,7 +70,7 @@ export function describeEmptyAiResponse(payload: UnknownRecord): string {
  const reason = typeof details?.reason === "string" ? details.reason : "";
  const error = asRecord(payload.error);
  const errorCode = typeof error?.code === "string" ? error.code : "";
- const errorMessage = typeof error?.message === "string" ? error.message : "";
+ const errorMessage = typeof error?.message === "string" ? error.message : typeof payload.error === "string" ? payload.error : "";
  const message = asRecord(payload.message);
  const doneReason = typeof message?.done_reason === "string" ? message.done_reason : "";
  const choices = Array.isArray(payload.choices) ? payload.choices : [];
@@ -136,8 +136,33 @@ function splitBody(value: string): string[] {
  const text = value.trim().slice(0, 12000);
  if (!text) return [];
  const paragraphs = text.split(/\r?\n\s*\r?\n|\r?\n/).map(item => item.trim()).filter(Boolean);
- if (paragraphs.length > 1) return paragraphs.slice(0, 5).map(item => item.slice(0, 1000));
- return [text.slice(0, 1000)];
+ if (paragraphs.length > 1) {
+  const result = paragraphs.slice(0, 5).map(item => item.slice(0, 1000));
+  if (paragraphs.length > 5 && result.length === 5) {
+   const remaining = paragraphs.slice(5).join(" ");
+   result[4] = (result[4] + " " + remaining).slice(0, 1000);
+  }
+  return result;
+ }
+ const single = paragraphs[0] ?? text;
+ if (single.length <= 1000) return [single];
+ const sentences = single.split(/(?<=[。！？.!?])\s*/).map(item => item.trim()).filter(Boolean);
+ if (sentences.length <= 1) {
+  return Array.from({ length: Math.min(5, Math.ceil(single.length / 1000)) }, (_, index) =>
+   single.slice(index * 1000, (index + 1) * 1000)
+  ).filter(Boolean);
+ }
+ const result: string[] = [];
+ let current = "";
+ for (const sentence of sentences) {
+  if (current && current.length + sentence.length > 900 && result.length < 4) {
+   result.push(current);
+   current = "";
+  }
+  current += sentence;
+ }
+ if (current && result.length < 5) result.push(current);
+ return result.slice(0, 5).map(item => item.slice(0, 1000));
 }
 function stringList(value: unknown, maxItems: number, maxLength: number): string[] {
  if (typeof value === "string") return splitBody(value).slice(0, maxItems);
