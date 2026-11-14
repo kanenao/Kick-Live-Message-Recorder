@@ -14,6 +14,8 @@ const latestPublicVersion = "0.1.0-beta.50";
 assert.ok(readme.includes("開発中：" + currentVersion), "README must show the current alpha development version");
 assert.ok(readme.includes("最新公開版：" + latestPublicVersion), "README must preserve the latest historically published beta version");
 assert.ok(readme.includes("CHANGELOG.md"), "README must link to the version history");
+assert.ok(readme.includes("バージョン番号の決め方"), "README must explain the independent core version and alpha counter");
+assert.ok(readme.includes("alpha.N"), "README must document the continuing alpha sequence");
 assert.ok(!readme.includes("0.1.0-beta.15"), "README must not retain the obsolete beta15 version");
 assert.ok(changelog.includes("## " + currentVersion), "CHANGELOG must include the current alpha development version");
 assert.ok(changelog.includes("## " + latestPublicVersion), "CHANGELOG must include the latest published version");
