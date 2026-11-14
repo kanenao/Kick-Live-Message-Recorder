@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync,
 import { basename, extname, join, resolve } from "node:path";
 import { isPathInsideDirectory } from "./recording";
 import { getVideoDurationSeconds } from "./video-frames";
+import { deleteArticlePreview, readArticlePreviewDataUrl } from "./article-preview";
 
 export type StreamArticle = {
   id: string;
@@ -27,6 +28,10 @@ export type StreamArticle = {
   viewerCount?: number;
   peakViewerCount?: number;
   aiError?: string;
+  videoPreviewAvailable?: boolean;
+  videoPreviewTimeSeconds?: number;
+  videoPreviewUpdatedAt?: string;
+  videoPreviewDataUrl?: string;
 };
 
 type ChatLine = {
@@ -95,7 +100,13 @@ export function listStreamArticles(outputDirectory: string, slugInput?: unknown)
       if (!entry.isFile() || extname(entry.name).toLowerCase() !== ".json") continue;
       try {
         const article = JSON.parse(readFileSync(join(directory, entry.name), "utf8")) as StreamArticle;
-        if (article && article.slug === folder.name && typeof article.headline === "string" && Array.isArray(article.paragraphs)) results.push(article);
+        if (article && article.slug === folder.name && typeof article.headline === "string" && Array.isArray(article.paragraphs)) {
+          const previewDataUrl = readArticlePreviewDataUrl(directory, article.id);
+          article.videoPreviewAvailable = Boolean(previewDataUrl);
+          if (previewDataUrl) article.videoPreviewDataUrl = previewDataUrl;
+          else delete article.videoPreviewDataUrl;
+          results.push(article);
+        }
       } catch { /* 破損した記事ファイルは一覧から除外 */ }
     }
   }
@@ -121,6 +132,7 @@ export function deleteStreamArticle(outputDirectory: string, slugInput: unknown,
     throw new Error("記事の内容と保存先が一致しないため削除できません。");
   }
   unlinkSync(filePath);
+  deleteArticlePreview(directory, idInput);
   return { ok: true, id: idInput };
 }
 export async function generateStreamArticle(input: unknown, outputDirectory: string): Promise<StreamArticle> {
