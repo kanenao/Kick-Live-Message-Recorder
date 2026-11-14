@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, readdirSync, statSync, unlinkSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve, sep } from "node:path";
 
 export type RecordingEvent = {
@@ -94,6 +94,37 @@ function timestampForFilename(date: Date): string {
 function boundedInteger(value: unknown, fallback: number, minimum: number, maximum: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
   return Math.max(minimum, Math.min(maximum, Math.round(value)));
+}
+
+function saveLiveRecordingTimelineMetadata(
+  session: ActiveRecording,
+  slug: string,
+  filePrefix: string
+): void {
+  if (session.isVod) return;
+  const startedAt = new Date();
+  const metadataDirectory = join(session.outputDirectory, "RecordingMetadata");
+  const metadataPath = join(metadataDirectory, basename(filePrefix) + ".json");
+  const temporaryPath = metadataPath + ".tmp";
+  try {
+    mkdirSync(metadataDirectory, { recursive: true });
+    writeFileSync(temporaryPath, JSON.stringify({
+      schemaVersion: 1,
+      channelSlug: slug,
+      recordingKind: "LIVE",
+      filePrefix: basename(filePrefix),
+      recordingStartedAt: startedAt.toISOString(),
+      recordingStartedAtEpochMs: startedAt.getTime(),
+      timestampSource: "yt-dlp-process-spawn"
+    }, null, 2), { encoding: "utf8", mode: 0o600 });
+    renameSync(temporaryPath, metadataPath);
+  } catch {
+    try {
+      if (existsSync(temporaryPath)) unlinkSync(temporaryPath);
+    } catch {
+      // A missing or unwritable sync sidecar must not stop the recording itself.
+    }
+  }
 }
 
 export class KickRecordingManager {
@@ -237,6 +268,7 @@ export class KickRecordingManager {
         child.kill();
         return;
       }
+      saveLiveRecordingTimelineMetadata(session, slug, prefix);
       this.onEvent({
         slug,
         status: "recording",
