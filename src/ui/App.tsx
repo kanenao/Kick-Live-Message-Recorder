@@ -155,7 +155,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.2.1-alpha.56";
+const APP_VERSION = "0.2.2-alpha.57";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -183,6 +183,15 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.2.2-alpha.57",
+    title: "LIVE音声の停止・無反応を自動検出",
+    changes: [
+      "FFmpegの出力メディア時刻を監視し、90秒以上進捗がない音声プロセスを検出",
+      "音声だけを停止・再接続し、LIVE映像の代表フレーム取得と記事更新は継続",
+      "音声再接続の無進捗判定とタイムアウト境界を自動テストに追加"
+    ]
+  },
   {
     version: "0.2.1-alpha.56",
     title: "LIVE音声ストリームの自動再接続を強化",
