@@ -38,6 +38,8 @@ jobs:
         run: node --experimental-strip-types scripts/test-ai-response.mjs
       - name: 配信AI新聞の放送画面保存テスト
         run: node --experimental-strip-types scripts/test-article-preview.mjs
+      - name: LIVE映像キャプチャの復旧ポリシーテスト
+        run: node --experimental-strip-types scripts/test-live-capture-policy.mjs
       - name: 型チェック
         run: npm run typecheck
       - name: アプリをビルド
