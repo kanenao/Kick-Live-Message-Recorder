@@ -570,7 +570,7 @@ function formatArticlePreviewTime(seconds: number): string {
 }
 
 function ArticleBroadcastFrame({ article }: { article: StreamArticle }) {
-  const frameRef = useRef<HTMLElement | null>(null);
+  const frameRef = useRef<HTMLElementTagNameMap["figure"] | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
