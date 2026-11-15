@@ -19,6 +19,7 @@ import { join } from "node:path";
 import { autoUpdater } from "electron-updater";
 import { KickChatReceiver } from "./chat";
 import { KickVodChatDownloader } from "./vod-chat";
+import { KickVodDownloadManager } from "./vod-download-queue";
 import { KickCommentVideoGenerator, listCommentLogFiles, previewCommentVideo } from "./comment-video";
 import { listRecentCommentMessages } from "./recording-library";
 import { deleteStreamArticle, generateStreamArticle, getStreamArticlePreview, listStreamArticles } from "./articles";
@@ -646,6 +647,10 @@ const chatReceiver = new KickChatReceiver(
 
 const vodChatDownloader = new KickVodChatDownloader(event => {
   mainWindow?.webContents.send("vod-chat:status", event);
+});
+
+const vodDownloadManager = new KickVodDownloadManager(job => {
+  mainWindow?.webContents.send("vod-download:status", job);
 });
 
 type ArticleLiveMetadata = {
@@ -1404,6 +1409,21 @@ function registerIpcHandlers(): void {
     return { ok: true };
   });
 
+  ipcMain.handle("vod-download:enqueue", (event, urls: unknown) => {
+    assertTrustedSender(event);
+    return vodDownloadManager.enqueue(urls, getRecordingOutputDirectory());
+  });
+
+  ipcMain.handle("vod-download:list", event => {
+    assertTrustedSender(event);
+    return vodDownloadManager.list();
+  });
+
+  ipcMain.handle("vod-download:cancel", (event, id: unknown) => {
+    assertTrustedSender(event);
+    return vodDownloadManager.cancel(id);
+  });
+
   ipcMain.handle("recording:start", (event, slug: unknown, sourceUrl?: unknown) => {
     assertTrustedSender(event);
     const settings = readState().settings;
@@ -1520,7 +1540,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle("articles:generate", async (event, input: unknown) => {
     assertTrustedSender(event);
     const article = await generateStreamArticle(input, getRecordingOutputDirectory());
-    if (recordingManager.isFileActive(article.sourceVideo)) {
+    if ((recordingManager.isFileActive(article.sourceVideo) || vodDownloadManager.isFileActive(article.sourceVideo))) {
       throw new Error("録画中の動画は映像解析できません。録画終了後に記事を生成してください。");
     }
     const settings = readState().settings;
@@ -1546,13 +1566,13 @@ function registerIpcHandlers(): void {
     return previewCommentVideo(
       input,
       getRecordingOutputDirectory(),
-      filePath => recordingManager.isFileActive(filePath)
+      filePath => recordingManager.isFileActive(filePath) || vodDownloadManager.isFileActive(filePath)
     );
   });
 
   ipcMain.handle("comment-video:start", (event, input: unknown) => {
     assertTrustedSender(event);
-    return commentVideoGenerator.start(input, getRecordingOutputDirectory(), filePath => recordingManager.isFileActive(filePath));
+    return commentVideoGenerator.start(input, getRecordingOutputDirectory(), filePath => recordingManager.isFileActive(filePath) || vodDownloadManager.isFileActive(filePath));
   });
 
   ipcMain.handle("comment-video:stop", event => {
@@ -1568,7 +1588,7 @@ function registerIpcHandlers(): void {
     return deleteRecordingFile(
       getRecordingOutputDirectory(),
       filePath,
-      target => recordingManager.isFileActive(target)
+      target => recordingManager.isFileActive(target) || vodDownloadManager.isFileActive(target)
     );
   });
 
@@ -1809,5 +1829,6 @@ app.on("before-quit", () => {
   manualArticleSession = null;
   void chatReceiver.stop();
   vodChatDownloader.stopAll();
+  vodDownloadManager.stopAll();
   commentVideoGenerator.stopAll();
 });
