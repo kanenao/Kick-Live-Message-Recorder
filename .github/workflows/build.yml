@@ -368,6 +368,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
           tag="v0.2.5-alpha.60"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "::error::Release $tag already exists; refusing to overwrite"
