@@ -193,7 +193,14 @@
 .version-update-actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-top:14px}
 .version-update-hint{display:block;color:#778391;font-size:9px;line-height:1.7;margin-top:13px}
 .release-notes-panel{background:#14171d;border:1px solid #303640;border-radius:9px;padding:16px 18px;margin:16px 0 24px}
-.release-notes-panel pre{white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.85 inherit;color:#c5cdd6;margin:12px 0 0}
+.release-notes-content{color:#cdd6df;font-size:12px;line-height:1.85;overflow-wrap:anywhere;margin-top:13px}
+.release-notes-content .release-note-title{font-size:17px;line-height:1.45;font-weight:800;color:#f0f4fa;margin:0 0 12px}
+.release-notes-content .release-note-heading{font-size:13px;line-height:1.6;font-weight:750;color:#88dfa9;margin:18px 0 8px}
+.release-notes-content p{margin:8px 0 12px}
+.release-notes-content ul{padding-left:22px;margin:9px 0 15px;list-style:disc}
+.release-notes-content li{padding-left:2px;margin:5px 0}
+.release-notes-content strong{font-weight:800;color:#eef2f7}
+.release-notes-content code{font:inherit;font-family:ui-monospace,Consolas,monospace;background:#222b32;padding:1px 5px;border-radius:4px;color:#a5e7bd}
 .version-history-section{margin-top:22px}
 .version-history-list{display:flex;flex-direction:column}
 .version-history-item{display:flex;gap:14px;border-bottom:1px solid #2b3039;padding:16px 3px}
