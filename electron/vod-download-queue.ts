@@ -69,7 +69,7 @@ export function parseVodProgress(line: string): { progress: number; estimatedRem
 function findExecutable(name: "yt-dlp" | "ffmpeg"): string {
   const exe = process.platform === "win32" ? name + ".exe" : name;
   const candidates = [
-    join(process.resourcesPath, "tools", exe),
+    ...(typeof process.resourcesPath === "string" ? [join(process.resourcesPath, "tools", exe)] : []),
     join(process.cwd(), "vendor", "win-x64", exe),
     join(process.cwd(), "vendor", exe)
   ];
@@ -88,7 +88,10 @@ export class KickVodDownloadManager {
   private counter = 0;
   private stopping = false;
 
-  constructor(private readonly onChange: (job: VodDownloadJob) => void) {}
+  constructor(
+    private readonly onChange: (job: VodDownloadJob) => void,
+    private readonly spawnProcess: typeof spawn = spawn
+  ) {}
 
   list(): VodDownloadJob[] {
     return [...this.jobs.values()].map(job => ({ ...job.data })).reverse();
@@ -212,7 +215,7 @@ export class KickVodDownloadManager {
 
     let child: ChildProcessWithoutNullStreams;
     try {
-      child = spawn(findExecutable("yt-dlp"), args, {
+      child = this.spawnProcess(findExecutable("yt-dlp"), args, {
         windowsHide: true, stdio: ["pipe", "pipe", "pipe"]
       });
     } catch (error) {
