@@ -155,7 +155,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.2.2-alpha.57";
+const APP_VERSION = "0.2.3-alpha.58";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -183,6 +183,15 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.2.3-alpha.58",
+    title: "配信AI新聞の記事削除を復旧",
+    changes: [
+      "記事の古いLIVE表示では削除を止めず、実際に稼働中の配信セッションだけを削除不可に",
+      "大文字・小文字が異なる旧記事フォルダーや、過去形式の記事IDも安全に照合",
+      "記事JSONの削除と放送画面プレビューの後片付けを改善し、元動画・コメントログは保持"
+    ]
+  },
   {
     version: "0.2.2-alpha.57",
     title: "LIVE音声の停止・無反応を自動検出",
@@ -1754,7 +1763,7 @@ export default function App() {
   }
 
   async function deleteStreamArticle(article: StreamArticle) {
-    if (!window.kickRecorder || article.status === "live" || deletingArticleId) return;
+    if (!window.kickRecorder || deletingArticleId) return;
     const confirmed = window.confirm(
       `「${article.headline}」を削除しますか？\\n\\n記事データのみ削除します。元動画とコメントログは削除されません。`
     );
@@ -2462,8 +2471,8 @@ export default function App() {
               <div className="article-stats">配信時間 {Math.floor((article.durationSeconds ?? 0) / 60).toLocaleString("ja-JP")}分 ・ コメント {article.commentCount.toLocaleString("ja-JP")}件 ・ 投稿者 {article.uniqueCommenters.toLocaleString("ja-JP")}人 ・ 視聴者数 {article.viewerCount?.toLocaleString("ja-JP") ?? "—"}人（最大 {article.peakViewerCount?.toLocaleString("ja-JP") ?? "—"}人） ・ 分析キーワード {article.keywords.join("、") || "なし"}{article.lastAiUpdateAt ? ` ・ AI更新 ${new Date(article.lastAiUpdateAt).toLocaleTimeString("ja-JP")}` : ""}</div>
               {article.sourceVideo && <div className="comment-video-actions"><button className="small-action" onClick={() => void window.kickRecorder?.openRecording(article.sourceVideo)}>元動画を開く</button><button className="small-action" onClick={() => void window.kickRecorder?.revealRecording(article.sourceVideo)}>録画の保存先</button></div>}
               <div className="comment-video-actions article-card-actions">
-                <button className="remove" onClick={() => void deleteStreamArticle(article)} disabled={article.status === "live" || deletingArticleId !== null}>
-                  {article.status === "live" ? "LIVE更新中は削除不可" : deletingArticleId === article.id ? "削除中..." : "この記事を削除"}
+                <button className="remove" onClick={() => void deleteStreamArticle(article)} disabled={deletingArticleId !== null}>
+                  {deletingArticleId === article.id ? "削除中..." : "この記事を削除"}
                 </button>
               </div>
               </article>)}

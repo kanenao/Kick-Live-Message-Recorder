@@ -53,6 +53,31 @@ function safeSlug(value: unknown): string {
   return value.toLowerCase();
 }
 
+export function isValidStreamArticleId(slugInput: unknown, idInput: unknown): boolean {
+  let slug: string;
+  try { slug = safeSlug(slugInput); } catch { return false; }
+  if (typeof idInput !== "string" || idInput.length > 80 ||
+      !idInput.toLowerCase().startsWith(slug + "_")) return false;
+  return /^[a-zA-Z0-9_-]{1,79}$/.test(idInput.slice(slug.length + 1));
+}
+
+function findArticleDirectory(outputDirectory: string, slug: string): string | null {
+  const articleRoot = join(resolve(outputDirectory), "Articles");
+  if (!existsSync(articleRoot)) return null;
+  const matches = readdirSync(articleRoot, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && entry.name.toLowerCase() === slug);
+  if (matches.length === 0) return null;
+  const selected = matches.find(entry => entry.name === slug) ?? matches[0];
+  if (matches.length > 1 && !matches.some(entry => entry.name === slug)) {
+    throw new Error("配信者の記事フォルダーが複数見つかったため、安全のため削除を中止しました。");
+  }
+  const directory = join(articleRoot, selected.name);
+  if (!isPathInsideDirectory(directory, articleRoot)) {
+    throw new Error("記事フォルダーが保存先の外側を指しているため削除できません。");
+  }
+  return directory;
+}
+
 function extractStartDate(fileName: string, fallback: Date): Date {
   const match = fileName.match(/_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})(?:_retry\d+)?\.[^.]+$/i);
   if (!match) return fallback;
@@ -111,12 +136,11 @@ export function listStreamArticles(outputDirectory: string, slugInput?: unknown)
 
 export function deleteStreamArticle(outputDirectory: string, slugInput: unknown, idInput: unknown): { ok: true; id: string } {
   const slug = safeSlug(slugInput);
-  if (typeof idInput !== "string" || !idInput.startsWith(slug + "_") ||
-      !/^(?:[0-9]{8}_[0-9]{6}|[0-9]{8}T[0-9]{6}Z)$/.test(idInput.slice(slug.length + 1))) {
+  if (!isValidStreamArticleId(slug, idInput)) {
     throw new Error("削除する記事IDが不正です。");
   }
-  const root = resolve(outputDirectory);
-  const directory = join(root, "Articles", slug);
+  const directory = findArticleDirectory(outputDirectory, slug) ??
+    join(resolve(outputDirectory), "Articles", slug);
   const filePath = join(directory, idInput + ".json");
   if (!isPathInsideDirectory(filePath, directory) || !existsSync(filePath)) {
     throw new Error("記事ファイルが見つかりません。");
@@ -124,11 +148,13 @@ export function deleteStreamArticle(outputDirectory: string, slugInput: unknown,
   let article: StreamArticle;
   try { article = JSON.parse(readFileSync(filePath, "utf8")) as StreamArticle; }
   catch { throw new Error("記事ファイルを読み取れません。"); }
-  if (!article || article.id !== idInput || article.slug !== slug) {
+  if (!article || article.id !== idInput || typeof article.slug !== "string" ||
+      article.slug.toLowerCase() !== slug) {
     throw new Error("記事の内容と保存先が一致しないため削除できません。");
   }
   unlinkSync(filePath);
-  deleteArticlePreview(directory, idInput);
+  // The article JSON is authoritative. A locked or stale preview must not make deletion appear to fail.
+  try { deleteArticlePreview(directory, idInput); } catch { /* best-effort preview cleanup */ }
   return { ok: true, id: idInput };
 }
 export async function generateStreamArticle(input: unknown, outputDirectory: string): Promise<StreamArticle> {
