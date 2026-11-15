@@ -20,6 +20,7 @@ import { autoUpdater } from "electron-updater";
 import { KickChatReceiver } from "./chat";
 import { KickVodChatDownloader } from "./vod-chat";
 import { KickVodDownloadManager } from "./vod-download-queue";
+import { listLibrarySessions } from "./library-sessions";
 import { KickCommentVideoGenerator, listCommentLogFiles, previewCommentVideo } from "./comment-video";
 import { listRecentCommentMessages } from "./recording-library";
 import { deleteStreamArticle, generateStreamArticle, getStreamArticlePreview, listStreamArticles } from "./articles";
@@ -628,7 +629,9 @@ const liveArticleManager = new LiveStreamArticleManager(
 
 const recordingManager = new KickRecordingManager(event => {
   mainWindow?.webContents.send("recording:status", event);
-  if (event.filePath && event.status !== "error") liveArticleManager.attachRecording(event.slug, event.filePath);
+  if (!event.isVod && event.filePath && event.status === "stopped" && existsSync(event.filePath)) {
+    liveArticleManager.attachRecording(event.slug, event.filePath);
+  }
 });
 
 const commentVideoGenerator = new KickCommentVideoGenerator(event => {
@@ -1436,6 +1439,11 @@ function registerIpcHandlers(): void {
   ipcMain.handle("recording:stop", (event, slug: unknown, isVod?: unknown) => {
     assertTrustedSender(event);
     return recordingManager.stop(slug, isVod ?? false);
+  });
+
+  ipcMain.handle("library:sessions", event => {
+    assertTrustedSender(event);
+    return listLibrarySessions(getRecordingOutputDirectory());
   });
 
   ipcMain.handle("recording:list", event => {
