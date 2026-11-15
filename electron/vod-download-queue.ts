@@ -88,10 +88,13 @@ export class KickVodDownloadManager {
   private counter = 0;
   private stopping = false;
 
-  constructor(
-    private readonly onChange: (job: VodDownloadJob) => void,
-    private readonly spawnProcess: typeof spawn = spawn
-  ) {}
+  private readonly onChange: (job: VodDownloadJob) => void;
+  private readonly spawnProcess: typeof spawn;
+
+  constructor(onChange: (job: VodDownloadJob) => void, spawnProcess: typeof spawn = spawn) {
+    this.onChange = onChange;
+    this.spawnProcess = spawnProcess;
+  }
 
   list(): VodDownloadJob[] {
     return [...this.jobs.values()].map(job => ({ ...job.data })).reverse();
