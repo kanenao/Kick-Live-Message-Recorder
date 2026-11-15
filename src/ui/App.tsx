@@ -780,10 +780,9 @@ export default function App() {
   const [vodChatStatus, setVodChatStatus] = useState("");
   const [vodChatActive, setVodChatActive] = useState(false);
   useEffect(() => {
-    if (!vodJobs.some(job => job.status === "downloading")) return;
     const ticker = window.setInterval(() => setVodClock(Date.now()), 1000);
     return () => window.clearInterval(ticker);
-  }, [vodJobs]);
+  }, []);
   const [tab, setTab] = useState<"dashboard" | "recording" | "library" | "comment-video" | "articles" | "updates" | "settings">("dashboard");
   const [isReady, setIsReady] = useState(false);
   const [storageError, setStorageError] = useState("");
@@ -1598,7 +1597,6 @@ export default function App() {
         return [...jobs.filter(job => !ids.has(job.id)).reverse(), ...previous];
       });
       setVodDownloadStatus(`${jobs.length}件を追加しました。同時ダウンロードは最大3件です。`);
-      setVodUrl("");
     } catch (error) {
       setVodDownloadStatus(error instanceof Error ? error.message : "過去配信を登録できませんでした。");
     }
