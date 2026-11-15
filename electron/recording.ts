@@ -167,7 +167,7 @@ function persistRecordingSession(
     writeFileSync(temp, JSON.stringify({
       schemaVersion: 1, id, slug, kind: session.isVod ? "VOD" : "LIVE",
       sourceUrl: session.sourceUrl, startedAt, status, finishedAt,
-      files: files.map(basename), retriesUsed: session.retriesUsed
+      files: files.map(file => basename(file)), retriesUsed: session.retriesUsed
     }, null, 2), { encoding: "utf8", mode: 0o600 });
     renameSync(temp, filePath);
   } catch (error) {
