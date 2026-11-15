@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
@@ -46,6 +46,7 @@ function fakeSpawn(command, args) {
   child.stdout = new PassThrough();
   child.stderr = new PassThrough();
   child.kill = () => { process.nextTick(() => child.emit("close", null)); return true; };
+  child.outputTemplate = args[args.indexOf("--output") + 1];
   children.push(child);
   return child;
 }
@@ -67,6 +68,8 @@ try {
 
   const more = manager.enqueue([url(ids[4])], directory);
   assert.equal(more.length, 1);
+  const outputTemplate = children[0].outputTemplate;
+  writeFileSync(outputTemplate.replace("%(title).90B", "sample").replace("%(ext)s", "mp4"), "recorded bytes");
   children[0].emit("close", 0);
   assert.equal(manager.list().find(job => job.id === created[0].id).status, "completed");
   assert.equal(children.length, 4, "完了すると次の番組を自動開始");
