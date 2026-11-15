@@ -508,7 +508,12 @@ function initializeAutoUpdater(): void {
 
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.allowPrerelease = app.getVersion().includes("-");
+
+  // GitHubのα版Releaseはalpha.ymlで配布する。暗黙のチャンネル判定に任せず固定する。
+  // channel setterはダウングレードを許可するため、明示的に再度禁止する。
+  autoUpdater.channel = "alpha";
+  autoUpdater.allowPrerelease = true;
+  autoUpdater.allowDowngrade = false;
 
   autoUpdater.on("checking-for-update", () => {
     publishUpdateStatus({
