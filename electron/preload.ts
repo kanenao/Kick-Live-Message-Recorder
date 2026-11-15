@@ -52,6 +52,21 @@ type RecordingFile = {
   modifiedAt: string;
 };
 
+type LibrarySession = {
+  id: string;
+  slug: string;
+  kind: "LIVE" | "VOD";
+  startedAt: string;
+  endedAt?: string;
+  title: string;
+  videos: RecordingFile[];
+  logs: CommentLogFile[];
+  article?: StreamArticle;
+  status: "saved" | "interrupted" | "failed" | "unknown";
+  warnings: string[];
+  commentAssociation: "exact" | "none";
+};
+
 type RecordingEvent = {
   slug: string;
   status: "starting" | "recording" | "stopped" | "error";
@@ -264,6 +279,7 @@ const api = {
     ipcRenderer.on("vod-download:status", listener);
     return () => ipcRenderer.removeListener("vod-download:status", listener);
   },
+  listLibrarySessions: (): Promise<LibrarySession[]> => ipcRenderer.invoke("library:sessions"),
   listRecordings: (): Promise<RecordingFile[]> => ipcRenderer.invoke("recording:list"),
   deleteRecording: (filePath: string): Promise<{ ok: true; name: string }> =>
     ipcRenderer.invoke("recording:delete", filePath),
