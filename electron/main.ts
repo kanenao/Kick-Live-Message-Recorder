@@ -508,7 +508,12 @@ function initializeAutoUpdater(): void {
 
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.allowPrerelease = app.getVersion().includes("-");
+
+  // α版Releaseのalpha.ymlを利用する。暗黙のチャンネル判定に依存しない。
+  autoUpdater.channel = "alpha";
+  autoUpdater.allowPrerelease = true;
+  // channelの設定はdowngradeを有効化するため、必ず再度無効化する。
+  autoUpdater.allowDowngrade = false;
 
   autoUpdater.on("checking-for-update", () => {
     publishUpdateStatus({
