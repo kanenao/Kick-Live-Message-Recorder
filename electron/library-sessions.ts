@@ -3,7 +3,7 @@ import { basename, extname, join, resolve } from "node:path";
 import { listRecordingFiles, type RecordingFile } from "./recording";
 import { listCommentLogFiles, type CommentLogFile } from "./comment-video";
 import { listStreamArticles, type StreamArticle } from "./articles";
-import { getRecordingChannelSlug } from "../src/shared/recording-library";
+
 
 export type LibrarySession = {
   id: string;
@@ -66,7 +66,8 @@ export function classifyRecordingFile(fileName: string, modifiedAt: string): {
     const slug = live[1].toLowerCase();
     return { id: slug + "_" + live[2], slug, kind: "LIVE", startedAt: parseStamp(live[2]) ?? modifiedAt };
   }
-  const slug = getRecordingChannelSlug(fileName);
+  const fallback = base.match(/^([a-zA-Z0-9_-]{1,40})$/);
+  const slug = fallback?.[1]?.toLowerCase();
   if (!slug) return null;
   return { id: slug + "_legacy_" + base.slice(0, 90), slug, kind: "LIVE", startedAt: modifiedAt };
 }
