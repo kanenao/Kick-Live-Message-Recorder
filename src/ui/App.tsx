@@ -155,7 +155,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.2.4-alpha.59";
+const APP_VERSION = "0.2.5-alpha.60";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -183,6 +183,15 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.2.5-alpha.60",
+    title: "録画ライブラリの一覧表示・スクロールを改善",
+    changes: [
+      "録画ライブラリの横幅を広げ、配信者一覧の680px高さ制限を解除",
+      "配信者ごとの録画一覧に独立した縦スクロールとキーボード操作を追加",
+      "動画のファイル名と再生・場所表示・削除ボタンを広いレイアウトで表示し、小さい画面では自動折り返し"
+    ]
+  },
   {
     version: "0.2.4-alpha.59",
     title: "記事削除・放送画面の旧データ互換性を改善",
@@ -1814,7 +1823,7 @@ export default function App() {
       <div className="sidebar-bottom"><span className="status-dot" /> α版・開発テスト中<small>現在のバージョン {appVersion}</small></div>
     </aside>
 
-    <main className="main">
+    <main className={tab === "library" ? "main main-library" : "main"}>
       <header className="topbar">
         <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "recording" ? "録画専用" : tab === "library" ? "録画ライブラリ" : tab === "comment-video" ? "コメント付き動画を生成" : tab === "articles" ? "配信記事" : tab === "updates" ? "バージョン更新" : "設定"}</h1></div>
         <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="alpha-tag">α版</span><div className="avatar">KR</div></div>
@@ -2127,19 +2136,26 @@ export default function App() {
                       </div>
 
                       {expandedLibraryVideosChannel === group.slug && <div className="recording-library-expanded">
-                        <div className="recording-library-expanded-title">保存された動画 <span>{group.videos.length}件</span></div>
-                        {group.videos.map(file => <div className="recording-library-video-row" key={file.path}>
-                          <div className="recording-file-icon">▶</div>
-                          <div className="recording-file-info">
-                            <strong>{file.name}</strong>
-                            <small>{new Date(file.modifiedAt).toLocaleString("ja-JP")} ・ {file.extension} ・ {(file.size / (1024 * 1024)).toFixed(1)} MB</small>
-                          </div>
-                          <button className="primary-small" onClick={() => void openRecordingFile(file.path)}>再生</button>
-                          <button className="small-action" onClick={() => void revealRecordingFile(file.path)}>場所を表示</button>
-                          <button className="danger-small" onClick={() => void deleteRecordingFromLibrary(file.path, file.name)} disabled={deletingRecordingPath !== null}>
-                            {deletingRecordingPath === file.path ? "削除中..." : "削除"}
-                          </button>
-                        </div>)}
+                        <div className="recording-library-expanded-title">
+                          <strong>録画一覧</strong>
+                          <span>{group.videos.length.toLocaleString("ja-JP")}件 ・ 一覧内を上下にスクロールできます</span>
+                        </div>
+                        <div className="recording-library-video-list" role="region" aria-label={group.displayName + "の録画一覧"} tabIndex={0}>
+                          {group.videos.map(file => <div className="recording-library-video-row" key={file.path}>
+                            <div className="recording-file-icon">▶</div>
+                            <div className="recording-file-info">
+                              <strong title={file.name}>{file.name}</strong>
+                              <small>{new Date(file.modifiedAt).toLocaleString("ja-JP")} ・ {file.extension} ・ {(file.size / (1024 * 1024)).toFixed(1)} MB</small>
+                            </div>
+                            <div className="recording-library-video-actions">
+                              <button className="primary-small" onClick={() => void openRecordingFile(file.path)}>再生</button>
+                              <button className="small-action" onClick={() => void revealRecordingFile(file.path)}>場所を表示</button>
+                              <button className="danger-small" onClick={() => void deleteRecordingFromLibrary(file.path, file.name)} disabled={deletingRecordingPath !== null}>
+                                {deletingRecordingPath === file.path ? "削除中..." : "削除"}
+                              </button>
+                            </div>
+                          </div>)}
+                        </div>
                       </div>}
 
                       {libraryCommentsChannel === group.slug && <div className="recording-library-comments">
