@@ -57,6 +57,22 @@ type KickRecorderRecordingEvent = {
   message?: string;
   isVod?: boolean;
 };
+type KickRecorderVodDownloadJob = {
+  id: string;
+  url: string;
+  slug: string;
+  videoId: string;
+  status: "queued" | "downloading" | "completed" | "cancelled" | "error";
+  progress: number | null;
+  createdAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  durationMs?: number;
+  estimatedRemainingSeconds?: number;
+  filePath?: string;
+  message: string;
+};
+
 type KickRecorderCommentLogFile = { path: string; name: string; channelSlug: string; kind: "LIVE" | "VOD"; size: number; modifiedAt: string };
 type KickRecorderLibraryCommentMessage = {
   eventId: string; senderUsername: string; content: string; createdAt: string; usernameColor: string | null;
@@ -212,6 +228,10 @@ declare global {
       onUpdateStatus: (callback: (status: KickRecorderUpdateStatus) => void) => () => void;
       startRecording: (slug: string, sourceUrl?: string) => Promise<{ ok: true; outputDirectory: string }>;
       stopRecording: (slug: string, isVod?: boolean) => Promise<{ ok: true }>;
+      enqueueVodDownloads: (urls: string[]) => Promise<KickRecorderVodDownloadJob[]>;
+      listVodDownloads: () => Promise<KickRecorderVodDownloadJob[]>;
+      cancelVodDownload: (id: string) => Promise<{ ok: true }>;
+      onVodDownloadStatus: (callback: (job: KickRecorderVodDownloadJob) => void) => () => void;
       listRecordings: () => Promise<KickRecorderRecordingFile[]>;
       deleteRecording: (filePath: string) => Promise<{ ok: true; name: string }>;
       openRecording: (filePath: string) => Promise<{ ok: true }>;
