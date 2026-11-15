@@ -155,7 +155,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.2.3-alpha.58";
+const APP_VERSION = "0.2.4-alpha.59";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -183,6 +183,15 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.2.4-alpha.59",
+    title: "記事削除・放送画面の旧データ互換性を改善",
+    changes: [
+      "大文字・小文字の違うフォルダーが共存する場合、記事IDで正しい保存先を特定",
+      "同じ記事IDが複数の場所にある場合は削除を中止して、ほかの記事を守る",
+      "旧記事の放送画面表示と一覧取得を同じ保存先判定へ統一し、削除の自動テストを拡充"
+    ]
+  },
   {
     version: "0.2.3-alpha.58",
     title: "配信AI新聞の記事削除を復旧",

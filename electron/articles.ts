@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync,
 import { basename, extname, join, resolve } from "node:path";
 import { isPathInsideDirectory } from "./recording";
 import { getVideoDurationSeconds } from "./video-frames";
-import { deleteArticlePreview, hasArticlePreview } from "./article-preview";
+import { deleteArticlePreview, hasArticlePreview, readArticlePreviewDataUrl } from "./article-preview";
 
 export type StreamArticle = {
   id: string;
@@ -53,7 +53,7 @@ function safeSlug(value: unknown): string {
   return value.toLowerCase();
 }
 
-export function isValidStreamArticleId(slugInput: unknown, idInput: unknown): boolean {
+export function isValidStreamArticleId(slugInput: unknown, idInput: unknown): idInput is string {
   let slug: string;
   try { slug = safeSlug(slugInput); } catch { return false; }
   if (typeof idInput !== "string" || idInput.length > 80 ||
@@ -61,21 +61,20 @@ export function isValidStreamArticleId(slugInput: unknown, idInput: unknown): bo
   return /^[a-zA-Z0-9_-]{1,79}$/.test(idInput.slice(slug.length + 1));
 }
 
-function findArticleDirectory(outputDirectory: string, slug: string): string | null {
+function findArticleDirectory(outputDirectory: string, slug: string, articleId: string): string | null {
   const articleRoot = join(resolve(outputDirectory), "Articles");
   if (!existsSync(articleRoot)) return null;
-  const matches = readdirSync(articleRoot, { withFileTypes: true })
-    .filter(entry => entry.isDirectory() && entry.name.toLowerCase() === slug);
-  if (matches.length === 0) return null;
-  const selected = matches.find(entry => entry.name === slug) ?? matches[0];
-  if (matches.length > 1 && !matches.some(entry => entry.name === slug)) {
-    throw new Error("配信者の記事フォルダーが複数見つかったため、安全のため削除を中止しました。");
+  // Legacy versions may have written case-variant folders for the same channel.
+  // Locate the specific article, rather than assuming the lowercase folder owns it.
+  const candidates = readdirSync(articleRoot, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && entry.name.toLowerCase() === slug)
+    .map(entry => join(articleRoot, entry.name))
+    .filter(directory => isPathInsideDirectory(directory, articleRoot) &&
+      existsSync(join(directory, articleId + ".json")));
+  if (candidates.length > 1) {
+    throw new Error("同じ記事IDが複数の配信者フォルダーに見つかりました。誤削除を防ぐため処理を中止しました。");
   }
-  const directory = join(articleRoot, selected.name);
-  if (!isPathInsideDirectory(directory, articleRoot)) {
-    throw new Error("記事フォルダーが保存先の外側を指しているため削除できません。");
-  }
-  return directory;
+  return candidates[0] ?? null;
 }
 
 function extractStartDate(fileName: string, fallback: Date): Date {
@@ -124,7 +123,10 @@ export function listStreamArticles(outputDirectory: string, slugInput?: unknown)
       if (!entry.isFile() || extname(entry.name).toLowerCase() !== ".json") continue;
       try {
         const article = JSON.parse(readFileSync(join(directory, entry.name), "utf8")) as StreamArticle;
-        if (article && article.slug === folder.name && typeof article.headline === "string" && Array.isArray(article.paragraphs)) {
+        if (article && article.id === entry.name.slice(0, -5) &&
+            isValidStreamArticleId(folder.name, article.id) &&
+            typeof article.slug === "string" && article.slug.toLowerCase() === folder.name.toLowerCase() &&
+            typeof article.headline === "string" && Array.isArray(article.paragraphs)) {
           article.videoPreviewAvailable = hasArticlePreview(directory, article.id);
           results.push(article);
         }
@@ -139,7 +141,7 @@ export function deleteStreamArticle(outputDirectory: string, slugInput: unknown,
   if (!isValidStreamArticleId(slug, idInput)) {
     throw new Error("削除する記事IDが不正です。");
   }
-  const directory = findArticleDirectory(outputDirectory, slug) ??
+  const directory = findArticleDirectory(outputDirectory, slug, idInput) ??
     join(resolve(outputDirectory), "Articles", slug);
   const filePath = join(directory, idInput + ".json");
   if (!isPathInsideDirectory(filePath, directory) || !existsSync(filePath)) {
@@ -157,6 +159,24 @@ export function deleteStreamArticle(outputDirectory: string, slugInput: unknown,
   try { deleteArticlePreview(directory, idInput); } catch { /* best-effort preview cleanup */ }
   return { ok: true, id: idInput };
 }
+export function getStreamArticlePreview(outputDirectory: string, slugInput: unknown, idInput: unknown): string | null {
+  const slug = safeSlug(slugInput);
+  if (!isValidStreamArticleId(slug, idInput)) {
+    throw new Error("記事の放送画面を読み込むためのIDが不正です。");
+  }
+  const directory = findArticleDirectory(outputDirectory, slug, idInput);
+  if (!directory) return null;
+  const filePath = join(directory, idInput + ".json");
+  try {
+    const article = JSON.parse(readFileSync(filePath, "utf8")) as StreamArticle;
+    if (!article || article.id !== idInput || typeof article.slug !== "string" ||
+        article.slug.toLowerCase() !== slug) return null;
+  } catch {
+    return null;
+  }
+  return readArticlePreviewDataUrl(directory, idInput) ?? null;
+}
+
 export async function generateStreamArticle(input: unknown, outputDirectory: string): Promise<StreamArticle> {
   if (!input || typeof input !== "object") throw new Error("記事の生成情報が不正です。");
   const values = input as { videoPath?: unknown; slug?: unknown; displayName?: unknown; category?: unknown; headline?: unknown; chatPaths?: unknown };
