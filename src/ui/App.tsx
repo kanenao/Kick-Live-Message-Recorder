@@ -123,6 +123,22 @@ type ChatReceiverStatus = {
   message: string;
 };
 
+type VodDownloadJob = {
+  id: string;
+  url: string;
+  slug: string;
+  videoId: string;
+  status: "queued" | "downloading" | "completed" | "cancelled" | "error";
+  progress: number | null;
+  createdAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  durationMs?: number;
+  estimatedRemainingSeconds?: number;
+  filePath?: string;
+  message: string;
+};
+
 type RecordingEvent = {
   slug: string;
   status: "starting" | "recording" | "stopped" | "error";
@@ -138,11 +154,18 @@ type LibraryCommentMessage = {
   createdAt: string;
   usernameColor: string | null;
 };
+type LibrarySession = {
+  id: string; slug: string; kind: "LIVE" | "VOD"; startedAt: string; endedAt?: string;
+  title: string; videos: RecordingFile[]; logs: CommentLogFile[]; article?: StreamArticle;
+  status: "saved" | "interrupted" | "failed" | "unknown"; warnings: string[];
+  commentAssociation: "exact" | "none";
+};
 type RecordingLibraryChannel = {
   slug: string;
   displayName: string;
   videos: RecordingFile[];
   logs: CommentLogFile[];
+  sessions: LibrarySession[];
   latestAt: string;
 };
 type StreamArticle = {
@@ -758,12 +781,15 @@ export default function App() {
   const [newChannel, setNewChannel] = useState("");
   const [newRecordingOnlyChannel, setNewRecordingOnlyChannel] = useState("");
   const [vodUrl, setVodUrl] = useState("");
-  const [vodSlug, setVodSlug] = useState("");
-  const vodSlugRef = useRef("");
   const [vodDownloadStatus, setVodDownloadStatus] = useState("");
-  const [vodDownloadActive, setVodDownloadActive] = useState(false);
+  const [vodJobs, setVodJobs] = useState<VodDownloadJob[]>([]);
+  const [vodClock, setVodClock] = useState(Date.now());
   const [vodChatStatus, setVodChatStatus] = useState("");
   const [vodChatActive, setVodChatActive] = useState(false);
+  useEffect(() => {
+    const ticker = window.setInterval(() => setVodClock(Date.now()), 1000);
+    return () => window.clearInterval(ticker);
+  }, []);
   const [tab, setTab] = useState<"dashboard" | "recording" | "library" | "comment-video" | "articles" | "updates" | "settings">("dashboard");
   const [isReady, setIsReady] = useState(false);
   const [storageError, setStorageError] = useState("");
@@ -804,6 +830,7 @@ export default function App() {
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
   const [recordingRequests, setRecordingRequests] = useState<Record<string, boolean>>({});
   const [recordingFiles, setRecordingFiles] = useState<RecordingFile[]>([]);
+  const [recordingSessions, setRecordingSessions] = useState<LibrarySession[]>([]);
   const [isLoadingRecordings, setIsLoadingRecordings] = useState(false);
   const [deletingRecordingPath, setDeletingRecordingPath] = useState<string | null>(null);
   const [recordingMessage, setRecordingMessage] = useState("");
@@ -900,55 +927,50 @@ export default function App() {
     return [...unique.values()];
   }, [channels, recordingOnlyChannels]);
   const recordingLibraryChannels = useMemo<RecordingLibraryChannel[]>(() => {
-    const grouped = new Map<string, { slug: string; videos: RecordingFile[]; logs: CommentLogFile[] }>();
-    const getGroup = (rawSlug: string) => {
-      const slug = rawSlug.trim().toLowerCase();
+    const groups = new Map<string, RecordingLibraryChannel>();
+    const ensure = (raw: string) => {
+      const slug = raw.toLowerCase();
       if (!/^[a-zA-Z0-9_-]{1,40}$/.test(slug)) return null;
-      let group = grouped.get(slug);
+      let group = groups.get(slug);
       if (!group) {
-        group = { slug, videos: [], logs: [] };
-        grouped.set(slug, group);
+        const registered = [...channels, ...recordingOnlyChannels].find(ch => ch.name.toLowerCase() === slug);
+        group = { slug, displayName: channelChecks[slug]?.displayName || registered?.name || slug,
+          videos: [], logs: [], sessions: [], latestAt: "" };
+        groups.set(slug, group);
       }
       return group;
     };
-
-    for (const log of commentLogFiles) {
-      const group = getGroup(log.channelSlug);
-      if (group) group.logs.push(log);
-    }
+    for (const session of recordingSessions) ensure(session.slug)?.sessions.push(session);
     for (const file of recordingFiles) {
       const slug = getRecordingChannelSlug(file.name);
-      if (!slug) continue;
-      const group = getGroup(slug);
-      if (group) group.videos.push(file);
+      if (slug) ensure(slug)?.videos.push(file);
     }
-
-    return [...grouped.values()].map(group => {
-      const knownChannel = [...channels, ...recordingOnlyChannels]
-        .find(channel => channel.name.toLowerCase() === group.slug);
-      const timestamps = [...group.videos, ...group.logs]
-        .map(item => Date.parse(item.modifiedAt))
-        .filter(value => Number.isFinite(value));
+    for (const log of commentLogFiles) ensure(log.channelSlug)?.logs.push(log);
+    return [...groups.values()].map(group => {
+      const timestamps = [...group.videos, ...group.logs].map(f => Date.parse(f.modifiedAt))
+        .concat(group.sessions.map(x => Date.parse(x.startedAt)))
+        .filter(Number.isFinite);
       return {
         ...group,
-        displayName: channelChecks[group.slug]?.displayName || knownChannel?.name || group.slug,
-        videos: [...group.videos].sort((a, b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt)),
-        logs: [...group.logs].sort((a, b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt)),
-        latestAt: timestamps.length ? new Date(Math.max(...timestamps)).toISOString() : ""
+        latestAt: timestamps.length ? new Date(Math.max(...timestamps)).toISOString() : "",
+        sessions: [...group.sessions].sort((a,b) => Date.parse(b.startedAt) - Date.parse(a.startedAt)),
+        videos: [...group.videos].sort((a,b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt)),
+        logs: [...group.logs].sort((a,b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt))
       };
-    }).sort((a, b) => Date.parse(b.latestAt) - Date.parse(a.latestAt));
-  }, [recordingFiles, commentLogFiles, channels, recordingOnlyChannels, channelChecks]);
+    }).sort((a,b) => Date.parse(b.latestAt) - Date.parse(a.latestAt));
+  }, [recordingSessions, recordingFiles, commentLogFiles, channels, recordingOnlyChannels, channelChecks]);
 
   const filteredRecordingLibraryChannels = useMemo(() => {
     const query = librarySearch.trim().toLocaleLowerCase("ja-JP");
     return recordingLibraryChannels.filter(group => {
-      if (libraryTypeFilter === "videos" && group.videos.length === 0) return false;
-      if (libraryTypeFilter === "comments" && group.logs.length === 0) return false;
+      if (libraryTypeFilter === "videos" && group.sessions.every(item => item.videos.length === 0)) return false;
+      if (libraryTypeFilter === "comments" && group.sessions.every(item => item.logs.length === 0)) return false;
       if (!query) return true;
       const searchable = [
         group.slug, group.displayName,
         ...group.videos.map(file => file.name),
-        ...group.logs.map(file => file.name)
+        ...group.logs.map(file => file.name),
+        ...group.sessions.flatMap(session => [session.title, session.article?.headline ?? "", session.article?.aiSummary ?? ""])
       ].join(" ").toLocaleLowerCase("ja-JP");
       return searchable.includes(query);
     });
@@ -981,6 +1003,7 @@ export default function App() {
     let unsubscribeChatMessage: (() => void) | undefined;
     let unsubscribeChatStatus: (() => void) | undefined;
     let unsubscribeVodChat: (() => void) | undefined;
+    let unsubscribeVodDownload: (() => void) | undefined;
     let unsubscribeCommentVideo: (() => void) | undefined;
     let unsubscribeBackgroundMonitor: (() => void) | undefined;
     void loadState().then(state => {
@@ -1012,6 +1035,20 @@ export default function App() {
       void window.kickRecorder.listChatMessages(50).then(messages => {
         if (active) setChatMessages(messages);
       }).catch(() => undefined);
+      unsubscribeVodDownload = window.kickRecorder.onVodDownloadStatus((job: VodDownloadJob) => {
+        if (!active) return;
+        setVodJobs(previous => previous.some(item => item.id === job.id)
+          ? previous.map(item => item.id === job.id ? job : item)
+          : [job, ...previous]);
+        if (job.status === "completed") setLibraryRefreshKey(value => value + 1);
+      });
+      void window.kickRecorder.listVodDownloads().then(jobs => {
+        if (active) setVodJobs(previous => {
+          const latest = new Map(jobs.map(job => [job.id, job]));
+          for (const job of previous) latest.set(job.id, job);
+          return [...latest.values()].reverse();
+        });
+      }).catch(() => undefined);
       unsubscribeVodChat = window.kickRecorder.onVodChatStatus(event => {
         if (!active) return;
         setVodChatStatus(event.message);
@@ -1042,11 +1079,6 @@ export default function App() {
       unsubscribeRecording = window.kickRecorder.onRecordingStatus((event: RecordingEvent) => {
         if (!active) return;
         const isRecording = event.status === "starting" || event.status === "recording";
-        if (event.isVod && vodSlugRef.current && event.slug === vodSlugRef.current) {
-          setVodDownloadStatus(event.message ?? "過去配信を処理しています。");
-          if (event.status === "recording") setVodDownloadActive(true);
-          if (event.status === "stopped" || event.status === "error") setVodDownloadActive(false);
-        }
         if (!event.isVod) setChannels(previous => previous.map(channel =>
           channel.name.toLowerCase() === event.slug ? { ...channel, recording: isRecording } : channel
         ));
@@ -1091,6 +1123,7 @@ export default function App() {
       unsubscribeChatMessage?.();
       unsubscribeChatStatus?.();
       unsubscribeVodChat?.();
+      unsubscribeVodDownload?.();
       unsubscribeCommentVideo?.();
       unsubscribeBackgroundMonitor?.();
     };
@@ -1112,8 +1145,8 @@ export default function App() {
     if ((tab !== "library" && tab !== "dashboard" && tab !== "comment-video" && tab !== "articles") || !isDesktop || !window.kickRecorder) return;
     let active = true;
     setIsLoadingRecordings(true);
-    void window.kickRecorder.listRecordings().then(files => {
-      if (active) setRecordingFiles(files);
+    void Promise.all([window.kickRecorder.listRecordings(), window.kickRecorder.listLibrarySessions()]).then(([files, sessions]) => {
+      if (active) { setRecordingFiles(files); setRecordingSessions(sessions); }
     }).catch(error => {
       if (active) setRecordingMessage(error instanceof Error ? error.message : "録画一覧を取得できませんでした。");
     }).finally(() => {
@@ -1554,20 +1587,31 @@ export default function App() {
 
   async function downloadPastBroadcast() {
     if (!window.kickRecorder) { setVodDownloadStatus("Windowsデスクトップ版で利用できます。"); return; }
-    const match = vodUrl.trim().match(/^https:\/\/(?:www\.)?kick\.com\/([a-zA-Z0-9_-]{1,40})\/videos\/[a-f0-9-]{20,40}\/?(?:[?#].*)?$/i);
-    if (!match) { setVodDownloadStatus("Kickの過去配信URLを入力してください（https://kick.com/チャンネル/videos/動画ID）。"); return; }
-    const slug = match[1].toLowerCase();
-    vodSlugRef.current = slug; setVodSlug(slug); setVodDownloadActive(false); setVodDownloadStatus("過去配信のダウンロードを準備しています...");
+    const urls = vodUrl.trim().split(/\s+/).filter(Boolean);
+    if (urls.length < 1 || urls.length > 20) {
+      setVodDownloadStatus("Kick過去番組のURLを1行ずつ、1〜20件入力してください。");
+      return;
+    }
+    setVodDownloadStatus("番組をダウンロード一覧に登録しています...");
     try {
-      const result = await window.kickRecorder.startRecording(slug, vodUrl.trim());
-      setVodDownloadActive(true); setVodDownloadStatus(`ダウンロードを開始しました。保存先：${result.outputDirectory}`);
-    } catch (error) { setVodDownloadActive(false); setVodDownloadStatus(error instanceof Error ? error.message : "過去配信のダウンロードに失敗しました。"); }
+      const jobs = await window.kickRecorder.enqueueVodDownloads(urls);
+      setVodJobs(previous => {
+        const ids = new Set(previous.map(item => item.id));
+        return [...jobs.filter(job => !ids.has(job.id)).reverse(), ...previous];
+      });
+      setVodDownloadStatus(`${jobs.length}件を追加しました。同時ダウンロードは最大3件です。`);
+    } catch (error) {
+      setVodDownloadStatus(error instanceof Error ? error.message : "過去配信を登録できませんでした。");
+    }
   }
 
-  async function stopPastBroadcastDownload() {
-    if (!window.kickRecorder || !vodSlug) return;
-    try { await window.kickRecorder.stopRecording(vodSlug, true); setVodDownloadStatus("停止要求を送信しました。"); }
-    catch (error) { setVodDownloadStatus(error instanceof Error ? error.message : "停止できませんでした。"); }
+  async function stopPastBroadcastDownload(id: string) {
+    if (!window.kickRecorder) return;
+    try {
+      await window.kickRecorder.cancelVodDownload(id);
+    } catch (error) {
+      setVodDownloadStatus(error instanceof Error ? error.message : "停止できませんでした。");
+    }
   }
 
   async function downloadPastBroadcastChat() {
@@ -1576,7 +1620,7 @@ export default function App() {
     setVodChatActive(true);
     setVodChatStatus("過去コメントの取得を準備しています...");
     try {
-      const result = await window.kickRecorder.startVodChatDownload(vodUrl.trim());
+      const result = await window.kickRecorder.startVodChatDownload(vodUrl.trim().split(/\s+/)[0]);
       setVodChatStatus("コメント取得を開始しました。保存先：" + result.outputDirectory);
     } catch (error) {
       setVodChatActive(false);
@@ -2062,12 +2106,51 @@ export default function App() {
         </section>}
                 <section className="panel vod-download-panel">
           <div className="panel-heading"><div><h2>過去の配信（VOD）を録画・コメント取得</h2><p>KickのVideosページから過去配信のURLをコピーして貼り付けます</p></div></div>
-          <div className="add-channel">
-            <input value={vodUrl} onChange={event => setVodUrl(event.target.value)} placeholder="https://kick.com/channel/videos/動画ID" aria-label="Kick過去配信URL" />
-            <button className="primary-small" onClick={() => void downloadPastBroadcast()} disabled={!isDesktop || vodDownloadActive}>過去配信をダウンロード</button>
-            {vodDownloadActive && <button className="remove" onClick={() => void stopPastBroadcastDownload()}>動画停止</button>}
+          <div className="vod-batch-form">
+            <label htmlFor="vod-batch-urls">番組URL（1行につき1件、最大20件）</label>
+            <textarea id="vod-batch-urls" value={vodUrl} onChange={event => setVodUrl(event.target.value)}
+              rows={3} placeholder={"https://kick.com/channel/videos/動画ID\nhttps://kick.com/channel/videos/別の動画ID"}
+              aria-label="Kick過去配信URL（複数入力）" />
+            <button className="primary-small" onClick={() => void downloadPastBroadcast()} disabled={!isDesktop || !vodUrl.trim()}>まとめてダウンロード</button>
           </div>
           {vodDownloadStatus && <div className="api-message" role="status">{vodDownloadStatus}</div>}
+          <div className="vod-job-list" aria-label="過去番組のダウンロード一覧">
+            {vodJobs.length === 0 && <div className="empty-inline">ダウンロード待ちの番組はありません。</div>}
+            {vodJobs.map(job => {
+              const active = job.status === "queued" || job.status === "downloading";
+              const elapsed = job.durationMs ?? (job.startedAt ? Math.max(0, vodClock - Date.parse(job.startedAt)) : 0);
+              const formatTime = (seconds: number) => {
+                const total = Math.max(0, Math.floor(seconds));
+                return [Math.floor(total / 3600), Math.floor(total / 60) % 60, total % 60].map(x => String(x).padStart(2, "0")).join(":");
+              };
+              const label = job.status === "queued" ? "待機中"
+                : job.status === "downloading" ? "ダウンロード中"
+                : job.status === "completed" ? "完了"
+                : job.status === "cancelled" ? "停止" : "エラー";
+              return <div className="vod-job" key={job.id}>
+                <div className="vod-job-top">
+                  <div className="vod-job-description"><strong>{job.slug} · {job.videoId}</strong><small title={job.url}>{job.url}</small></div>
+                  <span className={`vod-job-badge ${job.status}`}>{label}</span>
+                </div>
+                <div className="vod-job-progress" role="progressbar" aria-label={`${job.slug}のダウンロード進捗`}
+                  aria-valuemin={0} aria-valuemax={100} aria-valuenow={job.progress ?? 0}>
+                  <div style={{ width: `${job.progress ?? 0}%` }} />
+                </div>
+                <div className="vod-job-details">
+                  <span>進捗：{job.progress == null ? "取得中" : `${job.progress.toFixed(1)}%`}</span>
+                  <span>経過時間：{job.startedAt ? formatTime(elapsed / 1000) : "--:--:--"}</span>
+                  {job.status === "downloading" && job.estimatedRemainingSeconds != null && <span>残り目安：{formatTime(job.estimatedRemainingSeconds)}</span>}
+                  {job.startedAt && <span>開始：{new Date(job.startedAt).toLocaleTimeString("ja-JP")}</span>}
+                  {job.finishedAt && <span>終了：{new Date(job.finishedAt).toLocaleTimeString("ja-JP")}</span>}
+                </div>
+                <div className="vod-job-bottom">
+                  <small>{job.message}</small>
+                  {active && <button className="small-action" onClick={() => void stopPastBroadcastDownload(job.id)}>この番組を停止</button>}
+                </div>
+              </div>;
+            })}
+          </div>
+          <p className="settings-help">コメント取得は現在1番組ずつの処理です。複数URLを貼り付けた場合は先頭のURLが対象になります。ダウンロード一覧はアプリ再起動でリセットされますが、完成した動画は録画ライブラリに残ります。</p>
           <div className="add-channel vod-chat-actions">
             <button className="primary-small" onClick={() => void downloadPastBroadcastChat()} disabled={!isDesktop || vodChatActive}>過去配信のコメントを取得（JSONL・TXT・ASS）</button>
             {vodChatActive && <button className="remove" onClick={() => void stopPastBroadcastChat()}>コメント取得を停止</button>}
@@ -2163,11 +2246,11 @@ export default function App() {
                         <div className="recording-channel-info">
                           <strong>{group.displayName}</strong>
                           <small>@{group.slug}</small>
-                          <small>録画動画 {group.videos.length}件 ・ コメントログ {group.logs.length}件{group.latestAt ? " ・ " + new Date(group.latestAt).toLocaleString("ja-JP") : ""}</small>
+                          <small>配信 {group.sessions.length}件 ・ 録画動画 {group.videos.length}件 ・ コメントログ {group.logs.length}件{group.latestAt ? " ・ " + new Date(group.latestAt).toLocaleString("ja-JP") : ""}</small>
                         </div>
                         <div className="recording-channel-actions">
-                          <button className="primary-small" onClick={() => setExpandedLibraryVideosChannel(current => current === group.slug ? null : group.slug)} disabled={group.videos.length === 0}>
-                            {expandedLibraryVideosChannel === group.slug ? "録画一覧を閉じる" : "録画を見る"}
+                          <button className="primary-small" onClick={() => setExpandedLibraryVideosChannel(current => current === group.slug ? null : group.slug)} disabled={group.sessions.length === 0}>
+                            {expandedLibraryVideosChannel === group.slug ? "配信一覧を閉じる" : "配信一覧を見る"}
                           </button>
                           <button className="small-action" onClick={() => void toggleLibraryComments(group.slug)} disabled={group.logs.length === 0 || isLoadingLibraryComments}>
                             {libraryCommentsChannel === group.slug ? "コメントを閉じる" : "コメントを見る"}
@@ -2177,24 +2260,70 @@ export default function App() {
 
                       {expandedLibraryVideosChannel === group.slug && <div className="recording-library-expanded">
                         <div className="recording-library-expanded-title">
-                          <strong>録画一覧</strong>
-                          <span>{group.videos.length.toLocaleString("ja-JP")}件 ・ 一覧内を上下にスクロールできます</span>
+                          <strong>配信別：動画・コメント・AI記事</strong>
+                          <span>{group.sessions.length}件の配信</span>
                         </div>
-                        <div className="recording-library-video-list" role="region" aria-label={group.displayName + "の録画一覧"} tabIndex={0}>
-                          {group.videos.map(file => <div className="recording-library-video-row" key={file.path}>
-                            <div className="recording-file-icon">▶</div>
-                            <div className="recording-file-info">
-                              <strong title={file.name}>{file.name}</strong>
-                              <small>{new Date(file.modifiedAt).toLocaleString("ja-JP")} ・ {file.extension} ・ {(file.size / (1024 * 1024)).toFixed(1)} MB</small>
+                        <div className="recording-session-list" role="region" tabIndex={0} aria-label={group.displayName + "の配信別録画"}>
+                          {group.sessions.map(session => <article className="recording-session-card" key={session.id}>
+                            <div className="recording-session-head">
+                              <div className="recording-session-thumbnail">
+                                {session.article?.videoPreviewAvailable ? <ArticleBroadcastFrame article={session.article} /> : <span aria-hidden="true">▶</span>}
+                              </div>
+                              <div className="recording-session-heading">
+                                <div className="recording-session-tags">
+                                  <span className={session.kind === "LIVE" ? "session-kind-live" : "session-kind-vod"}>{session.kind}</span>
+                                  <span className={session.status === "saved" ? "session-status-ok" : session.status === "failed" || session.status === "interrupted" ? "session-status-warning" : "session-status-unknown"}>
+                                    {session.status === "saved" ? "動画保存済み" : session.status === "interrupted" ? "途中停止" : session.status === "failed" ? "保存エラー" : "状況未確認"}
+                                  </span>
+                                </div>
+                                <strong>{session.title || (group.displayName + " の" + (session.kind === "LIVE" ? "生放送" : "過去配信"))}</strong>
+                                <small>{Number.isFinite(Date.parse(session.startedAt)) ? new Date(session.startedAt).toLocaleString("ja-JP") : "日時未取得"}</small>
+                                <small>動画 {session.videos.length}件 ・ コメント {session.logs.length}件 ・ AI記事 {session.article ? "あり" : "なし"}</small>
+                              </div>
                             </div>
-                            <div className="recording-library-video-actions">
-                              <button className="primary-small" onClick={() => void openRecordingFile(file.path)}>再生</button>
-                              <button className="small-action" onClick={() => void revealRecordingFile(file.path)}>場所を表示</button>
-                              <button className="danger-small" onClick={() => void deleteRecordingFromLibrary(file.path, file.name)} disabled={deletingRecordingPath !== null}>
-                                {deletingRecordingPath === file.path ? "削除中..." : "削除"}
-                              </button>
-                            </div>
-                          </div>)}
+                            {session.article && <div className="recording-session-article">
+                              <strong>AI配信記事：{session.article.headline}</strong>
+                              <p>{session.article.aiSummary || session.article.paragraphs?.[0] || "記事を見ると内容を確認できます。"}</p>
+                              <button className="small-action" onClick={() => {
+                                setArticleSearch(session.article?.headline ?? "");
+                                setArticleStatusFilter("all");
+                                setTab("articles");
+                              }}>記事を見る</button>
+                            </div>}
+                            {session.warnings.length > 0 && <div className="recording-session-warnings">
+                              {session.warnings.map((warning, index) => <p key={index}>{warning}</p>)}
+                            </div>}
+                            {session.videos.map(file => <div className="recording-session-file" key={file.path}>
+                              <span className="recording-session-file-type">映像・{file.extension}</span>
+                              <div className="recording-file-info"><strong title={file.name}>{file.name}</strong>
+                                <small>{new Date(file.modifiedAt).toLocaleString("ja-JP")} ・ {(file.size / 1048576).toFixed(1)} MB</small>
+                              </div>
+                              <div className="recording-library-video-actions">
+                                <button className="primary-small" onClick={() => void openRecordingFile(file.path)}>再生</button>
+                                <button className="small-action" onClick={() => void revealRecordingFile(file.path)}>場所</button>
+                                <button className="danger-small" onClick={() => void deleteRecordingFromLibrary(file.path, file.name)} disabled={deletingRecordingPath !== null}>
+                                  {deletingRecordingPath === file.path ? "削除中..." : "削除"}
+                                </button>
+                              </div>
+                            </div>)}
+                            {session.logs.map(log => <div className="recording-session-file" key={log.path}>
+                              <span className="recording-session-file-type">コメント・JSONL</span>
+                              <div className="recording-file-info"><strong title={log.name}>{log.name}</strong>
+                                <small>{new Date(log.modifiedAt).toLocaleString("ja-JP")} ・ {(log.size / 1024).toFixed(1)} KB</small>
+                              </div>
+                              <div className="recording-library-video-actions">
+                                <button className="small-action" onClick={() => void revealRecordingFile(log.path)}>保存場所</button>
+                              </div>
+                            </div>)}
+                            {!session.article && session.videos.length > 0 && <div className="recording-session-actions">
+                              <button className="small-action" onClick={() => {
+                                setArticleSlug(session.slug);
+                                setArticleVideoPath(session.videos[0].path);
+                                setArticleHeadline("");
+                                setTab("articles");
+                              }}>この録画から記事を生成</button>
+                            </div>}
+                          </article>)}
                         </div>
                       </div>}
 

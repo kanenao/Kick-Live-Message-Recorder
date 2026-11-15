@@ -52,12 +52,43 @@ type RecordingFile = {
   modifiedAt: string;
 };
 
+type LibrarySession = {
+  id: string;
+  slug: string;
+  kind: "LIVE" | "VOD";
+  startedAt: string;
+  endedAt?: string;
+  title: string;
+  videos: RecordingFile[];
+  logs: CommentLogFile[];
+  article?: StreamArticle;
+  status: "saved" | "interrupted" | "failed" | "unknown";
+  warnings: string[];
+  commentAssociation: "exact" | "none";
+};
+
 type RecordingEvent = {
   slug: string;
   status: "starting" | "recording" | "stopped" | "error";
   filePath?: string;
   message?: string;
   isVod?: boolean;
+};
+
+type VodDownloadJob = {
+  id: string;
+  url: string;
+  slug: string;
+  videoId: string;
+  status: "queued" | "downloading" | "completed" | "cancelled" | "error";
+  progress: number | null;
+  createdAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  durationMs?: number;
+  estimatedRemainingSeconds?: number;
+  filePath?: string;
+  message: string;
 };
 
 type CommentLogFile = {
@@ -240,6 +271,15 @@ const api = {
     ipcRenderer.invoke("recording:start", slug, sourceUrl),
   stopRecording: (slug: string, isVod = false): Promise<{ ok: true }> =>
     ipcRenderer.invoke("recording:stop", slug, isVod),
+  enqueueVodDownloads: (urls: string[]): Promise<VodDownloadJob[]> => ipcRenderer.invoke("vod-download:enqueue", urls),
+  listVodDownloads: (): Promise<VodDownloadJob[]> => ipcRenderer.invoke("vod-download:list"),
+  cancelVodDownload: (id: string): Promise<{ ok: true }> => ipcRenderer.invoke("vod-download:cancel", id),
+  onVodDownloadStatus: (callback: (job: VodDownloadJob) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, job: VodDownloadJob): void => callback(job);
+    ipcRenderer.on("vod-download:status", listener);
+    return () => ipcRenderer.removeListener("vod-download:status", listener);
+  },
+  listLibrarySessions: (): Promise<LibrarySession[]> => ipcRenderer.invoke("library:sessions"),
   listRecordings: (): Promise<RecordingFile[]> => ipcRenderer.invoke("recording:list"),
   deleteRecording: (filePath: string): Promise<{ ok: true; name: string }> =>
     ipcRenderer.invoke("recording:delete", filePath),
