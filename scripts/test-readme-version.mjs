@@ -9,8 +9,8 @@ const appSource = readFileSync(new URL("../src/ui/App.tsx", import.meta.url), "u
 const match = packageJson.version.match(/^(\d+\.\d+\.\d+)-alpha\.(\d+)$/);
 assert.ok(match, "package.json must use the alpha version format while alpha development is active");
 const currentVersion = packageJson.version;
-// α60の初回公開を基準にし、β50は履歴として別途保持する。
-const latestPublicVersion = "0.2.5-alpha.60";
+// α61が最新の公開版。過去のβ50は公開履歴として別途保持する。
+const latestPublicVersion = "0.2.6-alpha.61";
 
 assert.ok(readme.includes("開発中：" + currentVersion), "README must show the current alpha development version");
 assert.ok(appSource.includes('const APP_VERSION = "' + currentVersion + '";'), "The app UI version must match package.json");
