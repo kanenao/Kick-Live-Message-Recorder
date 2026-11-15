@@ -1585,7 +1585,7 @@ export default function App() {
 
   async function downloadPastBroadcast() {
     if (!window.kickRecorder) { setVodDownloadStatus("Windowsデスクトップ版で利用できます。"); return; }
-    const urls = vodUrl.trim().split(/\\s+/).filter(Boolean);
+    const urls = vodUrl.trim().split(/\s+/).filter(Boolean);
     if (urls.length < 1 || urls.length > 20) {
       setVodDownloadStatus("Kick過去番組のURLを1行ずつ、1〜20件入力してください。");
       return;
@@ -2108,7 +2108,7 @@ export default function App() {
           <div className="vod-batch-form">
             <label htmlFor="vod-batch-urls">番組URL（1行につき1件、最大20件）</label>
             <textarea id="vod-batch-urls" value={vodUrl} onChange={event => setVodUrl(event.target.value)}
-              rows={3} placeholder={"https://kick.com/channel/videos/動画ID\\nhttps://kick.com/channel/videos/別の動画ID"}
+              rows={3} placeholder={"https://kick.com/channel/videos/動画ID\nhttps://kick.com/channel/videos/別の動画ID"}
               aria-label="Kick過去配信URL（複数入力）" />
             <button className="primary-small" onClick={() => void downloadPastBroadcast()} disabled={!isDesktop || !vodUrl.trim()}>まとめてダウンロード</button>
           </div>
@@ -2149,7 +2149,7 @@ export default function App() {
               </div>;
             })}
           </div>
-          <p className="settings-help">コメント取得は現在1番組ずつの処理です。複数URLを貼り付けた場合は先頭のURLが対象になります。</p>
+          <p className="settings-help">コメント取得は現在1番組ずつの処理です。複数URLを貼り付けた場合は先頭のURLが対象になります。ダウンロード一覧はアプリ再起動でリセットされますが、完成した動画は録画ライブラリに残ります。</p>
           <div className="add-channel vod-chat-actions">
             <button className="primary-small" onClick={() => void downloadPastBroadcastChat()} disabled={!isDesktop || vodChatActive}>過去配信のコメントを取得（JSONL・TXT・ASS）</button>
             {vodChatActive && <button className="remove" onClick={() => void stopPastBroadcastChat()}>コメント取得を停止</button>}
