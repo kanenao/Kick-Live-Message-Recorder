@@ -154,11 +154,18 @@ type LibraryCommentMessage = {
   createdAt: string;
   usernameColor: string | null;
 };
+type LibrarySession = {
+  id: string; slug: string; kind: "LIVE" | "VOD"; startedAt: string; endedAt?: string;
+  title: string; videos: RecordingFile[]; logs: CommentLogFile[]; article?: StreamArticle;
+  status: "saved" | "interrupted" | "failed" | "unknown"; warnings: string[];
+  commentAssociation: "exact" | "none";
+};
 type RecordingLibraryChannel = {
   slug: string;
   displayName: string;
   videos: RecordingFile[];
   logs: CommentLogFile[];
+  sessions: LibrarySession[];
   latestAt: string;
 };
 type StreamArticle = {
@@ -823,6 +830,7 @@ export default function App() {
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
   const [recordingRequests, setRecordingRequests] = useState<Record<string, boolean>>({});
   const [recordingFiles, setRecordingFiles] = useState<RecordingFile[]>([]);
+  const [recordingSessions, setRecordingSessions] = useState<LibrarySession[]>([]);
   const [isLoadingRecordings, setIsLoadingRecordings] = useState(false);
   const [deletingRecordingPath, setDeletingRecordingPath] = useState<string | null>(null);
   const [recordingMessage, setRecordingMessage] = useState("");
@@ -919,55 +927,50 @@ export default function App() {
     return [...unique.values()];
   }, [channels, recordingOnlyChannels]);
   const recordingLibraryChannels = useMemo<RecordingLibraryChannel[]>(() => {
-    const grouped = new Map<string, { slug: string; videos: RecordingFile[]; logs: CommentLogFile[] }>();
-    const getGroup = (rawSlug: string) => {
-      const slug = rawSlug.trim().toLowerCase();
+    const groups = new Map<string, RecordingLibraryChannel>();
+    const ensure = (raw: string) => {
+      const slug = raw.toLowerCase();
       if (!/^[a-zA-Z0-9_-]{1,40}$/.test(slug)) return null;
-      let group = grouped.get(slug);
+      let group = groups.get(slug);
       if (!group) {
-        group = { slug, videos: [], logs: [] };
-        grouped.set(slug, group);
+        const registered = [...channels, ...recordingOnlyChannels].find(ch => ch.name.toLowerCase() === slug);
+        group = { slug, displayName: channelChecks[slug]?.displayName || registered?.name || slug,
+          videos: [], logs: [], sessions: [], latestAt: "" };
+        groups.set(slug, group);
       }
       return group;
     };
-
-    for (const log of commentLogFiles) {
-      const group = getGroup(log.channelSlug);
-      if (group) group.logs.push(log);
-    }
+    for (const session of recordingSessions) ensure(session.slug)?.sessions.push(session);
     for (const file of recordingFiles) {
       const slug = getRecordingChannelSlug(file.name);
-      if (!slug) continue;
-      const group = getGroup(slug);
-      if (group) group.videos.push(file);
+      if (slug) ensure(slug)?.videos.push(file);
     }
-
-    return [...grouped.values()].map(group => {
-      const knownChannel = [...channels, ...recordingOnlyChannels]
-        .find(channel => channel.name.toLowerCase() === group.slug);
-      const timestamps = [...group.videos, ...group.logs]
-        .map(item => Date.parse(item.modifiedAt))
-        .filter(value => Number.isFinite(value));
+    for (const log of commentLogFiles) ensure(log.channelSlug)?.logs.push(log);
+    return [...groups.values()].map(group => {
+      const timestamps = [...group.videos, ...group.logs].map(f => Date.parse(f.modifiedAt))
+        .concat(group.sessions.map(x => Date.parse(x.startedAt)))
+        .filter(Number.isFinite);
       return {
         ...group,
-        displayName: channelChecks[group.slug]?.displayName || knownChannel?.name || group.slug,
-        videos: [...group.videos].sort((a, b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt)),
-        logs: [...group.logs].sort((a, b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt)),
-        latestAt: timestamps.length ? new Date(Math.max(...timestamps)).toISOString() : ""
+        latestAt: timestamps.length ? new Date(Math.max(...timestamps)).toISOString() : "",
+        sessions: [...group.sessions].sort((a,b) => Date.parse(b.startedAt) - Date.parse(a.startedAt)),
+        videos: [...group.videos].sort((a,b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt)),
+        logs: [...group.logs].sort((a,b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt))
       };
-    }).sort((a, b) => Date.parse(b.latestAt) - Date.parse(a.latestAt));
-  }, [recordingFiles, commentLogFiles, channels, recordingOnlyChannels, channelChecks]);
+    }).sort((a,b) => Date.parse(b.latestAt) - Date.parse(a.latestAt));
+  }, [recordingSessions, recordingFiles, commentLogFiles, channels, recordingOnlyChannels, channelChecks]);
 
   const filteredRecordingLibraryChannels = useMemo(() => {
     const query = librarySearch.trim().toLocaleLowerCase("ja-JP");
     return recordingLibraryChannels.filter(group => {
-      if (libraryTypeFilter === "videos" && group.videos.length === 0) return false;
-      if (libraryTypeFilter === "comments" && group.logs.length === 0) return false;
+      if (libraryTypeFilter === "videos" && group.sessions.every(item => item.videos.length === 0)) return false;
+      if (libraryTypeFilter === "comments" && group.sessions.every(item => item.logs.length === 0)) return false;
       if (!query) return true;
       const searchable = [
         group.slug, group.displayName,
         ...group.videos.map(file => file.name),
-        ...group.logs.map(file => file.name)
+        ...group.logs.map(file => file.name),
+        ...group.sessions.flatMap(session => [session.title, session.article?.headline ?? "", session.article?.aiSummary ?? ""])
       ].join(" ").toLocaleLowerCase("ja-JP");
       return searchable.includes(query);
     });
@@ -1142,8 +1145,8 @@ export default function App() {
     if ((tab !== "library" && tab !== "dashboard" && tab !== "comment-video" && tab !== "articles") || !isDesktop || !window.kickRecorder) return;
     let active = true;
     setIsLoadingRecordings(true);
-    void window.kickRecorder.listRecordings().then(files => {
-      if (active) setRecordingFiles(files);
+    void Promise.all([window.kickRecorder.listRecordings(), window.kickRecorder.listLibrarySessions()]).then(([files, sessions]) => {
+      if (active) { setRecordingFiles(files); setRecordingSessions(sessions); }
     }).catch(error => {
       if (active) setRecordingMessage(error instanceof Error ? error.message : "録画一覧を取得できませんでした。");
     }).finally(() => {
