@@ -2,19 +2,19 @@
 
 Kick配信の映像・音声・コメントを録画・保存するWindowsデスクトップアプリです。24時間の配信監視、コメント付き動画の生成、映像・音声・コメントを組み合わせたAI配信記事に対応しています。
 
-> **最新公開版：0.2.5-alpha.60（α版）**  
-> **開発中：0.2.6-alpha.61（未公開）**  
+> **最新公開版：0.2.6-alpha.61（α版）**  
+> **開発中：0.2.7-alpha.62（未公開）**  
 > 現在の開発・テスト対象はα版です。過去に公開したβ版は履歴として保持し、製品版は未完成のため公開・自動更新していません。
 
 ## バージョン・ダウンロード
 
 | 区分 | バージョン | 状態 |
 |---|---|---|
-| 最新公開α版 | `0.2.5-alpha.60` | GitHub ReleasesのPre-release |
+| 最新公開α版 | `0.2.6-alpha.61` | GitHub ReleasesのPre-release |
 | 旧β版（履歴） | `0.1.0-beta.50` | 公開済み・保持 |
-| 開発版 | `0.2.6-alpha.61` | リリースノート表示を修正中・未公開 |
+| 開発版 | `0.2.7-alpha.62` | 自動更新チャンネルを修正中・未公開 |
 
-- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.2.5-alpha.60)
+- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.2.6-alpha.61)
 - [α版開発ブランチ](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/feature/alpha52-broadcast-newspaper-layout)
 - [バージョン更新履歴（CHANGELOG）](CHANGELOG.md)
 - [α版・製品版の運用方針](docs/RELEASE_CHANNELS.md)
@@ -67,7 +67,11 @@ Kick配信の映像・音声・コメントを録画・保存するWindowsデス
 
 ## 最近の更新
 
-### 0.2.6-alpha.61（開発中・未公開）
+### 0.2.7-alpha.62（開発中・未公開）
+- α版の更新マニフェストを `alpha.yml` に揃え、自動更新でα版が検出されない問題を修正。
+- GitHub Releasesには `latest.yml` も互換用に公開し、配布検証テストを追加。
+
+### 0.2.6-alpha.61（公開済みα版）
 - HTML形式のリリースノートがタグのまま表示される問題を修正。見出し・箇条書き・強調文字を読みやすく整形。
 - HTML／Markdown両形式の自動テストを追加。
 
@@ -163,7 +167,7 @@ Client SecretはWindowsのElectron `safeStorage` で暗号化して保存しま�
 
 ### バージョン番号の決め方
 
-バージョンは `MAJOR.MINOR.PATCH-alpha.N` 形式で管理します。現在の開発版は `0.2.6-alpha.61` です。今回のPATCH更新は、HTML形式のリリースノートの表示修正です。
+バージョンは `MAJOR.MINOR.PATCH-alpha.N` 形式で管理します。現在の開発版は `0.2.7-alpha.62` です。今回のPATCH更新は、α版の自動更新チャンネル修正です。
 
 - **PATCH**：既存機能の不具合修正、安定性・性能改善、小規模な調整（次回例：`0.2.7-alpha.62`）。
 - **MINOR**：互換性を保った主要機能の追加・拡張、開発上の大きな節目（次回例：`0.3.0-alpha.62`）。
