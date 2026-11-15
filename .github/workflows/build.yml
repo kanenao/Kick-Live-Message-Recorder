@@ -154,7 +154,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Kick-Recorder-alpha-windows
-          path: release/*.exe
+          path: |
+            release/*.exe
+            release/latest.yml
+            release/*.blockmap
           if-no-files-found: error
           retention-days: 14
 
@@ -321,3 +324,63 @@ jobs:
         run: npm run publish:win
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-alpha60-request:
+    name: 明示リクエストによる α60 初回公開
+    runs-on: ubuntu-latest
+    needs: [quality, windows-installer]
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/alpha52-broadcast-newspaper-layout' && github.event.head_commit.message == 'release-publish-v0.2.5-alpha.60' }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Windows インストーラーと更新情報を取得
+        uses: actions/download-artifact@v4
+        with:
+          name: Kick-Recorder-alpha-windows
+          path: release
+      - name: バージョンと公開ファイルの検査
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          if [[ "$version" != "0.2.5-alpha.60" ]]; then
+            echo "::error::Unexpected version: $version"
+            exit 1
+          fi
+          shopt -s nullglob
+          installers=(release/*.exe)
+          blockmaps=(release/*.blockmap)
+          if (( ${#installers[@]} != 1 || ${#blockmaps[@]} < 1 )); then
+            echo "::error::Installer or blockmap is missing"
+            exit 1
+          fi
+          test -s release/latest.yml
+          grep -F "version: $version" release/latest.yml
+          echo "Installer: ${installers[0]}"
+          echo "Update file: release/latest.yml"
+      - name: α60 タグと GitHub Pre-release を公開
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="v0.2.5-alpha.60"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release $tag already exists; refusing to overwrite"
+            exit 1
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+            echo "::error::Tag $tag already exists; refusing to move it"
+            exit 1
+          fi
+          gh release create "$tag" release/*.exe release/latest.yml release/*.blockmap \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Kick Live Message Recorder $version (α版)" \
+            --notes-file docs/ALPHA60_RELEASE_NOTES.md \
+            --prerelease
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY"

@@ -9,18 +9,18 @@ const appSource = readFileSync(new URL("../src/ui/App.tsx", import.meta.url), "u
 const match = packageJson.version.match(/^(\d+\.\d+\.\d+)-alpha\.(\d+)$/);
 assert.ok(match, "package.json must use the alpha version format while alpha development is active");
 const currentVersion = packageJson.version;
-// β50は過去に公開済みの最終β版として残し、α版の公開後にこの値を更新する。
-const latestPublicVersion = "0.1.0-beta.50";
+// α60の初回公開を基準にし、β50は履歴として別途保持する。
+const latestPublicVersion = "0.2.5-alpha.60";
 
 assert.ok(readme.includes("開発中：" + currentVersion), "README must show the current alpha development version");
 assert.ok(appSource.includes('const APP_VERSION = "' + currentVersion + '";'), "The app UI version must match package.json");
 assert.ok(appSource.includes('version: "' + currentVersion + '"'), "The in-app version history must include the current alpha version");
-assert.ok(readme.includes("最新公開版：" + latestPublicVersion), "README must preserve the latest historically published beta version");
+assert.ok(readme.includes("最新公開版：" + latestPublicVersion), "README must show the latest published alpha version");
 assert.ok(readme.includes("CHANGELOG.md"), "README must link to the version history");
 assert.ok(readme.includes("バージョン番号の決め方"), "README must explain the independent core version and alpha counter");
 assert.ok(readme.includes("alpha.N"), "README must document the continuing alpha sequence");
 assert.ok(!readme.includes("0.1.0-beta.15"), "README must not retain the obsolete beta15 version");
 assert.ok(changelog.includes("## " + currentVersion), "CHANGELOG must include the current alpha development version");
-assert.ok(changelog.includes("## " + latestPublicVersion), "CHANGELOG must include the latest published version");
+assert.ok(changelog.includes("## " + latestPublicVersion), "CHANGELOG must include the latest published alpha version");
 
-console.log("README／更新履歴のバージョン整合性テスト成功（開発中: " + currentVersion + "、公開済みβ: " + latestPublicVersion + "）");
+console.log("README／更新履歴のバージョン整合性テスト成功（開発中: " + currentVersion + "、公開済みα: " + latestPublicVersion + "）");
