@@ -1,5 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getRecordingChannelSlug } from "../shared/recording-library";
+import { parseReleaseNotes, splitReleaseNoteInline } from "../shared/release-notes";
+
+function ReleaseNoteInlineText({ value }: { value: string }) {
+  return <>{splitReleaseNoteInline(value).map((part, index) =>
+    part.kind === "strong" ? <strong key={index}>{part.value}</strong> :
+    part.kind === "code" ? <code key={index}>{part.value}</code> :
+    <span key={index}>{part.value}</span>
+  )}</>;
+}
+
+function ReleaseNotesContent({ value }: { value: string }) {
+  const blocks = parseReleaseNotes(value);
+  return <div className="release-notes-content">
+    {blocks.map((block, index) =>
+      block.kind === "heading" ?
+        <h4 key={index} className={block.level === 1 ? "release-note-title" : "release-note-heading"}><ReleaseNoteInlineText value={block.text} /></h4> :
+      block.kind === "list" ?
+        <ul key={index}>{block.items.map((item, itemIndex) => <li key={itemIndex}><ReleaseNoteInlineText value={item} /></li>)}</ul> :
+        <p key={index}><ReleaseNoteInlineText value={block.text} /></p>
+    )}
+  </div>;
+}
 
 type Channel = {
   id: number;
@@ -155,7 +177,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.2.5-alpha.60";
+const APP_VERSION = "0.2.6-alpha.61";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -183,6 +205,15 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.2.6-alpha.61",
+    title: "リリースノートを読みやすく表示",
+    changes: [
+      "リリースノートのHTMLタグをそのまま表示せず、見出し・本文・箇条書きを整形",
+      "強調文字・コード表記・文字実体参照を安全なテキストとして描画",
+      "HTML・Markdown表示の回帰テストを追加"
+    ]
+  },
   {
     version: "0.2.5-alpha.60",
     title: "録画ライブラリの一覧表示・スクロールを改善",
@@ -2536,8 +2567,8 @@ export default function App() {
           </div>
         </div>
         {updateStatus.releaseNotes && <div className="release-notes-panel">
-          <div className="settings-subheading"><h3>配信中のリリースノート</h3>{updateStatus.releaseDate && <span className="comment-video-log-count">{new Date(updateStatus.releaseDate).toLocaleDateString("ja-JP")}</span>}</div>
-          <pre>{updateStatus.releaseNotes}</pre>
+          <div className="settings-subheading"><h3>公開中のリリースノート</h3>{updateStatus.releaseDate && <span className="comment-video-log-count">{new Date(updateStatus.releaseDate).toLocaleDateString("ja-JP")}</span>}</div>
+          <ReleaseNotesContent value={updateStatus.releaseNotes} />
         </div>}
         <div className="version-history-section">
           <div className="settings-subheading"><h3>バージョン更新履歴</h3><span className="api-state connected">{VERSION_HISTORY.length}件</span></div>
