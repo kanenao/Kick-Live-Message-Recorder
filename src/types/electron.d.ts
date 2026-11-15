@@ -50,6 +50,21 @@ type KickRecorderRecordingFile = {
   modifiedAt: string;
 };
 
+type KickRecorderLibrarySession = {
+  id: string;
+  slug: string;
+  kind: "LIVE" | "VOD";
+  startedAt: string;
+  endedAt?: string;
+  title: string;
+  videos: KickRecorderRecordingFile[];
+  logs: KickRecorderCommentLogFile[];
+  article?: KickRecorderStreamArticle;
+  status: "saved" | "interrupted" | "failed" | "unknown";
+  warnings: string[];
+  commentAssociation: "exact" | "none";
+};
+
 type KickRecorderRecordingEvent = {
   slug: string;
   status: "starting" | "recording" | "stopped" | "error";
@@ -232,6 +247,7 @@ declare global {
       listVodDownloads: () => Promise<KickRecorderVodDownloadJob[]>;
       cancelVodDownload: (id: string) => Promise<{ ok: true }>;
       onVodDownloadStatus: (callback: (job: KickRecorderVodDownloadJob) => void) => () => void;
+      listLibrarySessions: () => Promise<KickRecorderLibrarySession[]>;
       listRecordings: () => Promise<KickRecorderRecordingFile[]>;
       deleteRecording: (filePath: string) => Promise<{ ok: true; name: string }>;
       openRecording: (filePath: string) => Promise<{ ok: true }>;
