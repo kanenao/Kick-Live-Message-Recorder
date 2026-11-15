@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
-import { basename, join, resolve, sep } from "node:path";
+import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { basename, extname, join, resolve, sep } from "node:path";
 
 export type VodDownloadStatus = "queued" | "downloading" | "completed" | "cancelled" | "error";
 
@@ -277,6 +277,23 @@ export class KickVodDownloadManager {
     if (!job || job.settled) return;
     job.settled = true;
     job.child = null;
+    if (status === "completed") {
+      try {
+        const prefix = basename(job.outputPrefix);
+        const video = readdirSync(job.outputDirectory)
+          .filter(name => name.startsWith(prefix) && [".mp4", ".mkv", ".ts", ".webm", ".mov", ".m4v"].includes(extname(name).toLowerCase()))
+          .map(name => join(job.outputDirectory, name))
+          .find(path => statSync(path).isFile() && statSync(path).size > 0);
+        if (video) job.data.filePath = video;
+        else {
+          status = "error";
+          message = "処理は終了しましたが、動画ファイルが生成されていません。";
+        }
+      } catch {
+        status = "error";
+        message = "動画ファイルの保存を確認できませんでした。";
+      }
+    }
     job.data.status = status;
     job.data.finishedAt = new Date().toISOString();
     job.data.estimatedRemainingSeconds = undefined;
