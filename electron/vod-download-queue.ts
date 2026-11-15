@@ -202,7 +202,7 @@ export class KickVodDownloadManager {
       "--format", "best",
       "--output", `${job.outputPrefix}%(title).90B.%(ext)s`,
       "--print", "after_move:filepath",
-      "--ffmpeg-location", findExecutable("ffmpeg"),
+      ...(existsSync(findExecutable("ffmpeg")) ? ["--ffmpeg-location", findExecutable("ffmpeg")] : []),
       job.data.url
     ];
     job.data.status = "downloading";
