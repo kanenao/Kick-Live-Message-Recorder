@@ -79,7 +79,7 @@ function findYtDlp(): string {
 function findFfmpeg(): string | undefined {
   const executable = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
   const candidates = [
-    join(process.resourcesPath, "tools", executable),
+    ...(typeof process.resourcesPath === "string" ? [join(process.resourcesPath, "tools", executable)] : []),
     join(process.cwd(), "vendor", "win-x64", executable),
     join(process.cwd(), "vendor", executable)
   ];
