@@ -249,6 +249,7 @@ declare global {
       onVodDownloadStatus: (callback: (job: KickRecorderVodDownloadJob) => void) => () => void;
       listLibrarySessions: () => Promise<KickRecorderLibrarySession[]>;
       listRecordings: () => Promise<KickRecorderRecordingFile[]>;
+      getRecordingThumbnail: (filePath: string) => Promise<string | null>;
       deleteRecording: (filePath: string) => Promise<{ ok: true; name: string }>;
       openRecording: (filePath: string) => Promise<{ ok: true }>;
       revealRecording: (filePath: string) => Promise<{ ok: true }>;

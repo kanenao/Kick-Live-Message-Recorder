@@ -483,3 +483,38 @@
 }
 
 @media(min-width:761px) and (max-width:1100px){.recording-library-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Compact library: one broadcast per short row; expand file details only on demand. */
+.recording-library-page .recording-library-expanded{padding:10px 12px}
+.recording-library-page .recording-library-expanded-title{margin-bottom:7px}
+.recording-library-page .recording-session-list{gap:6px;max-height:none;overflow:visible;scrollbar-gutter:auto;padding:0}
+.recording-library-page .recording-session-card{border-radius:8px}
+.recording-library-page .recording-session-head{display:flex;align-items:center;flex-wrap:nowrap;gap:12px;padding:7px 10px;min-height:75px}
+.recording-library-page .recording-session-thumbnail{position:relative;display:grid;place-items:center;flex:0 0 112px;width:112px;height:63px;min-height:0;aspect-ratio:16/9;padding:0;border:0;border-radius:6px;background:#0b1220;color:#85dbaa;cursor:pointer;overflow:hidden;font-size:21px}
+.recording-library-page .recording-session-thumbnail img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.recording-library-page .recording-session-thumbnail:focus-visible{outline:2px solid #7debb4;outline-offset:2px}
+.recording-library-page .recording-session-thumbnail:disabled{cursor:default;color:#6b7b95}
+.recording-library-page .recording-session-heading{flex:1 1 0;gap:2px;min-width:0}
+.recording-library-page .recording-session-heading strong{display:block;max-width:100%;font-size:12px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal}
+.recording-library-page .recording-session-heading small{font-size:10px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recording-library-page .recording-session-tags{gap:4px}
+.recording-library-page .recording-session-tags span{font-size:9px;padding:2px 6px}
+.recording-session-quick-actions{display:flex;align-items:center;gap:6px;margin-left:auto;flex:0 0 auto}
+.recording-session-quick-actions button{min-height:28px;padding:5px 9px;font-size:10px;white-space:nowrap}
+.recording-library-page .recording-session-file{gap:10px;padding:9px 12px}
+.recording-library-page .recording-session-file-type{flex-basis:95px}
+.recording-library-page .recording-session-article{margin:7px 12px;padding:9px 12px}
+.recording-library-page .recording-session-article p{line-height:1.45;-webkit-line-clamp:2}
+.recording-library-page .recording-session-warnings{margin:7px 12px}
+@media(max-width:950px){
+  .recording-library-page .recording-session-head{align-items:center;flex-wrap:nowrap}
+  .recording-library-page .recording-session-thumbnail{flex:0 0 104px;width:104px;height:59px}
+}
+@media(max-width:680px){
+  .recording-library-page .recording-session-head{gap:8px;padding:6px 8px;flex-wrap:wrap}
+  .recording-library-page .recording-session-thumbnail{flex:0 0 88px;width:88px;height:50px}
+  .recording-library-page .recording-session-heading{flex:1 1 calc(100% - 96px)}
+  .recording-library-page .recording-session-quick-actions{margin:0 0 0 96px;width:calc(100% - 96px);justify-content:flex-start}
+  .recording-library-page .recording-session-file{flex-wrap:wrap}
+  .recording-library-page .recording-session-file-type{flex:0 0 75px}
+}
