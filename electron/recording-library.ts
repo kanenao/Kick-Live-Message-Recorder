@@ -17,12 +17,21 @@ export type LibraryCommentMessage = {
 export async function listRecentCommentMessages(
   outputDirectory: string,
   channelSlugInput: unknown,
-  limitInput: unknown = 100
+  limitInput: unknown = 100,
+  fileNameInput?: unknown
 ): Promise<LibraryCommentMessage[]> {
   if (typeof channelSlugInput !== "string" || !/^[a-zA-Z0-9_-]{1,40}$/.test(channelSlugInput)) {
     throw new Error("チャンネル名が正しくありません。");
   }
   const channelSlug = channelSlugInput.toLowerCase();
+  // Select by a filename discovered inside Chat/<slug> only, never by an
+  // arbitrary renderer-supplied path. This also prevents reading across users.
+  if (fileNameInput !== undefined && (typeof fileNameInput !== "string" ||
+      fileNameInput.length > 200 || fileNameInput.includes("/") ||
+      fileNameInput.includes("\\") || fileNameInput === "." ||
+      fileNameInput === ".." || !/\.jsonl$/i.test(fileNameInput))) {
+    throw new Error("コメントログのファイル名が正しくありません。");
+  }
   const limit = typeof limitInput === "number" && Number.isFinite(limitInput)
     ? Math.max(1, Math.min(200, Math.round(limitInput)))
     : 100;
@@ -40,7 +49,8 @@ export async function listRecentCommentMessages(
   }
 
   const logs = entries.flatMap(entry => {
-    if (!entry.isFile() || extname(entry.name).toLowerCase() !== ".jsonl") return [];
+    if (!entry.isFile() || extname(entry.name).toLowerCase() !== ".jsonl" ||
+        (typeof fileNameInput === "string" && entry.name !== fileNameInput)) return [];
     const path = join(channelDirectory, entry.name);
     try {
       const stats = lstatSync(path);
