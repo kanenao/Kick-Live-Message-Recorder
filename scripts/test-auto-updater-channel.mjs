@@ -10,7 +10,8 @@ assert.match(pkg.version, /^\d+\.\d+\.\d+-alpha\.\d+$/, "Only alpha versions may
 const github = pkg.build.publish.find(provider => provider.provider === "github");
 assert.ok(github, "A GitHub release provider must be configured");
 assert.equal(github.channel, "alpha", "Alpha releases must generate alpha.yml (not only latest.yml)");
-assert.equal(pkg.build.nsis.artifactName, "Kick-Live-Message-Recorder-Setup-\${version}.\${ext}",
+const releaseArtifactName = "Kick-Live-Message-Recorder-Setup-" + "$" + "{version}." + "$" + "{ext}";
+assert.equal(pkg.build.nsis.artifactName, releaseArtifactName,
   "NSIS installer must have a deterministic ASCII name that GitHub cannot normalize");
 assert.ok(workflow.includes("node scripts/validate-update-assets.mjs release"),
   "Installer and updater manifest URL must be checked in CI before the release is published");
