@@ -169,6 +169,11 @@ jobs:
           $content = Get-Content -LiteralPath $manifest -Raw
           if (-not $content.Contains("version: $version")) { throw "alpha.ymlのバージョン不一致です。" }
           Copy-Item -LiteralPath $manifest -Destination "release/latest.yml" -Force
+          Copy-Item -LiteralPath $manifest -Destination "release/beta.yml" -Force
+          if ((Get-FileHash -Algorithm SHA256 "release/latest.yml").Hash -ne
+              (Get-FileHash -Algorithm SHA256 "release/beta.yml").Hash) {
+            throw "beta/latestの互換マニフェストが一致しません。"
+          }
       - name: インストーラーを保存
         uses: actions/upload-artifact@v4
         with:
@@ -177,6 +182,7 @@ jobs:
             release/*.exe
             release/latest.yml
             release/alpha.yml
+            release/beta.yml
             release/*.blockmap
           if-no-files-found: error
           retention-days: 14
@@ -344,7 +350,7 @@ jobs:
         run: npm run publish:win
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: α版更新マニフェスト検証と旧latestチャンネル互換ファイル公開
+      - name: α/旧β/旧latest更新チャンネルの互換マニフェスト公開
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -358,9 +364,78 @@ jobs:
           if (-not $content.Contains("version: $version")) {
             throw "alpha.ymlのバージョンがpackage.jsonと異なります。"
           }
-          Copy-Item -LiteralPath $manifest -Destination "release/latest.yml" -Force
-          gh release upload "v$version" "release/latest.yml" --repo "$env:GITHUB_REPOSITORY" --clobber
-          if ($LASTEXITCODE -ne 0) { throw "latest.ymlの互換公開に失敗しました。" }
+          foreach ($channel in @("beta", "latest")) {
+            $alias = "release/$channel.yml"
+            Copy-Item -LiteralPath $manifest -Destination $alias -Force
+            if ((Get-FileHash -Algorithm SHA512 $alias).Hash -ne
+                (Get-FileHash -Algorithm SHA512 $manifest).Hash) {
+              throw "互換マニフェストのハッシュ不一致: $alias"
+            }
+            gh release upload "v$version" $alias --repo "$env:GITHUB_REPOSITORY" --clobber
+            if ($LASTEXITCODE -ne 0) { throw "$alias の互換公開に失敗しました。" }
+          }
+
+  publish-alpha-request:
+    name: 手動指定したα版を検証後に公開
+    runs-on: ubuntu-latest
+    needs: [quality, windows-installer]
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/v') && contains(github.ref, '-alpha.') && github.event.head_commit.message == 'release-publish' }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: Kick-Recorder-alpha-windows
+          path: release
+      - name: 更新ファイル・インストーラー・チャンネル一致を確認
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+$ ]]
+          test "$GITHUB_REF_NAME" = "release/v$version"
+          shopt -s nullglob
+          installers=(release/*.exe)
+          blockmaps=(release/*.blockmap)
+          test "${#installers[@]}" -eq 1
+          test "${#blockmaps[@]}" -ge 1
+          [[ "${installers[0]}" == *"$version.exe" ]]
+          test "$(stat -c%s "${installers[0]}")" -gt 10000000
+          for channel in alpha beta latest; do
+            test -s "release/$channel.yml"
+            grep -F "version: $version" "release/$channel.yml"
+          done
+          cmp release/alpha.yml release/beta.yml
+          cmp release/alpha.yml release/latest.yml
+          sha256sum "${installers[0]}"
+      - name: 新しいα版のPre-releaseを作成
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          tag="v$version"
+          repo="$GITHUB_REPOSITORY"
+          if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
+            echo "::error::Release already exists: $tag"
+            exit 1
+          fi
+          if gh api "repos/$repo/git/ref/tags/$tag" >/dev/null 2>&1; then
+            echo "::error::Tag already exists: $tag"
+            exit 1
+          fi
+          gh release create "$tag" release/*.exe release/*.blockmap release/alpha.yml release/beta.yml release/latest.yml \
+            --repo "$repo" \
+            --target "$GITHUB_SHA" \
+            --title "Kick Live Message Recorder $version (α版)" \
+            --notes-file "docs/ALPHA_UPDATE_RELEASE_NOTES.md" \
+            --prerelease
+          gh release view "$tag" --repo "$repo" --json tagName,assets,url
 
   publish-alpha61-request:
     name: 明示的な α61 修正版の初回公開

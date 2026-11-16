@@ -562,14 +562,14 @@ function initializeAutoUpdater(): void {
       releaseNotes: normalizeReleaseNotes(info.releaseNotes),
       releaseDate: info.releaseDate,
       percent: 100,
-      message: "現在のバージョンは最新です。"
+      message: "利用中の更新チャンネルで新しい版は見つかりませんでした。過去のβ版からの移行時はGitHub Releasesも確認してください。"
     });
   });
 
   autoUpdater.on("error", error => {
     publishUpdateStatus({
       status: "error",
-      message: `更新の確認・ダウンロードに失敗しました：${error.message}`
+      message: `更新に失敗しました：${error.message}。旧β版からの移行時はGitHub Releasesにある最新α版のインストーラーを利用できます。`
     });
   });
 
@@ -1341,6 +1341,9 @@ function registerIpcHandlers(): void {
     assertTrustedSender(event);
     if (updateStatus.status !== "downloaded") {
       throw new Error("更新ファイルのダウンロードが完了していません。");
+    }
+    if (recordingManager.hasActiveRecordings() || vodDownloadManager.hasActiveDownloads()) {
+      throw new Error("録画またはVODダウンロード中です。保存を完了・停止してから更新を適用してください。");
     }
     autoUpdater.quitAndInstall();
     return { ok: true };

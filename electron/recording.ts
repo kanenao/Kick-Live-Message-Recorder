@@ -212,6 +212,10 @@ export class KickRecordingManager {
     return (isVod ? "vod:" : "live:") + slug;
   }
 
+  hasActiveRecordings(): boolean {
+    return this.active.size > 0;
+  }
+
   isRecording(slug: string): boolean {
     return this.active.has(this.sessionKey(slug.toLowerCase(), false));
   }

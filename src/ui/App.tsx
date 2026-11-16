@@ -200,7 +200,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.3.0-alpha.63";
+const APP_VERSION = "0.3.1-alpha.64";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -228,6 +228,16 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.3.1-alpha.64",
+    title: "旧β版を含む自動更新チャンネルの互換性を改善",
+    changes: [
+      "旧β版のbeta.yml、従来版のlatest.yml、α版のalpha.ymlを同じ最新インストーラーに統一",
+      "旧版が更新を見つけられない場合の手動ダウンロード案内を追加",
+      "録画・VODダウンロード中は更新のために再起動せずデータを保護",
+      "毎回のα版公開で更新マニフェストのバージョン・ハッシュ一致を検証"
+    ]
+  },
   {
     version: "0.3.0-alpha.63",
     title: "録画途中切断の自動復旧と録画ライブラリの強化",
@@ -2704,7 +2714,7 @@ export default function App() {
               <button className="primary-small" onClick={() => void checkForAppUpdates()} disabled={isCheckingUpdates || updateStatus.status === "checking" || updateStatus.status === "downloading"}>{isCheckingUpdates || updateStatus.status === "checking" ? "確認中..." : "更新を確認"}</button>
               {updateStatus.status === "downloaded" && <button className="small-action" onClick={() => void installAppUpdate()}>再起動して更新</button>}
             </div>
-            <small className="version-update-hint">起動時と約6時間ごとに自動確認します。Windowsインストーラー版では新しい更新を自動ダウンロードします。適用は再起動時に行われます。</small>
+            <small className="version-update-hint">起動時と約6時間ごとに最新α版を自動確認・ダウンロードします。旧β版からの移行にも互換配信を用意しています。更新は録画・VOD保存の完了後、アプリを再起動して適用してください。</small>
           </div>
         </div>
         {updateStatus.releaseNotes && <div className="release-notes-panel">
@@ -2723,7 +2733,7 @@ export default function App() {
             </article>)}
           </div>
         </div>
-        <div className="notice">自動更新はGitHub Releasesに公開されたWindowsインストーラー版が対象です。ブラウザー版プレビューやZIP版では、更新ファイルを手動で取得してください。</div>
+        <div className="notice">Windowsインストーラー版の更新に対応します。旧β版や更新機能のない古い版では自動更新に失敗する場合があります。その場合は <a href="https://github.com/kanenao/Kick-Live-Message-Recorder/releases" target="_blank" rel="noreferrer">GitHub Releasesから最新α版を手動インストール</a> してください。ZIP版・ブラウザープレビューでは自動更新できません。安定版への自動切り替えは行いません。</div>
       </section>}
 
       {tab === "settings" && <section className="panel">
