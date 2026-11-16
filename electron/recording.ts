@@ -25,6 +25,7 @@ export type RecordingOptions = {
   retryDelaySeconds?: number;
   streamStartedAt?: string | null;
   displayName?: string;
+  filenameStartedAt?: string;
 };
 
 type ActiveRecording = {
@@ -263,7 +264,7 @@ export class KickRecordingManager {
       slug, displayName: options.displayName ?? slug,
       // A missing LIVE start uses recorder start as a best-effort fallback;
       // VOD unknown time must be labelled explicitly, never as download time.
-      startedAt: options.streamStartedAt ?? (isVod ? null : new Date().toISOString()),
+      startedAt: options.streamStartedAt ?? options.filenameStartedAt ?? (isVod ? null : new Date().toISOString()),
       kind: isVod ? "VOD" : "LIVE", videoId
     });
     let prefix = stem;
