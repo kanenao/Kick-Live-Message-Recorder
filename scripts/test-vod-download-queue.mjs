@@ -80,6 +80,18 @@ try {
   assert.equal(manager.list().find(job => job.id === created[1].id).status, "cancelled", "進行中の番組を個別停止");
   assert.ok(emitted.some(event => event.status === "completed"));
   manager.stopAll();
+  // Asynchronous metadata lookup should put the actual stream date in the
+  // output basename, even though the download starts much later.
+  const extraSpawns = children.length;
+  const named = new KickVodDownloadManager(event => emitted.push(event), fakeSpawn,
+    async () => ({ startedAt: new Date(2026, 10, 16, 20, 54, 47).toISOString(), displayName: "だいぶつ" }));
+  named.enqueue([url(ids[0], "daibututv2")], directory);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(children.length, extraSpawns + 1, "Metadata lookup starts the downloader");
+  assert.ok(children.at(-1).outputTemplate.includes("だいぶつ__daibututv2__2026-11-16_20-54-47__VOD_"),
+    "VOD download basename must contain broadcaster and actual broadcast start");
+  named.stopAll();
+
 } finally {
   rmSync(directory, { recursive: true, force: true });
 }
