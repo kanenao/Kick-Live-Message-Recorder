@@ -422,7 +422,7 @@ export class KickRecordingManager {
         this.onEvent({ slug, status: "error", filePath: savedPath, isVod: true,
           message: savedPath
             ? "過去配信のダウンロードが途中で終了しました。保存済みの動画は残します。"
-            : "過去配信のダウンロードに失敗しました：" + (session.stderrTail.trim().split(/\\r?\\n/).slice(-2).join(" ") || spawnError?.message || String(code)) });
+            : "過去配信のダウンロードに失敗しました：" + (session.stderrTail.trim().split(/\r?\n/).slice(-2).join(" ") || spawnError?.message || String(code)) });
       }
       return;
     }
@@ -494,7 +494,8 @@ export class KickRecordingManager {
       ? "yt-dlp.exe が見つかりません。アプリ同梱ファイルまたはPATHを確認してください。"
       : missingFfmpeg
         ? "ffmpeg.exe が見つかりません。アプリを最新版で再インストールしてください。"
-        : decision.message + (stderr ? " 詳細：" + stderr.split(/\\r?\\n/).slice(-2).join(" ") : "");
+        : decision.message + (stderr ? " 詳細：" + stderr.split(/\r?\n/).slice(-2).join(" ") : "") +
+          (signal ? " 終了シグナル：" + signal : "");
     this.onEvent({ slug, status: "error", filePath: savedPath, isVod: false, message: cause });
   }
 
