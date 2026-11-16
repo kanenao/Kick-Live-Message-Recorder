@@ -200,7 +200,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.3.1-alpha.64";
+const APP_VERSION = "0.3.2-alpha.65";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -228,6 +228,17 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.3.2-alpha.65",
+    title: "録画ライブラリに残る削除済み動画・コメントの表示を修正",
+    changes: [
+      "保存先から動画・コメントを削除した場合、実ファイルがない配信カードを一覧から除外",
+      "履歴JSONやAI記事だけで空の録画を再表示しない（AI記事は記事一覧に保持）",
+      "ライブラリ表示中は10秒ごと、およびアプリに戻った際にディスクを再読み込み",
+      "アプリ内で動画削除した直後も配信別一覧を更新",
+      "ファイル削除後のコメント表示を整理し、録画ファイルを消さずにコメントのみ残る場合は表示を維持"
+    ]
+  },
   {
     version: "0.3.1-alpha.64",
     title: "旧β版を含む自動更新チャンネルの互換性を改善",
