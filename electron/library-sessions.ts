@@ -198,8 +198,14 @@ export function buildRecordingSessions(
     s.logs.sort((a,b) => Date.parse(a.modifiedAt) - Date.parse(b.modifiedAt));
     if (!s.videos.length && s.logs.length) s.warnings.push("動画が見つかりません。コメントのみ保存されています。");
   }
-  return [...sessions.values()].sort((a,b) =>
-    Date.parse(b.startedAt || "0") - Date.parse(a.startedAt || "0")).slice(0, 3000);
+  // A RecordingSessions/*.json record is only historical metadata, not proof
+  // that a video or chat file still exists. Likewise an AI article may remain
+  // after its original recording was deleted. Keep that article in Articles,
+  // but never show an empty/phantom recording in the recording library.
+  return [...sessions.values()]
+    .filter(session => session.videos.length > 0 || session.logs.length > 0)
+    .sort((a,b) => Date.parse(b.startedAt || "0") - Date.parse(a.startedAt || "0"))
+    .slice(0, 3000);
 }
 
 export function listLibrarySessions(outputDirectory: string): LibrarySession[] {

@@ -848,6 +848,7 @@ export default function App() {
   const [deletingRecordingPath, setDeletingRecordingPath] = useState<string | null>(null);
   const [recordingMessage, setRecordingMessage] = useState("");
   const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
+  const libraryLoadedOnceRef = useRef(false);
   const [librarySearch, setLibrarySearch] = useState("");
   const [libraryTypeFilter, setLibraryTypeFilter] = useState<"all" | "videos" | "comments">("all");
   const [isLoadingLibraryLogs, setIsLoadingLibraryLogs] = useState(false);
@@ -1157,30 +1158,57 @@ export default function App() {
   useEffect(() => {
     if ((tab !== "library" && tab !== "dashboard" && tab !== "comment-video" && tab !== "articles") || !isDesktop || !window.kickRecorder) return;
     let active = true;
-    setIsLoadingRecordings(true);
-    void Promise.all([window.kickRecorder.listRecordings(), window.kickRecorder.listLibrarySessions()]).then(([files, sessions]) => {
-      if (active) { setRecordingFiles(files); setRecordingSessions(sessions); }
+    // Load all three lists together. Separate requests can temporarily display
+    // deleted files from an older snapshot alongside newly refreshed sessions.
+    if (!libraryLoadedOnceRef.current) {
+      setIsLoadingRecordings(true);
+      setIsLoadingLibraryLogs(true);
+    }
+    void Promise.all([
+      window.kickRecorder.listRecordings(),
+      window.kickRecorder.listLibrarySessions(),
+      window.kickRecorder.listCommentLogFiles()
+    ]).then(([files, sessions, logs]) => {
+      if (!active) return;
+      setRecordingFiles(files);
+      setRecordingSessions(sessions.filter(session => session.videos.length > 0 || session.logs.length > 0));
+      setCommentLogFiles(logs);
+      libraryLoadedOnceRef.current = true;
     }).catch(error => {
-      if (active) setRecordingMessage(error instanceof Error ? error.message : "録画一覧を取得できませんでした。");
+      if (active) setRecordingMessage(error instanceof Error ? error.message : "録画・コメント一覧を取得できませんでした。");
     }).finally(() => {
-      if (active) setIsLoadingRecordings(false);
+      if (active) {
+        setIsLoadingRecordings(false);
+        setIsLoadingLibraryLogs(false);
+      }
     });
     return () => { active = false; };
   }, [tab, isDesktop, libraryRefreshKey, settings.outputDirectory]);
 
   useEffect(() => {
     if (tab !== "library" || !isDesktop || !window.kickRecorder) return;
-    let active = true;
-    setIsLoadingLibraryLogs(true);
-    void window.kickRecorder.listCommentLogFiles().then(logs => {
-      if (active) setCommentLogFiles(logs);
-    }).catch(error => {
-      if (active) setRecordingMessage(error instanceof Error ? error.message : "コメントログ一覧を取得できませんでした。");
-    }).finally(() => {
-      if (active) setIsLoadingLibraryLogs(false);
-    });
-    return () => { active = false; };
-  }, [tab, isDesktop, libraryRefreshKey, settings.outputDirectory]);
+    // Explorer deletions are not routed through Electron IPC. Re-scan while
+    // the library is visible, and again when the user focuses the app.
+    const refreshIfVisible = () => {
+      if (document.visibilityState !== "hidden") setLibraryRefreshKey(value => value + 1);
+    };
+    const timer = window.setInterval(refreshIfVisible, 10_000);
+    window.addEventListener("focus", refreshIfVisible);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshIfVisible);
+    };
+  }, [tab, isDesktop]);
+
+  useEffect(() => {
+    if (tab !== "library" || !libraryCommentsChannel || !libraryLoadedOnceRef.current) return;
+    // A visible comment viewer must not keep displaying old JSONL rows after
+    // the last log was removed in Explorer.
+    if (commentLogFiles.some(log => log.channelSlug.toLowerCase() === libraryCommentsChannel.toLowerCase())) return;
+    setLibraryCommentsChannel(null);
+    setLibraryComments([]);
+    setLibraryCommentsError("");
+  }, [tab, libraryCommentsChannel, commentLogFiles]);
 
   useEffect(() => {
     if (!isDesktop || !window.kickRecorder) return;
@@ -1678,6 +1706,11 @@ export default function App() {
     try {
       const result = await window.kickRecorder.deleteRecording(filePath);
       setRecordingFiles(current => current.filter(file => file.path !== filePath));
+      setRecordingSessions(current => current.map(session => ({
+        ...session, videos: session.videos.filter(file => file.path !== filePath)
+      })).filter(session => session.videos.length > 0 || session.logs.length > 0));
+      // Also refresh the disk-backed index (including linked comments and AI article).
+      setLibraryRefreshKey(value => value + 1);
       setRecordingMessage(`「${result.name}」を削除しました。`);
     } catch (error) {
       setRecordingMessage(error instanceof Error ? error.message : "録画ファイルを削除できませんでした。");
@@ -2214,7 +2247,7 @@ export default function App() {
           <div>
             <span className="eyebrow">RECORDING LIBRARY</span>
             <h2>録画ライブラリ</h2>
-            <p>配信者別に保存された動画とコメントログをまとめて管理します。</p>
+            <p>配信者別に保存された動画とコメントログをまとめて管理します。保存先の変更は一覧表示中に自動反映します。</p>
           </div>
           <div className="recording-library-page-actions">
             <button className="small-action" onClick={() => void openRecordingFolder()} disabled={!isDesktop}>保存場所を開く</button>

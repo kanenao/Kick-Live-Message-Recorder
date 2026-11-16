@@ -13,6 +13,14 @@ assert.ok(channelListRule, "Channel list CSS must exist.");
 assert.doesNotMatch(channelListRule, /max-height|overflow:auto|overflow:hidden/, "The entire channel list must not trap scrolling.");
 
 assert.match(app, /className="recording-session-list" role="region" tabIndex=\{0\}/, "The session list should have a keyboard-accessible scroll region.");
+assert.match(app, /window\.setInterval\(refreshIfVisible, 10_000\)/,
+  "The library must refresh when files are deleted outside the app.");
+assert.match(app, /window\.addEventListener\("focus", refreshIfVisible\)/,
+  "Returning from Explorer should refresh the library.");
+assert.match(app, /setRecordingSessions\(current => current\.map\(session => \(\{/,
+  "Deleting a video inside the app must also update session cards.");
+assert.match(app, /setLibraryRefreshKey\(value => value \+ 1\)/,
+  "Deleting a file should re-scan on-disk metadata.");
 assert.match(css, /\.recording-session-list\{[^}]*max-height:[^;]*;overflow:auto;/, "Session list should scroll within viewport.");
 assert.match(css, /\.recording-session-card\{/, "Session cards should be styled.");
 assert.match(app, /className="recording-library-video-actions"/, "Recording actions should have a flexible group.");
