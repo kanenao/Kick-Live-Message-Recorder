@@ -1,6 +1,13 @@
 # 更新履歴
 
-> mainブランチは旧開発コードを保持しています。公開済みα版のソースとリリースノートは [v0.3.0-alpha.63](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.3.0-alpha.63) を参照してください。
+> mainブランチは旧開発コードを保持しています。公開済みα版のソースとリリースノートは [v0.3.1-alpha.64](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.3.1-alpha.64) を参照してください。
+
+## 0.3.1-alpha.64（公開済みα版）
+
+- 旧β版向け`beta.yml`、旧クライアント向け`latest.yml`、現行α版向け`alpha.yml`を同一インストーラーから生成・公開。
+- アプリ起動時と定期的な自動更新の互換性を強化し、旧版の更新機能が破損している場合の手動移行を案内。
+- 録画・VODダウンロード中にアプリの再起動を要求しても更新を保留し、データの保存を優先。
+- GitHub ActionsのWindowsインストーラー検証と更新マニフェスト一致テストを追加。
 
 ## 0.3.0-alpha.63（公開済みα版）
 
