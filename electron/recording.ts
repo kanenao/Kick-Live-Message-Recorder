@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve, sep } from "node:path";
+import { broadcastFileStem } from "./recording-filenames";
 import { decideLiveRecordingRecovery, hasLiveRecordingStalled, LIVE_RECORDING_WATCHDOG_INTERVAL_MS, LIVE_RECORDING_FORCE_KILL_TIMEOUT_MS, type LiveProbeResult } from "./recording-recovery";
 
 export type RecordingEvent = {
@@ -23,6 +24,7 @@ export type RecordingOptions = {
   retryCount?: number;
   retryDelaySeconds?: number;
   streamStartedAt?: string | null;
+  displayName?: string;
 };
 
 type ActiveRecording = {
@@ -256,7 +258,24 @@ export class KickRecordingManager {
     if (!outputDirectory) throw new Error("録画の保存先が設定されていません。");
 
     mkdirSync(outputDirectory, { recursive: true });
-    const basePrefix = join(outputDirectory, `${slug}${isVod ? "_VOD" : ""}_${timestampForFilename(new Date())}`);
+    const videoId = isVod ? sourceUrl.split("/").pop() : undefined;
+    const stem = broadcastFileStem({
+      slug, displayName: options.displayName ?? slug,
+      // A missing LIVE start uses recorder start as a best-effort fallback;
+      // VOD unknown time must be labelled explicitly, never as download time.
+      startedAt: options.streamStartedAt ?? (isVod ? null : new Date().toISOString()),
+      kind: isVod ? "VOD" : "LIVE", videoId
+    });
+    let prefix = stem;
+    let take = 2;
+    // Never overwrite an existing broadcast when manually recording it again.
+    while (readdirSync(outputDirectory).some(name => name === prefix + ".mp4" ||
+      name === prefix + ".mkv" || name === prefix + ".ts" ||
+      name.startsWith(prefix + "_retry")) ||
+      existsSync(join(outputDirectory, "RecordingSessions", prefix + ".json"))) {
+      prefix = stem + "_take" + take++;
+    }
+    const basePrefix = join(outputDirectory, prefix);
     const session: ActiveRecording = {
       child: null,
       stopRequested: false,
