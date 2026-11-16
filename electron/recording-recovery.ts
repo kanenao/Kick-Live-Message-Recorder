@@ -3,6 +3,14 @@
  * This decision belongs to the LIVE session, not to the process exit code.
  */
 export type LiveProbeResult = { isLive: boolean; startedAt: string | null } | null;
+export const LIVE_RECORDING_STALL_TIMEOUT_MS = 180_000;
+export const LIVE_RECORDING_WATCHDOG_INTERVAL_MS = 30_000;
+
+export function hasLiveRecordingStalled(lastByteGrowthAt: number, now: number): boolean {
+  return Number.isFinite(lastByteGrowthAt) && Number.isFinite(now) &&
+    now - lastByteGrowthAt >= LIVE_RECORDING_STALL_TIMEOUT_MS;
+}
+
 export type LiveRecoveryDecision = {
   action: "complete" | "retry" | "error";
   nextFailures: number;
@@ -32,6 +40,8 @@ export function decideLiveRecordingRecovery(input: {
       : { action: "error", nextFailures: failuresUsed, message: "配信は終了していますが、動画ファイルは保存されていません。" };
   }
   if (probe?.isLive && expectedStreamStartedAt && probe.startedAt &&
+      Number.isFinite(Date.parse(expectedStreamStartedAt)) &&
+      Number.isFinite(Date.parse(probe.startedAt)) &&
       Date.parse(expectedStreamStartedAt) !== Date.parse(probe.startedAt)) {
     // Do not append an unrelated next broadcast to the current session.
     return savedFileCount > 0
