@@ -160,6 +160,15 @@ jobs:
 
       - name: Windowsインストーラーを作成
         run: npm run dist:win
+      - name: alpha.yml を検証し旧版向け latest.yml を生成
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          $manifest = "release/alpha.yml"
+          if (-not (Test-Path -LiteralPath $manifest)) { throw "alpha.yml が生成されませんでした。" }
+          $content = Get-Content -LiteralPath $manifest -Raw
+          if (-not $content.Contains("version: $version")) { throw "alpha.ymlのバージョン不一致です。" }
+          Copy-Item -LiteralPath $manifest -Destination "release/latest.yml" -Force
       - name: インストーラーを保存
         uses: actions/upload-artifact@v4
         with:
@@ -405,3 +414,64 @@ jobs:
             --notes "更新画面のリリースノートでHTMLタグがそのまま表示される不具合を修正しました。見出し・箇条書き・強調文字・コード表記を読みやすく整形し、HTMLとMarkdownの回帰テストを追加。Windows x64向け開発中のα版です。" \
             --prerelease
           gh release view "$tag" --repo "$GITHUB_REPOSITORY"
+
+
+  publish-alpha63-request:
+    name: α63のインストーラーと自動更新情報を公開
+    runs-on: ubuntu-latest
+    needs: [quality, windows-installer]
+    if: \${{ github.event_name == 'push' && github.ref == 'refs/heads/release/v0.3.0-alpha.63' && github.event.head_commit.message == 'release-publish-v0.3.0-alpha.63' }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 検証済みWindowsインストーラーを取得
+        uses: actions/download-artifact@v4
+        with:
+          name: Kick-Recorder-alpha-windows
+          path: release
+      - name: インストーラーとα版更新ファイルを公開前に検査
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          test "$version" = "0.3.0-alpha.63"
+          test "$GITHUB_REF_NAME" = "release/v0.3.0-alpha.63"
+          shopt -s nullglob
+          installers=(release/*.exe)
+          blockmaps=(release/*.blockmap)
+          test "\${#installers[@]}" -eq 1
+          test "\${#blockmaps[@]}" -ge 1
+          [[ "\${installers[0]}" == *"0.3.0-alpha.63.exe" ]]
+          test "$(stat -c%s "\${installers[0]}")" -gt 10000000
+          test -s release/alpha.yml
+          test -s release/latest.yml
+          grep -F "version: $version" release/alpha.yml
+          grep -F "version: $version" release/latest.yml
+          cmp release/alpha.yml release/latest.yml
+          sha256sum "\${installers[0]}"
+      - name: 検査済みα63のタグとPre-releaseを公開
+        shell: bash
+        env:
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="v0.3.0-alpha.63"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release already exists: $tag"
+            exit 1
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+            echo "::error::Tag already exists: $tag"
+            exit 1
+          fi
+          gh release create "$tag" release/*.exe release/*.blockmap release/alpha.yml release/latest.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Kick Live Message Recorder 0.3.0-alpha.63 (α版)" \
+            --notes-file "docs/ALPHA_0.3.0-alpha.63_RELEASE_NOTES.md" \
+            --prerelease
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json tagName,assets,url
