@@ -1,9 +1,9 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync
+  existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, unlinkSync
 } from "node:fs";
-import { basename, extname, join, resolve, sep } from "node:path";
+import { extname, join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -27,6 +27,8 @@ export function recordingThumbnailSource(outputDirectory: string, input: unknown
   try {
     const stats = lstatSync(path);
     if (!stats.isFile() || stats.isSymbolicLink() || stats.size < 1024) return null;
+    // Refuse a symlinked parent directory that escapes the recording root.
+    if (!isUnder(realpathSync(path), realpathSync(root))) return null;
     return { path, size: stats.size, mtimeMs: stats.mtimeMs };
   } catch { return null; }
 }
