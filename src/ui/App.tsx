@@ -201,7 +201,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.3.2-alpha.65";
+const APP_VERSION = "0.3.3-alpha.66";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -229,6 +229,17 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.3.3-alpha.66",
+    title: "Kickアイコンと番組別コメント表示で録画ライブラリ改善",
+    changes: [
+      "Kickのプロフィールアイコンと表示名を配信者別カードへ自動取得（未登録の過去録画も対象）",
+      "Nico版風の丸いアイコンと配信者・録画・コメント情報の配置を調整",
+      "録画に付属するJSONLコメントをファイル単位で閲覧・開く・保存場所を表示",
+      "AI記事付き録画の件数と絞り込みを追加",
+      "削除済みの動画・コメントがライブラリに残らない同期処理を維持"
+    ]
+  },
   {
     version: "0.3.2-alpha.65",
     title: "録画ライブラリに残る削除済み動画・コメントの表示を修正",
