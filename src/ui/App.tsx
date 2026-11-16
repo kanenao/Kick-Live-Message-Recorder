@@ -201,7 +201,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.3.3-alpha.66";
+const APP_VERSION = "0.3.4-alpha.67";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -229,6 +229,17 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.3.4-alpha.67",
+    title: "録画・コメントのファイル名を配信者名と配信日時に統一",
+    changes: [
+      "Kickの配信者表示名・チャンネル名・配信開始日時を動画とコメントのファイル名に反映",
+      "LIVE映像とJSONLコメントは同じ配信日時を使い、配信ごとに整理",
+      "VOD動画とJSONL・TXT・ASSも過去配信の実際の開始日時で命名",
+      "取得できないVOD配信日時は日時未取得と明示し、ダウンロード時刻と区別",
+      "旧ファイル名も録画ライブラリで引き続き閲覧可能。既存ファイルは自動改名しない"
+    ]
+  },
   {
     version: "0.3.3-alpha.66",
     title: "Kickアイコンと番組別コメント表示で録画ライブラリ改善",
