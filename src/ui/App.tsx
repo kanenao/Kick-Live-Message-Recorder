@@ -163,6 +163,7 @@ type LibrarySession = {
 type RecordingLibraryChannel = {
   slug: string;
   displayName: string;
+  profilePicture: string | null;
   videos: RecordingFile[];
   logs: CommentLogFile[];
   sessions: LibrarySession[];
@@ -798,6 +799,17 @@ function ArticleBroadcastFrame({ article }: { article: StreamArticle }) {
   </figure>;
 }
 
+function LibraryChannelAvatar({ displayName, picture }: { displayName: string; picture: string | null }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setFailed(false); }, [picture]);
+  const safePicture = typeof picture === "string" && /^https:\/\//i.test(picture) ? picture : null;
+  return <div className="recording-channel-avatar" aria-hidden="true">
+    <span>{displayName.slice(0, 1).toUpperCase()}</span>
+    {safePicture && !failed && <img src={safePicture} alt="" loading="lazy" referrerPolicy="no-referrer"
+      onError={() => setFailed(true)} />}
+  </div>;
+}
+
 export default function App() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [recordingOnlyChannels, setRecordingOnlyChannels] = useState<Channel[]>([]);
@@ -836,6 +848,9 @@ export default function App() {
   const [chatSetupMessage, setChatSetupMessage] = useState("");
   const [isStartingChat, setIsStartingChat] = useState(false);
   const [channelChecks, setChannelChecks] = useState<Record<string, ChannelCheck>>({});
+  const [libraryProfiles, setLibraryProfiles] = useState<Record<string, ChannelCheck>>({});
+  const libraryProfileLastFetchRef = useRef<Map<string, number>>(new Map());
+  const [libraryProfileRefreshKey, setLibraryProfileRefreshKey] = useState(0);
   const [liveClock, setLiveClock] = useState(() => Date.now());
   const [isCheckingChannels, setIsCheckingChannels] = useState(false);
   const [lastChannelCheck, setLastChannelCheck] = useState("");
@@ -868,6 +883,11 @@ export default function App() {
   const [libraryComments, setLibraryComments] = useState<LibraryCommentMessage[]>([]);
   const [isLoadingLibraryComments, setIsLoadingLibraryComments] = useState(false);
   const [libraryCommentsError, setLibraryCommentsError] = useState("");
+  const [librarySelectedLogPath, setLibrarySelectedLogPath] = useState<string | null>(null);
+  const [libraryLogMessages, setLibraryLogMessages] = useState<LibraryCommentMessage[]>([]);
+  const [libraryLogLoading, setLibraryLogLoading] = useState(false);
+  const [libraryLogError, setLibraryLogError] = useState("");
+  const libraryLogRequestRef = useRef(0);
   const libraryCommentRequestRef = useRef(0);
   const [commentLogFiles, setCommentLogFiles] = useState<CommentLogFile[]>([]);
   const [selectedCommentVideoPath, setSelectedCommentVideoPath] = useState("");
@@ -959,8 +979,15 @@ export default function App() {
       let group = groups.get(slug);
       if (!group) {
         const registered = [...channels, ...recordingOnlyChannels].find(ch => ch.name.toLowerCase() === slug);
-        group = { slug, displayName: channelChecks[slug]?.displayName || registered?.name || slug,
-          videos: [], logs: [], sessions: [], latestAt: "" };
+        const profile = libraryProfiles[slug];
+        const monitored = channelChecks[slug];
+        group = {
+          slug,
+          displayName: profile?.found && profile.displayName ? profile.displayName
+            : monitored?.displayName || registered?.name || slug,
+          profilePicture: profile?.profilePicture || monitored?.profilePicture || null,
+          videos: [], logs: [], sessions: [], latestAt: ""
+        };
         groups.set(slug, group);
       }
       return group;
@@ -983,7 +1010,43 @@ export default function App() {
         logs: [...group.logs].sort((a,b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt))
       };
     }).sort((a,b) => Date.parse(b.latestAt) - Date.parse(a.latestAt));
-  }, [recordingSessions, recordingFiles, commentLogFiles, channels, recordingOnlyChannels, channelChecks]);
+  }, [recordingSessions, recordingFiles, commentLogFiles, channels, recordingOnlyChannels, channelChecks, libraryProfiles]);
+
+  const libraryProfileSlugs = recordingLibraryChannels.map(group => group.slug)
+    .filter(slug => /^[a-zA-Z0-9_]{1,25}$/.test(slug)).join("|");
+
+  useEffect(() => {
+    if (tab !== "library" || !isDesktop || !window.kickRecorder || !libraryProfileSlugs) return;
+    const now = Date.now();
+    const slugs = libraryProfileSlugs.split("|").filter(slug =>
+      (libraryProfileLastFetchRef.current.get(slug) ?? 0) <= now);
+    if (!slugs.length) return;
+    let cancelled = false;
+    // Fetch historically recorded broadcasters as well as watched ones. Do not
+    // call Kick every 10s when the filesystem scanner refreshes the list.
+    void (async () => {
+      for (let i = 0; i < slugs.length && !cancelled; i += 50) {
+        const batch = slugs.slice(i, i + 50);
+        try {
+          const profiles = await window.kickRecorder!.checkKickChannels(batch);
+          if (cancelled) return;
+          const fetchedAt = Date.now();
+          for (const slug of batch) libraryProfileLastFetchRef.current.set(slug, fetchedAt + 6 * 60 * 60 * 1000);
+          setLibraryProfiles(previous => ({
+            ...previous,
+            ...Object.fromEntries(profiles.filter(profile => profile.found).map(profile => [profile.slug, profile]))
+          }));
+        } catch {
+          if (cancelled) return;
+          // Credentials, rate limits or connection errors must not block the
+          // library: keep text avatars and allow a retry after 2 minutes.
+          for (const slug of batch) libraryProfileLastFetchRef.current.set(slug, Date.now() + 2 * 60 * 1000);
+          return;
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [tab, isDesktop, libraryProfileSlugs, libraryProfileRefreshKey]);
 
   const filteredRecordingLibraryChannels = useMemo(() => {
     const query = librarySearch.trim().toLocaleLowerCase("ja-JP");
@@ -1222,6 +1285,16 @@ export default function App() {
   }, [tab, libraryCommentsChannel, commentLogFiles]);
 
   useEffect(() => {
+    if (librarySelectedLogPath && !commentLogFiles.some(log => log.path === librarySelectedLogPath)) {
+      libraryLogRequestRef.current += 1;
+      setLibrarySelectedLogPath(null);
+      setLibraryLogMessages([]);
+      setLibraryLogError("");
+      setLibraryLogLoading(false);
+    }
+  }, [commentLogFiles, librarySelectedLogPath]);
+
+  useEffect(() => {
     if (!isDesktop || !window.kickRecorder) return;
     return window.kickRecorder.onLiveArticleCaptureStatus(status => setLiveArticleCaptureStatus(status));
   }, [isDesktop]);
@@ -1353,6 +1426,33 @@ export default function App() {
       setRecordingMessage("");
     } catch (error) {
       setRecordingMessage(error instanceof Error ? error.message : "保存場所を開けませんでした。");
+    }
+  }
+
+  async function toggleLibraryLog(log: CommentLogFile) {
+    if (!window.kickRecorder) return;
+    if (librarySelectedLogPath === log.path) {
+      libraryLogRequestRef.current += 1;
+      setLibrarySelectedLogPath(null);
+      setLibraryLogMessages([]);
+      setLibraryLogError("");
+      setLibraryLogLoading(false);
+      return;
+    }
+    const id = ++libraryLogRequestRef.current;
+    setLibrarySelectedLogPath(log.path);
+    setLibraryLogMessages([]);
+    setLibraryLogError("");
+    setLibraryLogLoading(true);
+    try {
+      const messages = await window.kickRecorder.listCommentFileMessages(log.channelSlug, log.name, 100);
+      if (id === libraryLogRequestRef.current) setLibraryLogMessages(messages);
+    } catch (error) {
+      if (id === libraryLogRequestRef.current) {
+        setLibraryLogError(error instanceof Error ? error.message : "コメントログを表示できませんでした。");
+      }
+    } finally {
+      if (id === libraryLogRequestRef.current) setLibraryLogLoading(false);
     }
   }
 
