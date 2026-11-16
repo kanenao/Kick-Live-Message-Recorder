@@ -91,19 +91,6 @@ function findFfmpeg(): string | undefined {
   return candidates.find(candidate => existsSync(candidate));
 }
 
-function timestampForFilename(date: Date): string {
-  const pad = (value: number): string => String(value).padStart(2, "0");
-  return [
-    date.getFullYear(),
-    pad(date.getMonth() + 1),
-    pad(date.getDate()),
-    "_",
-    pad(date.getHours()),
-    pad(date.getMinutes()),
-    pad(date.getSeconds())
-  ].join("");
-}
-
 function boundedInteger(value: unknown, fallback: number, minimum: number, maximum: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
   return Math.max(minimum, Math.min(maximum, Math.round(value)));
