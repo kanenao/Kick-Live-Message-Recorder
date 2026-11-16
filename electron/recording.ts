@@ -68,7 +68,7 @@ function validateVodUrl(value: unknown, expectedSlug: string): string {
 function findYtDlp(): string {
   const executable = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
   const candidates = [
-    join(process.resourcesPath, "tools", executable),
+    ...(typeof process.resourcesPath === "string" ? [join(process.resourcesPath, "tools", executable)] : []),
     join(process.cwd(), "vendor", "win-x64", executable),
     join(process.cwd(), "vendor", executable)
   ];
@@ -202,7 +202,8 @@ export class KickRecordingManager {
 
   constructor(
     private readonly onEvent: (event: RecordingEvent) => void,
-    private readonly probeLive: (slug: string) => Promise<LiveProbeResult> = async () => null
+    private readonly probeLive: (slug: string) => Promise<LiveProbeResult> = async () => null,
+    private readonly spawnProcess: typeof spawn = spawn
   ) {}
 
   private sessionKey(slug: string, isVod: boolean): string {
@@ -317,7 +318,7 @@ export class KickRecordingManager {
 
     let child: ChildProcessWithoutNullStreams;
     try {
-      child = spawn(findYtDlp(), args, {
+      child = this.spawnProcess(findYtDlp(), args, {
         windowsHide: true,
         stdio: ["pipe", "pipe", "pipe"]
       });
