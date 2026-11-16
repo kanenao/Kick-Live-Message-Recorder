@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { buildRecordingSessions, classifyRecordingFile } from "../electron/library-sessions.ts";
+import { mkdtempSync, mkdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { buildRecordingSessions, classifyRecordingFile, listLibrarySessions } from "../electron/library-sessions.ts";
 
 const root = process.platform === "win32" ? "C:\\Recordings" : "/recordings";
 const uuid = "11111111-2222-4333-8444-555555555555";
@@ -47,5 +49,36 @@ const failures = buildRecordingSessions([], [], [], [{
   schemaVersion: 1, id: "sample_20261115_152000", slug: "sample",
   kind: "LIVE", startedAt: "2026-11-15T06:20:00.000Z", status: "completed"
 }]);
-assert.equal(failures[0].status, "failed", "保存ファイルがない完了記録は異常として扱う");
-console.log("録画セッションのLIVE再接続・VODコメント・AI記事・途中停止・未保存の分類テスト成功");
+assert.equal(failures.length, 0, "録画ファイルのない完了記録だけではライブラリに残さない");
+assert.equal(buildRecordingSessions([], [], [article]).length, 0,
+  "AI記事のJSONだけが残っても空の録画カードを再作成しない");
+const commentOnly = buildRecordingSessions([], [log("sample", "2026-11-15.jsonl", "LIVE")], [], []);
+assert.equal(commentOnly.length, 1, "コメントが実在する場合は動画がなくても表示を維持");
+assert.equal(commentOnly[0].videos.length, 0);
+
+// Exercise a real filesystem scan, not just in-memory lists: Explorer can
+// delete files without sending a message to Electron.
+const dir = mkdtempSync(join(tmpdir(), "kick-library-sync-"));
+try {
+  mkdirSync(join(dir, "RecordingSessions"), { recursive: true });
+  const metadata = {
+    schemaVersion: 1, id: "sample_20261115_141000", slug: "sample", kind: "LIVE",
+    startedAt: "2026-11-15T05:10:00.000Z", status: "completed"
+  };
+  writeFileSync(join(dir, "RecordingSessions", metadata.id + ".json"), JSON.stringify(metadata));
+  const savedVideo = join(dir, live);
+  writeFileSync(savedVideo, "video data");
+  mkdirSync(join(dir, "Chat", "sample"), { recursive: true });
+  const savedLog = join(dir, "Chat", "sample", "2026-11-15.jsonl");
+  writeFileSync(savedLog, '{"content":"hello"}\n');
+  assert.equal(listLibrarySessions(dir).length, 2, "現存する動画と日別ログを検出");
+  unlinkSync(savedVideo);
+  const afterVideoDelete = listLibrarySessions(dir);
+  assert.equal(afterVideoDelete.length, 1, "エクスプローラーから動画削除後は動画カードが消える");
+  assert.equal(afterVideoDelete[0].logs.length, 1, "残っているコメントだけ維持");
+  unlinkSync(savedLog);
+  assert.deepEqual(listLibrarySessions(dir), [], "両ファイルが消えたら履歴JSONだけ残っていても一覧は空");
+} finally {
+  rmSync(dir, { recursive: true, force: true });
+}
+console.log("録画ライブラリの削除済みファイル自動除外・AI記事保護・ディスク再スキャンテスト成功");
