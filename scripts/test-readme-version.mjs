@@ -12,7 +12,7 @@ const currentVersion = packageJson.version;
 // α60の初回公開を基準にし、β50は履歴として別途保持する。
 const latestPublicVersion = "0.2.6-alpha.61";
 
-assert.ok(readme.includes("開発中：" + currentVersion), "README must show the current alpha development version");
+assert.ok(readme.includes("次期α版：" + currentVersion) || readme.includes("開発中：" + currentVersion), "README must show the current alpha release-candidate version");
 assert.ok(appSource.includes('const APP_VERSION = "' + currentVersion + '";'), "The app UI version must match package.json");
 assert.ok(appSource.includes('version: "' + currentVersion + '"'), "The in-app version history must include the current alpha version");
 assert.ok(readme.includes("最新公開版：" + latestPublicVersion), "README must show the latest published alpha version");
