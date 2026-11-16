@@ -5,6 +5,7 @@
 export type LiveProbeResult = { isLive: boolean; startedAt: string | null } | null;
 export const LIVE_RECORDING_STALL_TIMEOUT_MS = 180_000;
 export const LIVE_RECORDING_WATCHDOG_INTERVAL_MS = 30_000;
+export const LIVE_RECORDING_FORCE_KILL_TIMEOUT_MS = 20_000;
 
 export function hasLiveRecordingStalled(lastByteGrowthAt: number, now: number): boolean {
   return Number.isFinite(lastByteGrowthAt) && Number.isFinite(now) &&
@@ -23,12 +24,13 @@ export function decideLiveRecordingRecovery(input: {
   code: number | null;
   savedFileCount: number;
   runtimeMs: number;
+  attemptProducedVideo: boolean;
   failuresUsed: number;
   maxFailures: number;
   fatalError: boolean;
   stalled: boolean;
 }): LiveRecoveryDecision {
-  const { probe, expectedStreamStartedAt, savedFileCount, runtimeMs, failuresUsed,
+  const { probe, expectedStreamStartedAt, savedFileCount, runtimeMs, attemptProducedVideo, failuresUsed,
     maxFailures, fatalError, stalled, code } = input;
 
   if (fatalError) {
@@ -51,7 +53,7 @@ export function decideLiveRecordingRecovery(input: {
 
   // A segment that captured video for >= 60s is a successful recovery period:
   // don't let the lifetime retry count kill a long stream several hours later.
-  const nextFailures = runtimeMs >= 60_000 && savedFileCount > 0 ? 1 : failuresUsed + 1;
+  const nextFailures = runtimeMs >= 60_000 && attemptProducedVideo ? 1 : failuresUsed + 1;
   if (nextFailures > maxFailures) {
     return { action: "error", nextFailures,
       message: "LIVE録画の連続再接続が上限に達しました。保存済みの分割ファイルは残します。" };
