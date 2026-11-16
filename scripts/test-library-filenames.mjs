@@ -4,6 +4,7 @@ import { getRecordingChannelSlug } from "../src/shared/recording-library.ts";
 const cases = [
   ["sample_20261114_123456.mp4", "sample"],
   ["sample_channel_20261114_123456.mkv", "sample_channel"],
+  ["sample_channel_VOD_3c4c8e7d-1234-4abc-9def-0123456789ab_title.mp4", "sample_channel"],
   ["sample_VOD_20261114_123456.mp4", "sample"],
   ["sample_20261114_123456_retry02.ts", "sample"],
   ["sample_20261114_123456_comments.mp4", "sample"],

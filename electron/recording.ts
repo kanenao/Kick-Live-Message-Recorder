@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve, sep } from "node:path";
+import { decideLiveRecordingRecovery, hasLiveRecordingStalled, LIVE_RECORDING_WATCHDOG_INTERVAL_MS, type LiveProbeResult } from "./recording-recovery";
 
 export type RecordingEvent = {
   slug: string;
@@ -21,6 +22,7 @@ export type RecordingFile = {
 export type RecordingOptions = {
   retryCount?: number;
   retryDelaySeconds?: number;
+  streamStartedAt?: string | null;
 };
 
 type ActiveRecording = {
@@ -37,6 +39,12 @@ type ActiveRecording = {
   retryTimer: NodeJS.Timeout | null;
   sourceUrl: string;
   isVod: boolean;
+  streamStartedAt: string | null;
+  watchdogTimer: NodeJS.Timeout | null;
+  bytesAtLastCheck: number;
+  lastByteGrowthAt: number;
+  attemptStartedAt: number;
+  stallDetected: boolean;
 };
 
 function validateSlug(value: unknown): string {
@@ -60,7 +68,7 @@ function validateVodUrl(value: unknown, expectedSlug: string): string {
 function findYtDlp(): string {
   const executable = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
   const candidates = [
-    join(process.resourcesPath, "tools", executable),
+    ...(typeof process.resourcesPath === "string" ? [join(process.resourcesPath, "tools", executable)] : []),
     join(process.cwd(), "vendor", "win-x64", executable),
     join(process.cwd(), "vendor", executable)
   ];
@@ -71,7 +79,7 @@ function findYtDlp(): string {
 function findFfmpeg(): string | undefined {
   const executable = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
   const candidates = [
-    join(process.resourcesPath, "tools", executable),
+    ...(typeof process.resourcesPath === "string" ? [join(process.resourcesPath, "tools", executable)] : []),
     join(process.cwd(), "vendor", "win-x64", executable),
     join(process.cwd(), "vendor", executable)
   ];
@@ -127,10 +135,76 @@ function saveLiveRecordingTimelineMetadata(
   }
 }
 
+type SessionCompletion = "recording" | "completed" | "stopped" | "failed";
+
+function savedVideoFiles(session: ActiveRecording): string[] {
+  try {
+    const prefix = basename(session.basePrefix);
+    const allowed = new Set([".mp4", ".mkv", ".ts", ".webm", ".m4v", ".mov"]);
+    return readdirSync(session.outputDirectory)
+      .filter(name => (name.startsWith(prefix + ".") || name.startsWith(prefix + "_retry")) &&
+        allowed.has(extname(name).toLowerCase()))
+      .map(name => join(session.outputDirectory, name))
+      .filter(path => {
+        try { return statSync(path).isFile() && statSync(path).size > 0; }
+        catch { return false; }
+      })
+      .sort((a, b) => {
+        try { return statSync(b).mtimeMs - statSync(a).mtimeMs; }
+        catch { return 0; }
+      });
+  } catch { return []; }
+}
+
+function persistRecordingSession(
+  session: ActiveRecording,
+  slug: string,
+  status: SessionCompletion,
+  files: string[] = []
+): void {
+  const folder = join(session.outputDirectory, "RecordingSessions");
+  const id = basename(session.basePrefix);
+  const filePath = join(folder, id + ".json");
+  const temp = filePath + "." + process.pid + ".tmp";
+  try {
+    mkdirSync(folder, { recursive: true });
+    const previous = existsSync(filePath)
+      ? JSON.parse(readFileSync(filePath, "utf8")) as Record<string, unknown> : {};
+    const startedAt = typeof previous.startedAt === "string" ? previous.startedAt : new Date().toISOString();
+    const finishedAt = status !== "recording" ? new Date().toISOString() : undefined;
+    writeFileSync(temp, JSON.stringify({
+      schemaVersion: 1, id, slug, kind: session.isVod ? "VOD" : "LIVE",
+      sourceUrl: session.sourceUrl, startedAt, status, finishedAt,
+      files: files.map(file => basename(file)), retriesUsed: session.retriesUsed
+    }, null, 2), { encoding: "utf8", mode: 0o600 });
+    renameSync(temp, filePath);
+  } catch (error) {
+    try { if (existsSync(temp)) unlinkSync(temp); } catch { /* best effort */ }
+    console.warn("録画セッション情報の保存に失敗しました:", error);
+  }
+}
+
+function recordingBytes(session: ActiveRecording): number {
+  try {
+    const prefix = basename(session.basePrefix);
+    return readdirSync(session.outputDirectory)
+      .filter(name => name.startsWith(prefix + ".") || name.startsWith(prefix + "_retry"))
+      .filter(name => !name.endsWith(".json") && !name.endsWith(".tmp"))
+      .reduce((total, name) => {
+        try { return total + statSync(join(session.outputDirectory, name)).size; }
+        catch { return total; }
+      }, 0);
+  } catch { return 0; }
+}
+
 export class KickRecordingManager {
   private readonly active = new Map<string, ActiveRecording>();
 
-  constructor(private readonly onEvent: (event: RecordingEvent) => void) {}
+  constructor(
+    private readonly onEvent: (event: RecordingEvent) => void,
+    private readonly probeLive: (slug: string) => Promise<LiveProbeResult> = async () => null,
+    private readonly spawnProcess: typeof spawn = spawn
+  ) {}
 
   private sessionKey(slug: string, isVod: boolean): string {
     return (isVod ? "vod:" : "live:") + slug;
@@ -190,10 +264,17 @@ export class KickRecordingManager {
       attempt: 0,
       retryTimer: null,
       sourceUrl,
-      isVod
+      isVod,
+      streamStartedAt: typeof options.streamStartedAt === "string" ? options.streamStartedAt : null,
+      watchdogTimer: null,
+      bytesAtLastCheck: 0,
+      lastByteGrowthAt: Date.now(),
+      attemptStartedAt: 0,
+      stallDetected: false
     };
 
     this.active.set(sessionId, session);
+    persistRecordingSession(session, slug, "recording");
     this.onEvent({ slug, status: "starting", filePath: basePrefix, message: isVod ? "過去配信のダウンロードを開始しています。" : "録画プロセスを起動しています。", isVod });
     this.launch(sessionId, slug, session);
 
@@ -205,6 +286,10 @@ export class KickRecordingManager {
 
     session.attempt += 1;
     session.stderrTail = "";
+    session.attemptStartedAt = Date.now();
+    session.lastByteGrowthAt = Date.now();
+    session.bytesAtLastCheck = recordingBytes(session);
+    session.stallDetected = false;
     const suffix = session.attempt === 1
       ? ""
       : `_retry${String(session.attempt).padStart(2, "0")}`;
@@ -233,7 +318,7 @@ export class KickRecordingManager {
 
     let child: ChildProcessWithoutNullStreams;
     try {
-      child = spawn(findYtDlp(), args, {
+      child = this.spawnProcess(findYtDlp(), args, {
         windowsHide: true,
         stdio: ["pipe", "pipe", "pipe"]
       });
@@ -243,19 +328,37 @@ export class KickRecordingManager {
     }
 
     session.child = child;
+    if (!session.isVod) {
+      session.watchdogTimer = setInterval(() => {
+        if (session.stopRequested || this.active.get(sessionId) !== session || session.child !== child) return;
+        const bytes = recordingBytes(session);
+        if (bytes > session.bytesAtLastCheck) {
+          session.bytesAtLastCheck = bytes;
+          session.lastByteGrowthAt = Date.now();
+        }
+        if (!session.stallDetected && hasLiveRecordingStalled(session.lastByteGrowthAt, Date.now())) {
+          session.stallDetected = true;
+          this.onEvent({ slug, status: "starting", isVod: false,
+            message: "映像ファイルが3分間増えていないため、録画を再接続しています。" });
+          try { child.kill("SIGINT"); } catch { child.kill(); }
+        }
+      }, LIVE_RECORDING_WATCHDOG_INTERVAL_MS);
+    }
     let attemptSettled = false;
     const settle = (code: number | null, signal: NodeJS.Signals | null, error?: Error): void => {
       if (attemptSettled) return;
       attemptSettled = true;
-      this.finishAttempt(sessionId, slug, session, code, signal, error);
+      if (session.watchdogTimer) { clearInterval(session.watchdogTimer); session.watchdogTimer = null; }
+      void this.finishAttempt(sessionId, slug, session, code, signal, error);
     };
 
     child.stdout.on("data", (chunk: Buffer | string) => {
       const output = String(chunk);
       for (const line of output.split(/\r?\n/)) {
         const trimmed = line.trim();
-        if (trimmed && !trimmed.startsWith("[") && (trimmed.includes("/") || trimmed.includes("\\"))) {
-          session.filePath = trimmed;
+        if (trimmed && !trimmed.startsWith("[") && existsSync(trimmed) &&
+            [".mp4", ".mkv", ".ts", ".webm", ".m4v", ".mov"].includes(extname(trimmed).toLowerCase())) {
+          session.filePath = resolve(trimmed);
         }
       }
     });
@@ -284,68 +387,116 @@ export class KickRecordingManager {
     child.once("close", (code, signal) => settle(code, signal));
   }
 
-  private finishAttempt(
+  private async finishAttempt(
     sessionId: string,
     slug: string,
     session: ActiveRecording,
     code: number | null,
     signal: NodeJS.Signals | null,
     spawnError?: Error
-  ): void {
+  ): Promise<void> {
     session.child = null;
-    if (session.stopRequested || this.active.get(sessionId) !== session) {
+    const savedFiles = savedVideoFiles(session);
+    const savedPath = savedFiles[0];
+
+    // A stop request may be issued while waiting for the API. Never restart a
+    // manually stopped session, nor emit stale messages for a replaced session.
+    if (this.active.get(sessionId) !== session) return;
+    if (session.stopRequested) {
       this.active.delete(sessionId);
-      this.onEvent({ slug, status: "stopped", filePath: session.filePath, message: session.isVod ? "過去配信のダウンロードを停止しました。" : "録画を停止しました。", isVod: session.isVod });
+      persistRecordingSession(session, slug, "stopped", savedFiles);
+      this.onEvent({ slug, status: "stopped", filePath: savedPath, isVod: session.isVod,
+        message: savedPath ? "録画を停止し、途中までの映像を保存しました。" : "録画を停止しました。映像ファイルは作成されていません。" });
       return;
     }
 
-    if (!spawnError && code === 0) {
-      this.active.delete(sessionId);
-      this.onEvent({
-        slug,
-        status: "stopped",
-        filePath: session.filePath,
-        isVod: session.isVod,
-        message: session.isVod ? "過去配信のダウンロードが完了しました。" : "配信が終了し、録画を完了しました。"
-      });
+    if (session.isVod) {
+      if (!spawnError && code === 0 && savedPath) {
+        this.active.delete(sessionId);
+        persistRecordingSession(session, slug, "completed", savedFiles);
+        this.onEvent({ slug, status: "stopped", filePath: savedPath, isVod: true,
+          message: "過去配信のファイル保存を確認しました。" });
+      } else {
+        this.active.delete(sessionId);
+        persistRecordingSession(session, slug, "failed", savedFiles);
+        this.onEvent({ slug, status: "error", filePath: savedPath, isVod: true,
+          message: savedPath
+            ? "過去配信のダウンロードが途中で終了しました。保存済みの動画は残します。"
+            : "過去配信のダウンロードに失敗しました：" + (session.stderrTail.trim().split(/\r?\n/).slice(-2).join(" ") || spawnError?.message || String(code)) });
+      }
       return;
     }
 
     const stderr = session.stderrTail.trim();
-    const lowerStderr = stderr.toLowerCase();
     const spawnCode = spawnError && "code" in spawnError ? String(spawnError.code) : "";
     const missingExecutable = spawnCode === "ENOENT";
-    const missingFfmpeg = lowerStderr.includes("ffmpeg could not be found")
-      || lowerStderr.includes("ffmpeg not found");
-    const detail = stderr.split(/\r?\n/).filter(Boolean).slice(-3).join(" ");
-    const terminalMessage = missingExecutable
-      ? "yt-dlp.exe が見つかりません。同梱ファイルまたはPATHを確認してください。"
-      : missingFfmpeg
-        ? "ffmpeg.exe が見つかりません。アプリを最新版に更新して再インストールしてください。"
-        : detail || (spawnError
-          ? `録画プロセスを起動できませんでした：${spawnError.message}`
-          : `録画が異常終了しました（終了コード：${String(code)}、signal：${String(signal)}）。`);
+    const missingFfmpeg = /ffmpeg could not be found|ffmpeg not found/i.test(stderr);
+    const fatalError = missingExecutable || missingFfmpeg;
+    const runtimeMs = Math.max(0, Date.now() - session.attemptStartedAt);
 
-    if (!missingExecutable && !missingFfmpeg && session.retriesUsed < session.maxRetries) {
-      session.retriesUsed += 1;
-      const retryNumber = session.retriesUsed;
-      const delaySeconds = Math.round(session.retryDelayMs / 1000);
-      this.onEvent({
-        slug,
-        status: "starting",
-        filePath: session.filePath,
-        isVod: session.isVod,
-        message: `録画接続が切れました。${delaySeconds}秒後に再接続します（${retryNumber}/${session.maxRetries}回目）。`
-      });
+    let probe: LiveProbeResult = null;
+    if (!fatalError) {
+      try {
+        probe = await this.probeLive(slug);
+        // Confirm an offline result; transient API data can otherwise cut a live recording short.
+        if (probe && !probe.isLive) {
+          await new Promise<void>(resolve => setTimeout(resolve, 2500));
+          const confirmation = await this.probeLive(slug);
+          probe = confirmation?.isLive === false ? confirmation : confirmation;
+        }
+      } catch {
+        probe = null;
+      }
+    }
+    if (this.active.get(sessionId) !== session) return;
+    if (session.stopRequested) {
+      this.active.delete(sessionId);
+      persistRecordingSession(session, slug, "stopped", savedFiles);
+      this.onEvent({ slug, status: "stopped", filePath: savedPath, isVod: false,
+        message: "録画を手動停止しました。保存済み動画は保持します。" });
+      return;
+    }
+
+    if (!session.streamStartedAt && probe?.isLive && probe.startedAt) {
+      session.streamStartedAt = probe.startedAt;
+    }
+    const decision = decideLiveRecordingRecovery({
+      probe, expectedStreamStartedAt: session.streamStartedAt,
+      code, savedFileCount: savedFiles.length, runtimeMs,
+      failuresUsed: session.retriesUsed, maxFailures: session.maxRetries,
+      fatalError, stalled: session.stallDetected
+    });
+
+    if (decision.action === "complete") {
+      this.active.delete(sessionId);
+      persistRecordingSession(session, slug, "completed", savedFiles);
+      this.onEvent({ slug, status: "stopped", filePath: savedPath, isVod: false,
+        message: decision.message });
+      return;
+    }
+
+    if (decision.action === "retry") {
+      session.retriesUsed = decision.nextFailures;
+      persistRecordingSession(session, slug, "recording", savedFiles);
+      const delaySeconds = Math.ceil(session.retryDelayMs / 1000);
+      this.onEvent({ slug, status: "starting", filePath: savedPath, isVod: false,
+        message: `${decision.message} ${delaySeconds}秒後に再接続（連続失敗 ${session.retriesUsed}/${session.maxRetries}）。` });
       session.retryTimer = setTimeout(() => {
         session.retryTimer = null;
-        this.launch(sessionId, slug, session);
+        if (!session.stopRequested && this.active.get(sessionId) === session) this.launch(sessionId, slug, session);
       }, session.retryDelayMs);
       return;
     }
 
     this.active.delete(sessionId);
-    this.onEvent({ slug, status: "error", filePath: session.filePath, message: session.isVod ? `過去配信のダウンロードに失敗しました：${terminalMessage}` : terminalMessage, isVod: session.isVod });
+    persistRecordingSession(session, slug, "failed", savedFiles);
+    const cause = missingExecutable
+      ? "yt-dlp.exe が見つかりません。アプリ同梱ファイルまたはPATHを確認してください。"
+      : missingFfmpeg
+        ? "ffmpeg.exe が見つかりません。アプリを最新版で再インストールしてください。"
+        : decision.message + (stderr ? " 詳細：" + stderr.split(/\r?\n/).slice(-2).join(" ") : "") +
+          (signal ? " 終了シグナル：" + signal : "");
+    this.onEvent({ slug, status: "error", filePath: savedPath, isVod: false, message: cause });
   }
 
   stop(inputSlug: unknown, inputIsVod: unknown = false): { ok: true } {
@@ -358,6 +509,7 @@ export class KickRecordingManager {
       : `${slug} はライブ録画中ではありません。`);
 
     session.stopRequested = true;
+    if (session.watchdogTimer) { clearInterval(session.watchdogTimer); session.watchdogTimer = null; }
     if (session.retryTimer) {
       clearTimeout(session.retryTimer);
       session.retryTimer = null;
@@ -371,7 +523,9 @@ export class KickRecordingManager {
       }
     } else {
       this.active.delete(sessionId);
-      this.onEvent({ slug, status: "stopped", filePath: session.filePath, message: session.isVod ? "過去配信のダウンロードを停止しました。" : "再接続待ちを取り消し、録画を停止しました。", isVod: session.isVod });
+      const files = savedVideoFiles(session);
+      persistRecordingSession(session, slug, "stopped", files);
+      this.onEvent({ slug, status: "stopped", filePath: files[0], message: session.isVod ? "過去配信のダウンロードを停止しました。" : "再接続待ちを取り消し、録画を停止しました。", isVod: session.isVod });
     }
     return { ok: true };
   }
@@ -379,6 +533,7 @@ export class KickRecordingManager {
   stopAll(): void {
     for (const [sessionId, session] of this.active) {
       session.stopRequested = true;
+      if (session.watchdogTimer) { clearInterval(session.watchdogTimer); session.watchdogTimer = null; }
       if (session.retryTimer) {
         clearTimeout(session.retryTimer);
         session.retryTimer = null;

@@ -5,7 +5,7 @@ on:
     branches: [main, "release/*-alpha*", "feature/alpha52-broadcast-newspaper-layout"]
     tags: ["v*-alpha*"]
   pull_request:
-    branches: [main]
+    branches: [main, "release/*-alpha*"]
   workflow_dispatch:
 
 permissions:
@@ -40,6 +40,12 @@ jobs:
         run: node scripts/test-library-layout.mjs
       - name: VOD ASS字幕生成テスト
         run: node --experimental-strip-types scripts/test-vod-chat-ass.mjs
+      - name: 複数VODのダウンロード・経過時間・停止テスト
+        run: node --experimental-strip-types scripts/test-vod-download-queue.mjs
+      - name: 配信単位の録画・コメント・AI記事の分類テスト
+        run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-library-sessions.mjs
+      - name: LIVE録画の途中切断・自動復旧・手動停止テスト
+        run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-recording-recovery.mjs
       - name: AI記事応答形式テスト
         run: node --experimental-strip-types scripts/test-ai-response.mjs
       - name: 配信AI新聞の放送画面保存テスト
@@ -80,7 +86,7 @@ jobs:
     name: Windows α版インストーラーを作成
     runs-on: windows-latest
     needs: quality
-    if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+    if: ${{ github.event_name != 'pull_request' && !startsWith(github.ref, 'refs/tags/v') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

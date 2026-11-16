@@ -19,6 +19,8 @@ import { join } from "node:path";
 import { autoUpdater } from "electron-updater";
 import { KickChatReceiver } from "./chat";
 import { KickVodChatDownloader } from "./vod-chat";
+import { KickVodDownloadManager } from "./vod-download-queue";
+import { listLibrarySessions } from "./library-sessions";
 import { KickCommentVideoGenerator, listCommentLogFiles, previewCommentVideo } from "./comment-video";
 import { listRecentCommentMessages } from "./recording-library";
 import { deleteStreamArticle, generateStreamArticle, getStreamArticlePreview, listStreamArticles } from "./articles";
@@ -625,10 +627,32 @@ const liveArticleManager = new LiveStreamArticleManager(
   article => mainWindow?.webContents.send("articles:updated", article)
 );
 
+// Intentional user stop must not be undone by background auto-recording during the same LIVE.
+const manuallyStoppedLiveBroadcasts = new Map<string, string | null>();
+const autoRecordingRetryNotBefore = new Map<string, number>();
+
+async function resolveCurrentKickLive(slug: string): Promise<{ isLive: boolean; startedAt: string | null } | null> {
+  if (!getKickCredentialsStatus().configured) return null;
+  try {
+    const [result] = await checkKickChannels([slug], false);
+    return result?.found ? { isLive: result.isLive, startedAt: result.startedAt } : null;
+  } catch (error) {
+    console.warn("LIVE録画の配信継続確認に失敗しました:", error);
+    return null;
+  }
+}
+
 const recordingManager = new KickRecordingManager(event => {
   mainWindow?.webContents.send("recording:status", event);
-  if (event.filePath && event.status !== "error") liveArticleManager.attachRecording(event.slug, event.filePath);
-});
+  if (!event.isVod && event.status === "error") {
+    autoRecordingRetryNotBefore.set(event.slug, Date.now() + 60_000);
+  } else if (!event.isVod && event.status === "recording") {
+    autoRecordingRetryNotBefore.delete(event.slug);
+  }
+  if (!event.isVod && event.filePath && event.status === "stopped" && existsSync(event.filePath)) {
+    liveArticleManager.attachRecording(event.slug, event.filePath);
+  }
+}, resolveCurrentKickLive);
 
 const commentVideoGenerator = new KickCommentVideoGenerator(event => {
   mainWindow?.webContents.send("comment-video:status", event);
@@ -646,6 +670,10 @@ const chatReceiver = new KickChatReceiver(
 
 const vodChatDownloader = new KickVodChatDownloader(event => {
   mainWindow?.webContents.send("vod-chat:status", event);
+});
+
+const vodDownloadManager = new KickVodDownloadManager(job => {
+  mainWindow?.webContents.send("vod-download:status", job);
 });
 
 type ArticleLiveMetadata = {
@@ -1095,7 +1123,18 @@ async function runBackgroundMonitor(): Promise<void> {
       } else if (wasLive) {
         void stopArticleFrameCapture(result.slug).finally(() => liveArticleManager.finishStream(articleMetadata));
       }
-      if (!live || wasLive) continue;
+      if (result.found && !live) {
+        manuallyStoppedLiveBroadcasts.delete(result.slug);
+        autoRecordingRetryNotBefore.delete(result.slug);
+      }
+      if (!live) continue;
+
+      const manualStopStream = manuallyStoppedLiveBroadcasts.get(result.slug);
+      if (manualStopStream !== undefined && manualStopStream && result.startedAt &&
+          manualStopStream !== result.startedAt) {
+        // A newly started broadcast is eligible for auto recording again.
+        manuallyStoppedLiveBroadcasts.delete(result.slug);
+      }
 
       const normalChannel = state.channels.find(channel => channel.name.toLowerCase() === result.slug);
       const recordingOnly = state.recordingOnlyChannels.find(channel => channel.name.toLowerCase() === result.slug);
@@ -1106,11 +1145,16 @@ async function runBackgroundMonitor(): Promise<void> {
         ? state.settings.autoReceiveChat
         : Boolean(recordingOnly && state.settings.autoReceiveChatForRecordingOnly);
       let recordingStarted = false;
-      if (shouldRecord && !recordingManager.isRecording(result.slug)) {
+      const deliberatelyStopped = manuallyStoppedLiveBroadcasts.has(result.slug);
+      const retryCooldown = (autoRecordingRetryNotBefore.get(result.slug) ?? 0) > Date.now();
+      // Re-check every poll even if the stream was already LIVE on the previous poll.
+      // Otherwise a recorder process that exits early is never restarted.
+      if (shouldRecord && !deliberatelyStopped && !retryCooldown && !recordingManager.isRecording(result.slug)) {
         try {
           recordingManager.start(result.slug, getRecordingOutputDirectory(), {
             retryCount: state.settings.recordingRetryCount,
-            retryDelaySeconds: state.settings.recordingRetryDelaySeconds
+            retryDelaySeconds: state.settings.recordingRetryDelaySeconds,
+            streamStartedAt: result.startedAt
           });
           recordingStarted = true;
         } catch (error) {
@@ -1119,7 +1163,7 @@ async function runBackgroundMonitor(): Promise<void> {
           });
         }
       }
-      if (state.settings.notifyOnLive) notifyBackgroundLive(result, recordingStarted, commentCaptureEnabled);
+      if (!wasLive && state.settings.notifyOnLive) notifyBackgroundLive(result, recordingStarted, commentCaptureEnabled);
     }
     for (const key of [...backgroundPreviousLiveState.keys()]) {
       if (!slugs.includes(key)) backgroundPreviousLiveState.delete(key);
@@ -1404,18 +1448,52 @@ function registerIpcHandlers(): void {
     return { ok: true };
   });
 
+  ipcMain.handle("vod-download:enqueue", (event, urls: unknown) => {
+    assertTrustedSender(event);
+    return vodDownloadManager.enqueue(urls, getRecordingOutputDirectory());
+  });
+
+  ipcMain.handle("vod-download:list", event => {
+    assertTrustedSender(event);
+    return vodDownloadManager.list();
+  });
+
+  ipcMain.handle("vod-download:cancel", (event, id: unknown) => {
+    assertTrustedSender(event);
+    return vodDownloadManager.cancel(id);
+  });
+
   ipcMain.handle("recording:start", (event, slug: unknown, sourceUrl?: unknown) => {
     assertTrustedSender(event);
     const settings = readState().settings;
-    return recordingManager.start(slug, getRecordingOutputDirectory(), {
+    const result = recordingManager.start(slug, getRecordingOutputDirectory(), {
       retryCount: settings.recordingRetryCount,
-      retryDelaySeconds: settings.recordingRetryDelaySeconds
+      retryDelaySeconds: settings.recordingRetryDelaySeconds,
+      streamStartedAt: typeof slug === "string"
+        ? backgroundMonitorStatus.results.find(item => item.slug === slug.toLowerCase())?.startedAt ?? null
+        : null
     }, sourceUrl);
+    if (sourceUrl === undefined && typeof slug === "string") {
+      manuallyStoppedLiveBroadcasts.delete(slug.toLowerCase());
+      autoRecordingRetryNotBefore.delete(slug.toLowerCase());
+    }
+    return result;
   });
 
   ipcMain.handle("recording:stop", (event, slug: unknown, isVod?: unknown) => {
     assertTrustedSender(event);
-    return recordingManager.stop(slug, isVod ?? false);
+    const result = recordingManager.stop(slug, isVod ?? false);
+    if (!isVod && typeof slug === "string") {
+      const normalized = slug.toLowerCase();
+      const current = backgroundMonitorStatus.results.find(item => item.slug === normalized);
+      manuallyStoppedLiveBroadcasts.set(normalized, current?.startedAt ?? null);
+    }
+    return result;
+  });
+
+  ipcMain.handle("library:sessions", event => {
+    assertTrustedSender(event);
+    return listLibrarySessions(getRecordingOutputDirectory());
   });
 
   ipcMain.handle("recording:list", event => {
@@ -1520,7 +1598,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle("articles:generate", async (event, input: unknown) => {
     assertTrustedSender(event);
     const article = await generateStreamArticle(input, getRecordingOutputDirectory());
-    if (recordingManager.isFileActive(article.sourceVideo)) {
+    if ((recordingManager.isFileActive(article.sourceVideo) || vodDownloadManager.isFileActive(article.sourceVideo))) {
       throw new Error("録画中の動画は映像解析できません。録画終了後に記事を生成してください。");
     }
     const settings = readState().settings;
@@ -1546,13 +1624,13 @@ function registerIpcHandlers(): void {
     return previewCommentVideo(
       input,
       getRecordingOutputDirectory(),
-      filePath => recordingManager.isFileActive(filePath)
+      filePath => recordingManager.isFileActive(filePath) || vodDownloadManager.isFileActive(filePath)
     );
   });
 
   ipcMain.handle("comment-video:start", (event, input: unknown) => {
     assertTrustedSender(event);
-    return commentVideoGenerator.start(input, getRecordingOutputDirectory(), filePath => recordingManager.isFileActive(filePath));
+    return commentVideoGenerator.start(input, getRecordingOutputDirectory(), filePath => recordingManager.isFileActive(filePath) || vodDownloadManager.isFileActive(filePath));
   });
 
   ipcMain.handle("comment-video:stop", event => {
@@ -1568,7 +1646,7 @@ function registerIpcHandlers(): void {
     return deleteRecordingFile(
       getRecordingOutputDirectory(),
       filePath,
-      target => recordingManager.isFileActive(target)
+      target => recordingManager.isFileActive(target) || vodDownloadManager.isFileActive(target)
     );
   });
 
@@ -1809,5 +1887,6 @@ app.on("before-quit", () => {
   manualArticleSession = null;
   void chatReceiver.stop();
   vodChatDownloader.stopAll();
+  vodDownloadManager.stopAll();
   commentVideoGenerator.stopAll();
 });
