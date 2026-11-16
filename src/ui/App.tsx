@@ -2362,7 +2362,7 @@ export default function App() {
           </div>
           <div className="recording-library-page-actions">
             <button className="small-action" onClick={() => void openRecordingFolder()} disabled={!isDesktop}>保存場所を開く</button>
-            <button className="primary-small" onClick={() => setLibraryRefreshKey(value => value + 1)} disabled={!isDesktop || isLoadingRecordings || isLoadingLibraryLogs || deletingRecordingPath !== null}>一覧を更新</button>
+            <button className="primary-small" onClick={() => { libraryProfileLastFetchRef.current.clear(); setLibraryProfileRefreshKey(value => value + 1); setLibraryRefreshKey(value => value + 1); }} disabled={!isDesktop || isLoadingRecordings || isLoadingLibraryLogs || deletingRecordingPath !== null}>一覧を更新</button>
           </div>
         </div>
 
@@ -2399,11 +2399,11 @@ export default function App() {
                 : <div className="recording-channel-list">
                     {filteredRecordingLibraryChannels.map(group => <article className="recording-channel-card" key={group.slug}>
                       <div className="recording-channel-summary">
-                        <div className="recording-channel-avatar">{group.displayName.slice(0, 1).toUpperCase()}</div>
+                        <LibraryChannelAvatar displayName={group.displayName} picture={group.profilePicture} />
                         <div className="recording-channel-info">
                           <strong>{group.displayName}</strong>
                           <small>@{group.slug}</small>
-                          <small>配信 {group.sessions.length}件 ・ 録画動画 {group.videos.length}件 ・ コメントログ {group.logs.length}件{group.latestAt ? " ・ " + new Date(group.latestAt).toLocaleString("ja-JP") : ""}</small>
+                          <small>配信 {group.sessions.length}件 ・ 録画動画 {group.videos.length}件 ・ コメントログ {group.logs.length}件{group.latestAt ? " ・ 最終保存 " + new Date(group.latestAt).toLocaleString("ja-JP") : ""}</small>
                         </div>
                         <div className="recording-channel-actions">
                           <button className="primary-small" onClick={() => setExpandedLibraryVideosChannel(current => current === group.slug ? null : group.slug)} disabled={group.sessions.length === 0}>
@@ -2463,14 +2463,42 @@ export default function App() {
                                 </button>
                               </div>
                             </div>)}
-                            {session.logs.map(log => <div className="recording-session-file" key={log.path}>
-                              <span className="recording-session-file-type">コメント・JSONL</span>
-                              <div className="recording-file-info"><strong title={log.name}>{log.name}</strong>
-                                <small>{new Date(log.modifiedAt).toLocaleString("ja-JP")} ・ {(log.size / 1024).toFixed(1)} KB</small>
+                            {session.logs.map(log => <div className="recording-session-log" key={log.path}>
+                              <div className="recording-session-file">
+                                <span className="recording-session-file-type log">コメント・JSONL</span>
+                                <div className="recording-file-info"><strong title={log.name}>{log.name}</strong>
+                                  <small>{new Date(log.modifiedAt).toLocaleString("ja-JP")} ・ {(log.size / 1024).toFixed(1)} KB
+                                    {session.commentAssociation !== "exact" && " ・ 対応する配信は未確認"}
+                                  </small>
+                                </div>
+                                <div className="recording-library-video-actions">
+                                  <button className="primary-small" onClick={() => void toggleLibraryLog(log)}>
+                                    {librarySelectedLogPath === log.path ? "コメントを閉じる" : "コメントを見る"}
+                                  </button>
+                                  <button className="small-action" onClick={() => void openRecordingFile(log.path)}>開く</button>
+                                  <button className="small-action" onClick={() => void revealRecordingFile(log.path)}>場所</button>
+                                </div>
                               </div>
-                              <div className="recording-library-video-actions">
-                                <button className="small-action" onClick={() => void revealRecordingFile(log.path)}>保存場所</button>
-                              </div>
+                              {librarySelectedLogPath === log.path && <div className="recording-session-log-preview" role="region" aria-label={log.name + "の保存済みコメント"}>
+                                <div className="recording-library-expanded-title">
+                                  <strong>保存済みコメント</strong><span>{libraryLogLoading ? "読込中" : "直近 " + libraryLogMessages.length + "件"}</span>
+                                </div>
+                                {libraryLogError
+                                  ? <div className="empty-inline">{libraryLogError}</div>
+                                  : libraryLogLoading
+                                    ? <div className="empty-inline">コメントを読み込んでいます...</div>
+                                    : libraryLogMessages.length === 0
+                                      ? <div className="empty-inline">このファイルに表示できるコメントはありません。</div>
+                                      : <div className="recording-library-comment-list">
+                                          {libraryLogMessages.map((message, index) => <article className="recording-library-comment-row" key={message.eventId || message.createdAt + ":" + index}>
+                                            <div className="recording-library-comment-meta">
+                                              <strong style={message.usernameColor ? { color: message.usernameColor } : undefined}>{message.senderUsername}</strong>
+                                              <time>{new Date(message.createdAt).toLocaleString("ja-JP")}</time>
+                                            </div>
+                                            <p>{message.content}</p>
+                                          </article>)}
+                                        </div>}
+                              </div>}
                             </div>)}
                             {!session.article && session.videos.length > 0 && <div className="recording-session-actions">
                               <button className="small-action" onClick={() => {
