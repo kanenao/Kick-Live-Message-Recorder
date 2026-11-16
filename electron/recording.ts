@@ -29,6 +29,7 @@ type ActiveRecording = {
   child: ChildProcessWithoutNullStreams | null;
   stopRequested: boolean;
   filePath: string;
+  attemptPrefix: string;
   basePrefix: string;
   outputDirectory: string;
   stderrTail: string;
@@ -256,6 +257,7 @@ export class KickRecordingManager {
       child: null,
       stopRequested: false,
       filePath: basePrefix,
+      attemptPrefix: basePrefix,
       basePrefix,
       outputDirectory,
       stderrTail: "",
@@ -319,6 +321,7 @@ export class KickRecordingManager {
       : `_retry${String(session.attempt).padStart(2, "0")}`;
     const prefix = `${session.basePrefix}${suffix}`;
     session.filePath = prefix;
+    session.attemptPrefix = prefix;
 
     const ffmpegPath = findFfmpeg();
     const args = [
@@ -423,7 +426,7 @@ export class KickRecordingManager {
     session.child = null;
     const savedFiles = savedVideoFiles(session);
     const savedPath = savedFiles[0];
-    const currentPrefix = basename(session.filePath);
+    const currentPrefix = basename(session.attemptPrefix);
     const attemptProducedVideo = savedFiles.some(file =>
       basename(file).startsWith(currentPrefix + "."));
 
