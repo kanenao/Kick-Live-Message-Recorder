@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
+import { broadcastFileStem } from "./recording-filenames";
 import { join } from "node:path";
 import WebSocket from "ws";
 
@@ -170,6 +171,7 @@ export class KickChatReceiver {
   private readonly seenEventIds = new Set<string>();
   private readonly seenEventOrder: string[] = [];
   private readonly recentMessages: KickChatMessage[] = [];
+  private readonly broadcastSessions = new Map<string, string>();
 
   constructor(
     private readonly getOutputDirectory: () => string,
@@ -191,6 +193,24 @@ export class KickChatReceiver {
   getDesiredSlugs(): string[] {
     return [...this.desiredSlugs];
   }
+
+  /** Set the actual LIVE start so the saved JSONL uses the same name as the MP4. */
+  setBroadcastSession(slug: string, startedAt: string | null, displayName: string): void {
+    if (!/^[a-zA-Z0-9_-]{1,40}$/.test(slug) || !startedAt ||
+        !Number.isFinite(Date.parse(startedAt))) return;
+    const normalized = slug.toLowerCase();
+    // Don't rotate an in-progress chat file merely because a profile display name changed.
+    if (this.broadcastSessions.has(normalized)) return;
+    this.broadcastSessions.set(normalized, broadcastFileStem({
+      slug: normalized, displayName, startedAt, kind: "LIVE"
+    }));
+  }
+
+  clearBroadcastSession(slug: string): void {
+    this.broadcastSessions.delete(slug.toLowerCase());
+  }
+
+
 
   private publishStatus(message?: string): void {
     if (message) this.statusMessage = message;
@@ -510,7 +530,10 @@ export class KickChatReceiver {
       const day = createdAt.slice(0, 10);
       const channelDirectory = join(this.getOutputDirectory(), "Chat", message.channelSlug);
       mkdirSync(channelDirectory, { recursive: true });
-      appendFileSync(join(channelDirectory, day + ".jsonl"), JSON.stringify(message) + "\n", "utf8");
+      // Without a verified broadcast start, preserve the legacy per-day filename;
+      // never mislabel the first comment time as the actual broadcast start.
+      const fileStem = this.broadcastSessions.get(message.channelSlug) ?? day;
+      appendFileSync(join(channelDirectory, fileStem + ".jsonl"), JSON.stringify(message) + "\n", "utf8");
     }
 
     this.rememberEventId(message.eventId);
@@ -543,7 +566,7 @@ export class KickChatReceiver {
         if (!channelEntry.isDirectory() || !/^[a-z0-9_]{1,25}$/.test(channelEntry.name)) continue;
         const channelDirectory = join(root, channelEntry.name);
         const files = readdirSync(channelDirectory)
-          .filter(file => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(file))
+          .filter(file => /\.jsonl$/i.test(file))
           .sort()
           .reverse()
           .slice(0, 7);
