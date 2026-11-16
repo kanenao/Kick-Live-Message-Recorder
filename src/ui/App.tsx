@@ -230,11 +230,14 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
 const VERSION_HISTORY = [
   {
     version: "0.3.0-alpha.63",
-    title: "α版の自動更新チャンネルを修正",
+    title: "録画途中切断の自動復旧と録画ライブラリの強化",
     changes: [
-      "GitHub Releasesのα版更新情報（alpha.yml）へ接続するよう明示",
-      "自動更新による意図しないバージョンダウンを防止",
-      "α版の配布メタデータと更新処理の回帰テストを追加"
+      "LIVE録画が配信終了前に切れた場合は配信状態を確認して再接続",
+      "録画ファイルの書き込み停止・無応答を検知し、保存済み分割動画を保護",
+      "登録配信者の録画が停止しても、LIVE継続中なら監視機能で復旧",
+      "複数VODの同時ダウンロード、番組ごとの進捗・経過時間・停止操作を追加",
+      "録画ライブラリで動画・コメント・AI記事を配信単位に表示",
+      "α版自動更新用のalpha.ymlと旧版向けlatest.ymlを配布"
     ]
   },
   {
