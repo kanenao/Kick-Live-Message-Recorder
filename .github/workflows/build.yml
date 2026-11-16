@@ -174,6 +174,8 @@ jobs:
               (Get-FileHash -Algorithm SHA256 "release/beta.yml").Hash) {
             throw "beta/latestの互換マニフェストが一致しません。"
           }
+      - name: 公開するインストーラー名と更新URL・SHA512を照合
+        run: node scripts/validate-update-assets.mjs release
       - name: インストーラーを保存
         uses: actions/upload-artifact@v4
         with:
@@ -411,6 +413,7 @@ jobs:
           done
           cmp release/alpha.yml release/beta.yml
           cmp release/alpha.yml release/latest.yml
+          node scripts/validate-update-assets.mjs release
           sha256sum "${installers[0]}"
       - name: 新しいα版のPre-releaseを作成
         shell: bash
