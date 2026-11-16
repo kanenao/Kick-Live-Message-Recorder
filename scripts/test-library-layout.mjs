@@ -35,7 +35,21 @@ assert.match(app, /setRecordingSessions\(current => current\.map\(session => \(\
   "Deleting a video inside the app must also update session cards.");
 assert.match(app, /setLibraryRefreshKey\(value => value \+ 1\)/,
   "Deleting a file should re-scan on-disk metadata.");
-assert.match(css, /\.recording-session-list\{[^}]*max-height:[^;]*;overflow:auto;/, "Session list should scroll within viewport.");
+assert.match(css, /\.recording-library-page \.recording-session-list\{[^}]*max-height:none;overflow:visible;/,
+  "The library must scroll as one page without trapping scroll in each broadcaster.");
+assert.match(css, /\.recording-library-page \.recording-session-head\{[^}]*min-height:75px/,
+  "Broadcast cards must be compact rather than oversized panels.");
+assert.match(css, /\.recording-library-page \.recording-session-thumbnail\{[^}]*height:63px/,
+  "Recorded video thumbnails should fit compact session cards.");
+assert.match(app, /<LibraryRecordingThumbnail filePath=\{session\.videos\[0\]\?\.path \?\? null\}/,
+  "Thumbnails must be taken from the saved video, not Kick placeholder art.");
+assert.match(app, /getRecordingThumbnail\(filePath\)/,
+  "Thumbnails should be requested through the secure local recording API.");
+assert.match(app, /expandedLibrarySessions\[session\.id\] && <>/,
+  "Files and comments should remain collapsible so every broadcast is visible.");
+assert.match(app, /IntersectionObserver/,
+  "Thumbnail extraction should be lazy while scrolling.");
+
 assert.match(css, /\.recording-session-card\{/, "Session cards should be styled.");
 assert.match(app, /className="recording-library-video-actions"/, "Recording actions should have a flexible group.");
 assert.match(css, /@media\(max-width:1100px\)\{[\s\S]*?\.recording-library-video-actions\{grid-column:2;/, "Video actions should move below the filename in narrower windows.");
