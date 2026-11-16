@@ -12,6 +12,15 @@ const channelListRule = css.match(/\.recording-channel-list\{([^}]*)\}/)?.[1];
 assert.ok(channelListRule, "Channel list CSS must exist.");
 assert.doesNotMatch(channelListRule, /max-height|overflow:auto|overflow:hidden/, "The entire channel list must not trap scrolling.");
 
+assert.match(app, /<LibraryChannelAvatar displayName=\{group\.displayName\} picture=\{group\.profilePicture\}/,
+  "Library broadcaster cards must show the official Kick avatar when available.");
+assert.match(app, /checkKickChannels\(batch\)/,
+  "Profiles must also be fetched for archived broadcasters, not only monitored channels.");
+assert.match(app, /listCommentFileMessages\(log\.channelSlug, log\.name, 100\)/,
+  "Each saved comment file must support an independent preview.");
+assert.match(css, /\.recording-channel-avatar\{[^}]*border-radius:50%/,
+  "Broadcaster avatars should be round in the Nico-style cards.");
+
 assert.match(app, /className="recording-session-list" role="region" tabIndex=\{0\}/, "The session list should have a keyboard-accessible scroll region.");
 assert.match(app, /window\.setInterval\(refreshIfVisible, 10_000\)/,
   "The library must refresh when files are deleted outside the app.");
