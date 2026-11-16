@@ -2,20 +2,20 @@
 
 Kick配信の映像・音声・コメントを録画・保存するWindowsデスクトップアプリです。24時間の配信監視、コメント付き動画の生成、映像・音声・コメントを組み合わせたAI配信記事に対応しています。
 
-> **最新公開版：0.3.0-alpha.63（α版）**  
-> **次期α版：0.3.1-alpha.64（β→α更新互換性の検証中）**  
+> **最新公開版：0.3.1-alpha.64（α版）**  
+> **次期α版：0.3.2-alpha.65（録画ライブラリ表示修正の公開準備中）**  
 > 現在の開発・テスト対象はα版です。過去に公開したβ版は履歴として保持し、製品版は未完成のため公開・自動更新していません。
 
 ## バージョン・ダウンロード
 
 | 区分 | バージョン | 状態 |
 |---|---|---|
-| 最新公開α版 | `0.3.0-alpha.63` | GitHub ReleasesのPre-release |
+| 最新公開α版 | `0.3.1-alpha.64` | GitHub ReleasesのPre-release |
 | 旧β版（履歴） | `0.1.0-beta.50` | 公開済み・保持 |
-| 次期α版 | `0.3.1-alpha.64` | 旧β版・旧α版の更新互換性を検証中 |
+| 次期α版 | `0.3.2-alpha.65` | 録画ライブラリの削除済みファイル表示修正を検証中 |
 
-- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.3.0-alpha.63)
-- [α版公開候補ブランチ](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/prepare/alpha63-installer-release)
+- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.3.1-alpha.64)
+- [α版公開候補ブランチ](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/release/v0.3.2-alpha.65)
 - [バージョン更新履歴（CHANGELOG）](CHANGELOG.md)
 - [α版・製品版の運用方針](docs/RELEASE_CHANNELS.md)
 
@@ -71,6 +71,15 @@ Kick配信の映像・音声・コメントを録画・保存するWindowsデス
 - リリースノートと過去の更新履歴をアプリ内で確認
 
 ## 最近の更新
+
+### 0.3.2-alpha.65（開発中・未公開）
+
+- 動画やコメントをエクスプローラーから削除したあと、録画ライブラリに空の配信カードが残る不具合を修正。
+- ディスク上に動画・コメントの両方が存在しない場合、履歴メタデータやAI記事が残っていても録画一覧から除外。AI記事自体は記事一覧に保持。
+- 録画ライブラリを表示中に10秒ごとに再スキャンし、ウィンドウへ戻った時も再取得するよう改善。
+- アプリ内の削除操作も即座に配信別一覧へ反映し、残っているコメントだけの記録は維持。
+
+
 
 ### 0.3.1-alpha.64（開発中・未公開）
 - 従来のα版向け `alpha.yml` と旧β版向け `beta.yml`、旧クライアント向け `latest.yml` の3形式を同じWindowsインストーラーから生成・配布します。
