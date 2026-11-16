@@ -343,7 +343,7 @@
 .recording-library-page-header h2{margin:5px 0 4px;color:#edf1f7;font-size:19px}
 .recording-library-page-header p{margin:0;color:#8190a5;font-size:11px}
 .recording-library-page-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.recording-library-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.recording-library-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
 .recording-library-stat{display:flex;flex-direction:column;gap:7px;min-height:72px;padding:14px 16px;border:1px solid #2b3441;border-radius:10px;background:linear-gradient(135deg,#171d29,#121722)}
 .recording-library-stat span{color:#8392a9;font-size:10px}
 .recording-library-stat strong{color:#e7edf7;font-size:21px;font-variant-numeric:tabular-nums}
@@ -481,3 +481,5 @@
   .recording-channel-actions{padding-left:0}
   .recording-session-log-preview{padding:12px}
 }
+
+@media(min-width:761px) and (max-width:1100px){.recording-library-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
