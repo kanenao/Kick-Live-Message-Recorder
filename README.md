@@ -15,7 +15,7 @@ Kick配信の映像・音声・コメントを録画・保存するWindowsデス
 | 最新ソース | `v0.3.1-alpha.64` | α版の公開タグ（mainとは別ライン） |
 
 - [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.3.1-alpha.64)
-- [α版公開候補ブランチ](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/release/v0.3.1-alpha.64)
+- [公開α版のソースコード](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/v0.3.1-alpha.64)
 - [バージョン更新履歴（CHANGELOG）](CHANGELOG.md)
 - [α版・製品版の運用方針](docs/RELEASE_CHANNELS.md)
 
