@@ -876,7 +876,7 @@ export default function App() {
   const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
   const libraryLoadedOnceRef = useRef(false);
   const [librarySearch, setLibrarySearch] = useState("");
-  const [libraryTypeFilter, setLibraryTypeFilter] = useState<"all" | "videos" | "comments">("all");
+  const [libraryTypeFilter, setLibraryTypeFilter] = useState<"all" | "videos" | "comments" | "articles">("all");
   const [isLoadingLibraryLogs, setIsLoadingLibraryLogs] = useState(false);
   const [expandedLibraryVideosChannel, setExpandedLibraryVideosChannel] = useState<string | null>(null);
   const [libraryCommentsChannel, setLibraryCommentsChannel] = useState<string | null>(null);
@@ -1053,6 +1053,7 @@ export default function App() {
     return recordingLibraryChannels.filter(group => {
       if (libraryTypeFilter === "videos" && group.sessions.every(item => item.videos.length === 0)) return false;
       if (libraryTypeFilter === "comments" && group.sessions.every(item => item.logs.length === 0)) return false;
+      if (libraryTypeFilter === "articles" && group.sessions.every(item => !item.article)) return false;
       if (!query) return true;
       const searchable = [
         group.slug, group.displayName,
@@ -2370,6 +2371,7 @@ export default function App() {
           <div className="recording-library-stat"><span>登録ファイル</span><strong>{(recordingFiles.length + commentLogFiles.length).toLocaleString("ja-JP")}</strong></div>
           <div className="recording-library-stat"><span>録画動画</span><strong>{recordingFiles.length.toLocaleString("ja-JP")}</strong></div>
           <div className="recording-library-stat"><span>コメントログ</span><strong>{commentLogFiles.length.toLocaleString("ja-JP")}</strong></div>
+          <div className="recording-library-stat"><span>AI記事付きの配信</span><strong>{recordingSessions.filter(session => Boolean(session.article)).length.toLocaleString("ja-JP")}</strong></div>
         </div>
 
         <div className="recording-library-filter-row">
@@ -2379,10 +2381,11 @@ export default function App() {
           </label>
           <label>
             <span>表示する種類</span>
-            <select value={libraryTypeFilter} onChange={event => setLibraryTypeFilter(event.target.value as "all" | "videos" | "comments")}>
+            <select value={libraryTypeFilter} onChange={event => setLibraryTypeFilter(event.target.value as "all" | "videos" | "comments" | "articles")}>
               <option value="all">すべて</option>
               <option value="videos">録画動画あり</option>
               <option value="comments">コメントログあり</option>
+              <option value="articles">AI記事付きの録画</option>
             </select>
           </label>
         </div>
