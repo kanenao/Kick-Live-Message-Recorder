@@ -201,7 +201,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.3.4-alpha.67";
+const APP_VERSION = "0.3.5-alpha.68";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -229,6 +229,18 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.3.5-alpha.68",
+    title: "録画ライブラリをコンパクト化・動画フレームのサムネイルに対応",
+    changes: [
+      "大きな配信カードを約75pxのコンパクトな行に変更し一度に多くの配信を表示",
+      "保存済み動画の映像からFFmpegで320x180のサムネイルを生成・キャッシュ",
+      "動画プレビューをクリックすると保存した録画の再生を開始",
+      "動画・コメント・AI記事の詳細は必要な配信だけ展開できるよう整理",
+      "配信者一覧の二重スクロールをなくして画面全体でスクロール",
+      "壊れた動画や録画中はサムネイル取得をスキップし従来表示に戻す"
+    ]
+  },
   {
     version: "0.3.4-alpha.67",
     title: "録画・コメントのファイル名を配信者名と配信日時に統一",
