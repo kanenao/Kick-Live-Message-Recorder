@@ -26,6 +26,16 @@ try {
   utimesSync(olderPath, oldTime, oldTime);
   utimesSync(newerPath, newTime, newTime);
 
+  const olderOnly = await listRecentCommentMessages(root, "sample_channel", 200, "2026-11-13.jsonl");
+  assert.deepEqual(olderOnly.map(item => item.eventId), ["old-2", "old-1"],
+    "Selected log must not include a different broadcast/date.");
+  const newerOnly = await listRecentCommentMessages(root, "sample_channel", 200, "2026-11-14.jsonl");
+  assert.deepEqual(newerOnly.map(item => item.eventId), ["new-1"]);
+  assert.deepEqual(await listRecentCommentMessages(root, "sample_channel", 100, "absent.jsonl"), [],
+    "Deleted log should not resurrect comments.");
+  await assert.rejects(() => listRecentCommentMessages(root, "sample_channel", 100, "../escape.jsonl"), /ファイル名/);
+  await assert.rejects(() => listRecentCommentMessages(root, "sample_channel", 100, "other\\escape.jsonl"), /ファイル名/);
+
   const latest = await listRecentCommentMessages(root, "sample_channel", 2);
   assert.deepEqual(latest.map(item => item.eventId), ["new-1", "old-2"]);
   assert.equal(latest[0].senderUsername, "carol");

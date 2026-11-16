@@ -1632,9 +1632,9 @@ function registerIpcHandlers(): void {
     return listCommentLogFiles(getRecordingOutputDirectory());
   });
 
-  ipcMain.handle("library:recent-comments", async (event, channelSlug: unknown, limit?: unknown) => {
+  ipcMain.handle("library:recent-comments", async (event, channelSlug: unknown, limit?: unknown, fileName?: unknown) => {
     assertTrustedSender(event);
-    return listRecentCommentMessages(getRecordingOutputDirectory(), channelSlug, limit);
+    return listRecentCommentMessages(getRecordingOutputDirectory(), channelSlug, limit, fileName);
   });
 
   ipcMain.handle("comment-video:preview", async (event, input: unknown) => {

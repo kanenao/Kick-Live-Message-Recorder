@@ -320,6 +320,8 @@ const api = {
   listCommentLogFiles: (): Promise<CommentLogFile[]> => ipcRenderer.invoke("comment-video:list-logs"),
   listRecentCommentMessages: (channelSlug: string, limit = 100): Promise<LibraryCommentMessage[]> =>
     ipcRenderer.invoke("library:recent-comments", channelSlug, limit),
+  listCommentFileMessages: (channelSlug: string, fileName: string, limit = 100): Promise<LibraryCommentMessage[]> =>
+    ipcRenderer.invoke("library:recent-comments", channelSlug, limit, fileName),
   previewCommentVideo: (input: { videoPath: string; chatPaths: string[]; delaySeconds?: number }): Promise<CommentVideoPreviewResult> =>
     ipcRenderer.invoke("comment-video:preview", input),
   startCommentVideo: (options: CommentVideoOptions): Promise<{ ok: true; outputPath: string }> => ipcRenderer.invoke("comment-video:start", options),

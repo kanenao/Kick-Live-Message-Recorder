@@ -163,6 +163,7 @@ type LibrarySession = {
 type RecordingLibraryChannel = {
   slug: string;
   displayName: string;
+  profilePicture: string | null;
   videos: RecordingFile[];
   logs: CommentLogFile[];
   sessions: LibrarySession[];
@@ -798,6 +799,17 @@ function ArticleBroadcastFrame({ article }: { article: StreamArticle }) {
   </figure>;
 }
 
+function LibraryChannelAvatar({ displayName, picture }: { displayName: string; picture: string | null }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setFailed(false); }, [picture]);
+  const safePicture = typeof picture === "string" && /^https:\/\//i.test(picture) ? picture : null;
+  return <div className="recording-channel-avatar" aria-hidden="true">
+    <span>{displayName.slice(0, 1).toUpperCase()}</span>
+    {safePicture && !failed && <img src={safePicture} alt="" loading="lazy" referrerPolicy="no-referrer"
+      onError={() => setFailed(true)} />}
+  </div>;
+}
+
 export default function App() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [recordingOnlyChannels, setRecordingOnlyChannels] = useState<Channel[]>([]);
@@ -836,6 +848,9 @@ export default function App() {
   const [chatSetupMessage, setChatSetupMessage] = useState("");
   const [isStartingChat, setIsStartingChat] = useState(false);
   const [channelChecks, setChannelChecks] = useState<Record<string, ChannelCheck>>({});
+  const [libraryProfiles, setLibraryProfiles] = useState<Record<string, ChannelCheck>>({});
+  const libraryProfileLastFetchRef = useRef<Map<string, number>>(new Map());
+  const [libraryProfileRefreshKey, setLibraryProfileRefreshKey] = useState(0);
   const [liveClock, setLiveClock] = useState(() => Date.now());
   const [isCheckingChannels, setIsCheckingChannels] = useState(false);
   const [lastChannelCheck, setLastChannelCheck] = useState("");
@@ -861,13 +876,18 @@ export default function App() {
   const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
   const libraryLoadedOnceRef = useRef(false);
   const [librarySearch, setLibrarySearch] = useState("");
-  const [libraryTypeFilter, setLibraryTypeFilter] = useState<"all" | "videos" | "comments">("all");
+  const [libraryTypeFilter, setLibraryTypeFilter] = useState<"all" | "videos" | "comments" | "articles">("all");
   const [isLoadingLibraryLogs, setIsLoadingLibraryLogs] = useState(false);
   const [expandedLibraryVideosChannel, setExpandedLibraryVideosChannel] = useState<string | null>(null);
   const [libraryCommentsChannel, setLibraryCommentsChannel] = useState<string | null>(null);
   const [libraryComments, setLibraryComments] = useState<LibraryCommentMessage[]>([]);
   const [isLoadingLibraryComments, setIsLoadingLibraryComments] = useState(false);
   const [libraryCommentsError, setLibraryCommentsError] = useState("");
+  const [librarySelectedLogPath, setLibrarySelectedLogPath] = useState<string | null>(null);
+  const [libraryLogMessages, setLibraryLogMessages] = useState<LibraryCommentMessage[]>([]);
+  const [libraryLogLoading, setLibraryLogLoading] = useState(false);
+  const [libraryLogError, setLibraryLogError] = useState("");
+  const libraryLogRequestRef = useRef(0);
   const libraryCommentRequestRef = useRef(0);
   const [commentLogFiles, setCommentLogFiles] = useState<CommentLogFile[]>([]);
   const [selectedCommentVideoPath, setSelectedCommentVideoPath] = useState("");
@@ -959,8 +979,15 @@ export default function App() {
       let group = groups.get(slug);
       if (!group) {
         const registered = [...channels, ...recordingOnlyChannels].find(ch => ch.name.toLowerCase() === slug);
-        group = { slug, displayName: channelChecks[slug]?.displayName || registered?.name || slug,
-          videos: [], logs: [], sessions: [], latestAt: "" };
+        const profile = libraryProfiles[slug];
+        const monitored = channelChecks[slug];
+        group = {
+          slug,
+          displayName: profile?.found && profile.displayName ? profile.displayName
+            : monitored?.displayName || registered?.name || slug,
+          profilePicture: profile?.profilePicture || monitored?.profilePicture || null,
+          videos: [], logs: [], sessions: [], latestAt: ""
+        };
         groups.set(slug, group);
       }
       return group;
@@ -983,13 +1010,50 @@ export default function App() {
         logs: [...group.logs].sort((a,b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt))
       };
     }).sort((a,b) => Date.parse(b.latestAt) - Date.parse(a.latestAt));
-  }, [recordingSessions, recordingFiles, commentLogFiles, channels, recordingOnlyChannels, channelChecks]);
+  }, [recordingSessions, recordingFiles, commentLogFiles, channels, recordingOnlyChannels, channelChecks, libraryProfiles]);
+
+  const libraryProfileSlugs = recordingLibraryChannels.map(group => group.slug)
+    .filter(slug => /^[a-zA-Z0-9_]{1,25}$/.test(slug)).join("|");
+
+  useEffect(() => {
+    if (tab !== "library" || !isDesktop || !window.kickRecorder || !libraryProfileSlugs) return;
+    const now = Date.now();
+    const slugs = libraryProfileSlugs.split("|").filter(slug =>
+      (libraryProfileLastFetchRef.current.get(slug) ?? 0) <= now);
+    if (!slugs.length) return;
+    let cancelled = false;
+    // Fetch historically recorded broadcasters as well as watched ones. Do not
+    // call Kick every 10s when the filesystem scanner refreshes the list.
+    void (async () => {
+      for (let i = 0; i < slugs.length && !cancelled; i += 50) {
+        const batch = slugs.slice(i, i + 50);
+        try {
+          const profiles = await window.kickRecorder!.checkKickChannels(batch);
+          if (cancelled) return;
+          const fetchedAt = Date.now();
+          for (const slug of batch) libraryProfileLastFetchRef.current.set(slug, fetchedAt + 6 * 60 * 60 * 1000);
+          setLibraryProfiles(previous => ({
+            ...previous,
+            ...Object.fromEntries(profiles.filter(profile => profile.found).map(profile => [profile.slug, profile]))
+          }));
+        } catch {
+          if (cancelled) return;
+          // Credentials, rate limits or connection errors must not block the
+          // library: keep text avatars and allow a retry after 2 minutes.
+          for (const slug of batch) libraryProfileLastFetchRef.current.set(slug, Date.now() + 2 * 60 * 1000);
+          return;
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [tab, isDesktop, libraryProfileSlugs, libraryProfileRefreshKey]);
 
   const filteredRecordingLibraryChannels = useMemo(() => {
     const query = librarySearch.trim().toLocaleLowerCase("ja-JP");
     return recordingLibraryChannels.filter(group => {
       if (libraryTypeFilter === "videos" && group.sessions.every(item => item.videos.length === 0)) return false;
       if (libraryTypeFilter === "comments" && group.sessions.every(item => item.logs.length === 0)) return false;
+      if (libraryTypeFilter === "articles" && group.sessions.every(item => !item.article)) return false;
       if (!query) return true;
       const searchable = [
         group.slug, group.displayName,
@@ -1222,6 +1286,16 @@ export default function App() {
   }, [tab, libraryCommentsChannel, commentLogFiles]);
 
   useEffect(() => {
+    if (librarySelectedLogPath && !commentLogFiles.some(log => log.path === librarySelectedLogPath)) {
+      libraryLogRequestRef.current += 1;
+      setLibrarySelectedLogPath(null);
+      setLibraryLogMessages([]);
+      setLibraryLogError("");
+      setLibraryLogLoading(false);
+    }
+  }, [commentLogFiles, librarySelectedLogPath]);
+
+  useEffect(() => {
     if (!isDesktop || !window.kickRecorder) return;
     return window.kickRecorder.onLiveArticleCaptureStatus(status => setLiveArticleCaptureStatus(status));
   }, [isDesktop]);
@@ -1353,6 +1427,33 @@ export default function App() {
       setRecordingMessage("");
     } catch (error) {
       setRecordingMessage(error instanceof Error ? error.message : "保存場所を開けませんでした。");
+    }
+  }
+
+  async function toggleLibraryLog(log: CommentLogFile) {
+    if (!window.kickRecorder) return;
+    if (librarySelectedLogPath === log.path) {
+      libraryLogRequestRef.current += 1;
+      setLibrarySelectedLogPath(null);
+      setLibraryLogMessages([]);
+      setLibraryLogError("");
+      setLibraryLogLoading(false);
+      return;
+    }
+    const id = ++libraryLogRequestRef.current;
+    setLibrarySelectedLogPath(log.path);
+    setLibraryLogMessages([]);
+    setLibraryLogError("");
+    setLibraryLogLoading(true);
+    try {
+      const messages = await window.kickRecorder.listCommentFileMessages(log.channelSlug, log.name, 100);
+      if (id === libraryLogRequestRef.current) setLibraryLogMessages(messages);
+    } catch (error) {
+      if (id === libraryLogRequestRef.current) {
+        setLibraryLogError(error instanceof Error ? error.message : "コメントログを表示できませんでした。");
+      }
+    } finally {
+      if (id === libraryLogRequestRef.current) setLibraryLogLoading(false);
     }
   }
 
@@ -2262,7 +2363,7 @@ export default function App() {
           </div>
           <div className="recording-library-page-actions">
             <button className="small-action" onClick={() => void openRecordingFolder()} disabled={!isDesktop}>保存場所を開く</button>
-            <button className="primary-small" onClick={() => setLibraryRefreshKey(value => value + 1)} disabled={!isDesktop || isLoadingRecordings || isLoadingLibraryLogs || deletingRecordingPath !== null}>一覧を更新</button>
+            <button className="primary-small" onClick={() => { libraryProfileLastFetchRef.current.clear(); setLibraryProfileRefreshKey(value => value + 1); setLibraryRefreshKey(value => value + 1); }} disabled={!isDesktop || isLoadingRecordings || isLoadingLibraryLogs || deletingRecordingPath !== null}>一覧を更新</button>
           </div>
         </div>
 
@@ -2270,6 +2371,7 @@ export default function App() {
           <div className="recording-library-stat"><span>登録ファイル</span><strong>{(recordingFiles.length + commentLogFiles.length).toLocaleString("ja-JP")}</strong></div>
           <div className="recording-library-stat"><span>録画動画</span><strong>{recordingFiles.length.toLocaleString("ja-JP")}</strong></div>
           <div className="recording-library-stat"><span>コメントログ</span><strong>{commentLogFiles.length.toLocaleString("ja-JP")}</strong></div>
+          <div className="recording-library-stat"><span>AI記事付きの配信</span><strong>{recordingSessions.filter(session => Boolean(session.article)).length.toLocaleString("ja-JP")}</strong></div>
         </div>
 
         <div className="recording-library-filter-row">
@@ -2279,10 +2381,11 @@ export default function App() {
           </label>
           <label>
             <span>表示する種類</span>
-            <select value={libraryTypeFilter} onChange={event => setLibraryTypeFilter(event.target.value as "all" | "videos" | "comments")}>
+            <select value={libraryTypeFilter} onChange={event => setLibraryTypeFilter(event.target.value as "all" | "videos" | "comments" | "articles")}>
               <option value="all">すべて</option>
               <option value="videos">録画動画あり</option>
               <option value="comments">コメントログあり</option>
+              <option value="articles">AI記事付きの録画</option>
             </select>
           </label>
         </div>
@@ -2299,11 +2402,11 @@ export default function App() {
                 : <div className="recording-channel-list">
                     {filteredRecordingLibraryChannels.map(group => <article className="recording-channel-card" key={group.slug}>
                       <div className="recording-channel-summary">
-                        <div className="recording-channel-avatar">{group.displayName.slice(0, 1).toUpperCase()}</div>
+                        <LibraryChannelAvatar displayName={group.displayName} picture={group.profilePicture} />
                         <div className="recording-channel-info">
                           <strong>{group.displayName}</strong>
                           <small>@{group.slug}</small>
-                          <small>配信 {group.sessions.length}件 ・ 録画動画 {group.videos.length}件 ・ コメントログ {group.logs.length}件{group.latestAt ? " ・ " + new Date(group.latestAt).toLocaleString("ja-JP") : ""}</small>
+                          <small>配信 {group.sessions.length}件 ・ 録画動画 {group.videos.length}件 ・ コメントログ {group.logs.length}件{group.latestAt ? " ・ 最終保存 " + new Date(group.latestAt).toLocaleString("ja-JP") : ""}</small>
                         </div>
                         <div className="recording-channel-actions">
                           <button className="primary-small" onClick={() => setExpandedLibraryVideosChannel(current => current === group.slug ? null : group.slug)} disabled={group.sessions.length === 0}>
@@ -2363,14 +2466,42 @@ export default function App() {
                                 </button>
                               </div>
                             </div>)}
-                            {session.logs.map(log => <div className="recording-session-file" key={log.path}>
-                              <span className="recording-session-file-type">コメント・JSONL</span>
-                              <div className="recording-file-info"><strong title={log.name}>{log.name}</strong>
-                                <small>{new Date(log.modifiedAt).toLocaleString("ja-JP")} ・ {(log.size / 1024).toFixed(1)} KB</small>
+                            {session.logs.map(log => <div className="recording-session-log" key={log.path}>
+                              <div className="recording-session-file">
+                                <span className="recording-session-file-type log">コメント・JSONL</span>
+                                <div className="recording-file-info"><strong title={log.name}>{log.name}</strong>
+                                  <small>{new Date(log.modifiedAt).toLocaleString("ja-JP")} ・ {(log.size / 1024).toFixed(1)} KB
+                                    {session.commentAssociation !== "exact" && " ・ 対応する配信は未確認"}
+                                  </small>
+                                </div>
+                                <div className="recording-library-video-actions">
+                                  <button className="primary-small" onClick={() => void toggleLibraryLog(log)}>
+                                    {librarySelectedLogPath === log.path ? "コメントを閉じる" : "コメントを見る"}
+                                  </button>
+                                  <button className="small-action" onClick={() => void openRecordingFile(log.path)}>開く</button>
+                                  <button className="small-action" onClick={() => void revealRecordingFile(log.path)}>場所</button>
+                                </div>
                               </div>
-                              <div className="recording-library-video-actions">
-                                <button className="small-action" onClick={() => void revealRecordingFile(log.path)}>保存場所</button>
-                              </div>
+                              {librarySelectedLogPath === log.path && <div className="recording-session-log-preview" role="region" aria-label={log.name + "の保存済みコメント"}>
+                                <div className="recording-library-expanded-title">
+                                  <strong>保存済みコメント</strong><span>{libraryLogLoading ? "読込中" : "直近 " + libraryLogMessages.length + "件"}</span>
+                                </div>
+                                {libraryLogError
+                                  ? <div className="empty-inline">{libraryLogError}</div>
+                                  : libraryLogLoading
+                                    ? <div className="empty-inline">コメントを読み込んでいます...</div>
+                                    : libraryLogMessages.length === 0
+                                      ? <div className="empty-inline">このファイルに表示できるコメントはありません。</div>
+                                      : <div className="recording-library-comment-list">
+                                          {libraryLogMessages.map((message, index) => <article className="recording-library-comment-row" key={message.eventId || message.createdAt + ":" + index}>
+                                            <div className="recording-library-comment-meta">
+                                              <strong style={message.usernameColor ? { color: message.usernameColor } : undefined}>{message.senderUsername}</strong>
+                                              <time>{new Date(message.createdAt).toLocaleString("ja-JP")}</time>
+                                            </div>
+                                            <p>{message.content}</p>
+                                          </article>)}
+                                        </div>}
+                              </div>}
                             </div>)}
                             {!session.article && session.videos.length > 0 && <div className="recording-session-actions">
                               <button className="small-action" onClick={() => {
