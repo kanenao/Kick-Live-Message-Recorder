@@ -3,6 +3,7 @@ import { basename, extname, join, resolve } from "node:path";
 import { listRecordingFiles, type RecordingFile } from "./recording";
 import { listCommentLogFiles, type CommentLogFile } from "./comment-video";
 import { listStreamArticles, type StreamArticle } from "./articles";
+import { parseBroadcastFileStem } from "./recording-filenames";
 
 
 export type LibrarySession = {
@@ -32,7 +33,7 @@ type SessionMetadata = {
 };
 
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mkv", ".ts", ".webm", ".m4v", ".mov"]);
-const SESSION_ID_REGEX = /^[a-zA-Z0-9_-]{1,180}$/;
+const SESSION_ID_REGEX = /^[^<>:"/\\|?*\x00-\x1f]{1,180}$/;
 const VOD_UUID = "[a-f0-9-]{20,40}";
 
 function parseStamp(input: string): string | null {
@@ -51,6 +52,14 @@ export function classifyRecordingFile(fileName: string, modifiedAt: string): {
 } | null {
   if (typeof fileName !== "string" || !VIDEO_EXTENSIONS.has(extname(fileName).toLowerCase())) return null;
   const base = fileName.slice(0, -extname(fileName).length);
+  const modern = parseBroadcastFileStem(fileName);
+  if (modern) {
+    const id = modern.kind === "VOD" && modern.videoId
+      ? modern.slug + "_VOD_" + modern.videoId
+      : modern.slug + "_LIVE_" + (modern.startedAt ?? "date-unknown");
+    return { id, slug: modern.slug, kind: modern.kind,
+      startedAt: modern.startedAt ?? modifiedAt };
+  }
   const batch = base.match(new RegExp("^([a-zA-Z0-9_-]{1,40})_VOD_("+ VOD_UUID +")_.+$", "i"));
   if (batch) {
     const slug = batch[1].toLowerCase();
@@ -115,7 +124,11 @@ export function buildRecordingSessions(
   }
   for (const meta of metadata) {
     if (!meta.id || !meta.slug || !meta.kind || !meta.startedAt) continue;
-    const s = ensure(meta.id, meta.slug.toLowerCase(), meta.kind, meta.startedAt);
+    const modern = parseBroadcastFileStem(meta.id + ".mp4");
+    const id = modern ? (modern.kind === "VOD" && modern.videoId
+      ? modern.slug + "_VOD_" + modern.videoId
+      : modern.slug + "_LIVE_" + (modern.startedAt ?? "date-unknown")) : meta.id;
+    const s = ensure(id, meta.slug.toLowerCase(), meta.kind, meta.startedAt);
     s.startedAt = meta.startedAt;
     if (meta.finishedAt && Number.isFinite(Date.parse(meta.finishedAt))) s.endedAt = meta.finishedAt;
     if (meta.status === "failed" || meta.status === "stopped") s.status = meta.status === "failed" ? "failed" : "interrupted";
@@ -156,6 +169,16 @@ export function buildRecordingSessions(
   for (const log of commentLogs) {
     if (!log || typeof log.channelSlug !== "string") continue;
     const slug = log.channelSlug.toLowerCase();
+    const modern = parseBroadcastFileStem(log.name);
+    if (modern && modern.slug === slug) {
+      const id = modern.kind === "VOD" && modern.videoId
+        ? slug + "_VOD_" + modern.videoId
+        : slug + "_LIVE_" + (modern.startedAt ?? "date-unknown");
+      const s = ensure(id, slug, modern.kind, modern.startedAt ?? log.modifiedAt);
+      s.logs.push(log);
+      s.commentAssociation = modern.startedAt ? "exact" : "none";
+      continue;
+    }
     const vod = log.kind === "VOD" ? log.name.match(new RegExp("^VOD_("+ VOD_UUID +")_", "i")) : null;
     if (vod) {
       const id = slug + "_VOD_" + vod[1].toLowerCase();

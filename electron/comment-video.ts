@@ -22,6 +22,8 @@ import { resolveVideoTimelineAnchor, type VideoTimelineSyncSource } from "./reco
 
 const execFileAsync = promisify(execFile);
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mkv", ".ts", ".webm", ".m4v", ".mov"]);
+import { parseBroadcastFileStem } from "./recording-filenames";
+
 const MAX_CHAT_RECORDS = 250_000;
 
 export type CommentLogFile = {
@@ -332,7 +334,7 @@ export function listCommentLogFiles(outputDirectory: string): CommentLogFile[] {
           path: fullPath,
           name: basename(entry.name),
           channelSlug: channelEntry.name,
-          kind: /^VOD_/i.test(entry.name) ? "VOD" : "LIVE",
+          kind: /^VOD_/i.test(entry.name) || parseBroadcastFileStem(entry.name)?.kind === "VOD" ? "VOD" : "LIVE",
           size: stats.size,
           modifiedAt: stats.mtime.toISOString()
         });
@@ -417,7 +419,7 @@ export async function previewCommentVideo(
     !/^[a-zA-Z0-9_-]{1,40}$/.test(basename(channelDirectory))) {
     throw new Error("複数選択する場合は、同じチャンネルフォルダー内のコメントログを選択してください。");
   }
-  const chatKinds = new Set(chatPaths.map(path => /^VOD_/i.test(basename(path)) ? "VOD" : "LIVE"));
+  const chatKinds = new Set(chatPaths.map(path => (/^VOD_/i.test(basename(path)) || parseBroadcastFileStem(basename(path))?.kind === "VOD") ? "VOD" : "LIVE"));
   if (chatKinds.size !== 1 || (chatKinds.has("VOD") && chatPaths.length > 1)) {
     throw new Error("LIVEログとVODログは混在できません。VODログは1ファイルずつ選択してください。");
   }
@@ -566,7 +568,7 @@ export class KickCommentVideoGenerator {
       !/^[a-zA-Z0-9_-]{1,40}$/.test(basename(channelDirectory))) {
       throw new Error("複数選択する場合は、同じチャンネルフォルダー内のコメントログを選択してください。");
     }
-    const chatKinds = new Set(chatPaths.map(path => /^VOD_/i.test(basename(path)) ? "VOD" : "LIVE"));
+    const chatKinds = new Set(chatPaths.map(path => (/^VOD_/i.test(basename(path)) || parseBroadcastFileStem(basename(path))?.kind === "VOD") ? "VOD" : "LIVE"));
     if (chatKinds.size !== 1 || (chatKinds.has("VOD") && chatPaths.length > 1)) {
       throw new Error("LIVEログとVODログは混在できません。VODログは1ファイルずつ生成してください。");
     }

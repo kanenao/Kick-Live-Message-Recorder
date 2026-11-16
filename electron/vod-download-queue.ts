@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { basename, extname, join, resolve, sep } from "node:path";
+import { broadcastFileStem } from "./recording-filenames";
 
 export type VodDownloadStatus = "queued" | "downloading" | "completed" | "cancelled" | "error";
 
@@ -90,10 +91,13 @@ export class KickVodDownloadManager {
 
   private readonly onChange: (job: VodDownloadJob) => void;
   private readonly spawnProcess: typeof spawn;
+  private readonly resolveBroadcastInfo?: (url: string) => Promise<{ startedAt: string; displayName: string }>;
 
-  constructor(onChange: (job: VodDownloadJob) => void, spawnProcess: typeof spawn = spawn) {
+  constructor(onChange: (job: VodDownloadJob) => void, spawnProcess: typeof spawn = spawn,
+    resolveBroadcastInfo?: (url: string) => Promise<{ startedAt: string; displayName: string }>) {
     this.onChange = onChange;
     this.spawnProcess = spawnProcess;
+    this.resolveBroadcastInfo = resolveBroadcastInfo;
   }
 
   hasActiveDownloads(): boolean {
@@ -141,7 +145,9 @@ export class KickVodDownloadManager {
       };
       this.jobs.set(id, {
         data, outputDirectory: directory,
-        outputPrefix: join(directory, `${item.slug}_VOD_${item.videoId}_`),
+        outputPrefix: join(directory, broadcastFileStem({
+          slug: item.slug, displayName: item.slug, startedAt: null, kind: "VOD", videoId: item.videoId
+        })),
         child: null, stderrTail: "", stdoutBuffer: "", stopRequested: false,
         settled: false, lastProgressEvent: 0
       });
@@ -205,12 +211,51 @@ export class KickVodDownloadManager {
   }
 
   private launch(id: string, job: InternalJob): void {
+    if (!this.resolveBroadcastInfo) {
+      this.startProcess(id, job);
+      return;
+    }
+    job.data.message = "Kickの配信開始日時を取得しています。";
+    this.emit(id);
+    void this.resolveBroadcastInfo(job.data.url).then(info => {
+      if (job.stopRequested || job.settled || this.stopping) {
+        this.finish(id, "cancelled", "ダウンロードを停止しました。");
+        return;
+      }
+      job.outputPrefix = join(job.outputDirectory, broadcastFileStem({
+        slug: job.data.slug, displayName: info.displayName,
+        startedAt: info.startedAt, kind: "VOD", videoId: job.data.videoId
+      }));
+      this.startProcess(id, job);
+    }).catch(error => {
+      if (job.stopRequested || job.settled || this.stopping) {
+        this.finish(id, "cancelled", "ダウンロードを停止しました。");
+        return;
+      }
+      // Never invent a broadcast date from the download time.
+      job.data.message = "配信日時を取得できなかったため、日時未取得として保存します：" +
+        (error instanceof Error ? error.message : String(error));
+      this.emit(id);
+      this.startProcess(id, job);
+    });
+  }
+
+  private startProcess(id: string, job: InternalJob): void {
+    const stem = job.outputPrefix;
+    let target = stem;
+    let take = 2;
+    while (readdirSync(job.outputDirectory).some(name =>
+      name === basename(target) + ".mp4" || name === basename(target) + ".mkv" ||
+      name === basename(target) + ".ts" || name === basename(target) + ".webm")) {
+      target = stem + "_take" + take++;
+    }
+    job.outputPrefix = target;
     const args = [
       "--no-warnings", "--no-color", "--newline", "--no-playlist",
       "--no-part", "--no-overwrites", "--socket-timeout", "30",
       "--retries", "10", "--fragment-retries", "10",
       "--format", "best",
-      "--output", `${job.outputPrefix}%(title).90B.%(ext)s`,
+      "--output", `${job.outputPrefix}.%(ext)s`,
       "--print", "after_move:filepath",
       ...(existsSync(findExecutable("ffmpeg")) ? ["--ffmpeg-location", findExecutable("ffmpeg")] : []),
       job.data.url

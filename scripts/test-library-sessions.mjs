@@ -50,6 +50,29 @@ const failures = buildRecordingSessions([], [], [], [{
   kind: "LIVE", startedAt: "2026-11-15T06:20:00.000Z", status: "completed"
 }]);
 assert.equal(failures.length, 0, "録画ファイルのない完了記録だけではライブラリに残さない");
+
+const broadcastStem = "だいぶつv2__daibututv2__2026-11-16_20-54-47__LIVE";
+const modernVodStem = "だいぶつv2__daibututv2__2026-11-16_20-54-47__VOD_" + uuid;
+const modern = buildRecordingSessions([
+  file(broadcastStem + ".mp4"),
+  file(broadcastStem + "_retry02.ts"),
+  file(modernVodStem + ".mp4")
+], [
+  log("daibututv2", broadcastStem + ".jsonl", "LIVE"),
+  log("daibututv2", modernVodStem + ".jsonl", "VOD")
+], [], [{
+  schemaVersion: 1, id: broadcastStem, slug: "daibututv2", kind: "LIVE",
+  startedAt: "2026-11-16T11:54:47.000Z", status: "completed"
+}]);
+assert.equal(modern.length, 2, "Video and comments for each modern broadcast should be grouped");
+const modernLive = modern.find(s => s.kind === "LIVE");
+const modernVod = modern.find(s => s.kind === "VOD");
+assert.equal(modernLive.videos.length, 2, "Retry recording files remain in one session");
+assert.equal(modernLive.logs.length, 1, "LIVE chat joins matching video by actual start time");
+assert.equal(modernLive.commentAssociation, "exact");
+assert.equal(modernVod.videos.length, 1);
+assert.equal(modernVod.logs.length, 1, "VOD joins by UUID, not download timestamp");
+
 assert.equal(buildRecordingSessions([], [], [article]).length, 0,
   "AI記事のJSONだけが残っても空の録画カードを再作成しない");
 const commentOnly = buildRecordingSessions([], [log("sample", "2026-11-15.jsonl", "LIVE")], [], []);

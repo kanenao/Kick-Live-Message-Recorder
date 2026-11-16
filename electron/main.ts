@@ -18,7 +18,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileS
 import { join } from "node:path";
 import { autoUpdater } from "electron-updater";
 import { KickChatReceiver } from "./chat";
-import { KickVodChatDownloader } from "./vod-chat";
+import { KickVodChatDownloader, getVodBroadcastDetails } from "./vod-chat";
 import { KickVodDownloadManager } from "./vod-download-queue";
 import { listLibrarySessions } from "./library-sessions";
 import { KickCommentVideoGenerator, listCommentLogFiles, previewCommentVideo } from "./comment-video";
@@ -630,6 +630,7 @@ const liveArticleManager = new LiveStreamArticleManager(
 // Intentional user stop must not be undone by background auto-recording during the same LIVE.
 const manuallyStoppedLiveBroadcasts = new Map<string, string | null>();
 const backgroundConfirmedOfflinePolls = new Map<string, number>();
+const liveRecordingFileTimes = new Map<string, string>();
 const autoRecordingRetryNotBefore = new Map<string, number>();
 
 async function resolveCurrentKickLive(slug: string): Promise<{ isLive: boolean; startedAt: string | null } | null> {
@@ -675,7 +676,7 @@ const vodChatDownloader = new KickVodChatDownloader(event => {
 
 const vodDownloadManager = new KickVodDownloadManager(job => {
   mainWindow?.webContents.send("vod-download:status", job);
-});
+}, undefined, getVodBroadcastDetails);
 
 type ArticleLiveMetadata = {
   slug: string;
@@ -1133,10 +1134,16 @@ async function runBackgroundMonitor(): Promise<void> {
         void stopArticleFrameCapture(result.slug).finally(() => liveArticleManager.finishStream(articleMetadata));
       }
       if (confirmedOffline) {
+        chatReceiver.clearBroadcastSession(result.slug);
+        liveRecordingFileTimes.delete(result.slug);
         manuallyStoppedLiveBroadcasts.delete(result.slug);
         autoRecordingRetryNotBefore.delete(result.slug);
       }
       if (!live) continue;
+      const filenameStart = result.startedAt ??
+        (liveRecordingFileTimes.get(result.slug) || new Date().toISOString());
+      liveRecordingFileTimes.set(result.slug, filenameStart);
+      chatReceiver.setBroadcastSession(result.slug, filenameStart, result.displayName || result.slug);
 
       const manualStopStream = manuallyStoppedLiveBroadcasts.get(result.slug);
       if (manualStopStream !== undefined && manualStopStream && result.startedAt &&
@@ -1163,7 +1170,9 @@ async function runBackgroundMonitor(): Promise<void> {
           recordingManager.start(result.slug, getRecordingOutputDirectory(), {
             retryCount: state.settings.recordingRetryCount,
             retryDelaySeconds: state.settings.recordingRetryDelaySeconds,
-            streamStartedAt: result.startedAt
+            streamStartedAt: result.startedAt,
+            filenameStartedAt: filenameStart,
+            displayName: result.displayName || result.slug
           });
           recordingStarted = true;
         } catch (error) {
@@ -1428,6 +1437,22 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("chat:start", async (event, slugs: unknown) => {
     assertTrustedSender(event);
+    if (Array.isArray(slugs)) {
+      const requested = slugs.filter((slug): slug is string => typeof slug === "string" &&
+        /^[a-zA-Z0-9_]{1,25}$/.test(slug));
+      if (requested.length > 0 && getKickCredentialsStatus().configured) {
+        try {
+          const channels = await checkKickChannels(requested, false);
+          for (const channel of channels) {
+            if (channel.found && channel.isLive) {
+              chatReceiver.setBroadcastSession(channel.slug, channel.startedAt, channel.displayName || channel.slug);
+            }
+          }
+        } catch {
+          // Retain legacy date-based log for unknown LIVE state.
+        }
+      }
+    }
     return chatReceiver.start(slugs);
   });
 
@@ -1481,19 +1506,50 @@ function registerIpcHandlers(): void {
     return vodDownloadManager.cancel(id);
   });
 
-  ipcMain.handle("recording:start", (event, slug: unknown, sourceUrl?: unknown) => {
+  ipcMain.handle("recording:start", async (event, slug: unknown, sourceUrl?: unknown) => {
     assertTrustedSender(event);
     const settings = readState().settings;
+    const requestedSlug = typeof slug === "string" ? slug.toLowerCase() : "";
+    const monitored = backgroundMonitorStatus.results.find(item => item.slug === requestedSlug);
+    let startedAt = monitored?.startedAt ?? null;
+    let displayName = monitored?.displayName || requestedSlug;
+    if (sourceUrl !== undefined && typeof sourceUrl === "string") {
+      try {
+        const details = await getVodBroadcastDetails(sourceUrl);
+        startedAt = details.startedAt;
+        displayName = details.displayName;
+      } catch {
+        startedAt = null; // Never mislabel a VOD with its download date.
+      }
+    } else if (!startedAt && /^[a-zA-Z0-9_]{1,25}$/.test(requestedSlug) &&
+               getKickCredentialsStatus().configured) {
+      try {
+        const [channel] = await checkKickChannels([requestedSlug], true);
+        if (channel?.found && channel.isLive) {
+          startedAt = channel.startedAt;
+          displayName = channel.displayName || requestedSlug;
+        }
+      } catch {
+        // Manual recording must remain usable when Kick API is unavailable.
+      }
+    }
+    const filenameStartedAt = sourceUrl === undefined
+      ? startedAt ?? liveRecordingFileTimes.get(requestedSlug) ?? new Date().toISOString()
+      : null;
+    if (sourceUrl === undefined) {
+      liveRecordingFileTimes.set(requestedSlug, filenameStartedAt!);
+      chatReceiver.setBroadcastSession(requestedSlug, filenameStartedAt!, displayName);
+    }
     const result = recordingManager.start(slug, getRecordingOutputDirectory(), {
       retryCount: settings.recordingRetryCount,
       retryDelaySeconds: settings.recordingRetryDelaySeconds,
-      streamStartedAt: typeof slug === "string"
-        ? backgroundMonitorStatus.results.find(item => item.slug === slug.toLowerCase())?.startedAt ?? null
-        : null
+      streamStartedAt: startedAt,
+      filenameStartedAt: filenameStartedAt ?? undefined,
+      displayName
     }, sourceUrl);
     if (sourceUrl === undefined && typeof slug === "string") {
-      manuallyStoppedLiveBroadcasts.delete(slug.toLowerCase());
-      autoRecordingRetryNotBefore.delete(slug.toLowerCase());
+      manuallyStoppedLiveBroadcasts.delete(requestedSlug);
+      autoRecordingRetryNotBefore.delete(requestedSlug);
     }
     return result;
   });
