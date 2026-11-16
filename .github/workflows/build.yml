@@ -28,6 +28,8 @@ jobs:
         run: node scripts/test-readme-version.mjs
       - name: α版自動更新チャンネルの整合性テスト
         run: node scripts/test-auto-updater-channel.mjs
+      - name: アップデート用インストーラー名・マニフェスト一致テスト
+        run: node scripts/test-update-assets.mjs
       - name: リリースノート表示テスト
         run: node --experimental-strip-types scripts/test-release-notes.mjs
       - name: 録画タイムライン同期テスト
@@ -174,6 +176,8 @@ jobs:
               (Get-FileHash -Algorithm SHA256 "release/beta.yml").Hash) {
             throw "beta/latestの互換マニフェストが一致しません。"
           }
+      - name: 公開するインストーラー名と更新URL・SHA512を照合
+        run: node scripts/validate-update-assets.mjs release
       - name: インストーラーを保存
         uses: actions/upload-artifact@v4
         with:
@@ -411,6 +415,7 @@ jobs:
           done
           cmp release/alpha.yml release/beta.yml
           cmp release/alpha.yml release/latest.yml
+          node scripts/validate-update-assets.mjs release
           sha256sum "${installers[0]}"
       - name: 新しいα版のPre-releaseを作成
         shell: bash

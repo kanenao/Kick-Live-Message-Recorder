@@ -10,6 +10,13 @@ assert.match(pkg.version, /^\d+\.\d+\.\d+-alpha\.\d+$/, "Only alpha versions may
 const github = pkg.build.publish.find(provider => provider.provider === "github");
 assert.ok(github, "A GitHub release provider must be configured");
 assert.equal(github.channel, "alpha", "Alpha releases must generate alpha.yml (not only latest.yml)");
+const releaseArtifactName = "Kick-Live-Message-Recorder-Setup-" + "$" + "{version}." + "$" + "{ext}";
+assert.equal(pkg.build.nsis.artifactName, releaseArtifactName,
+  "NSIS installer must have a deterministic ASCII name that GitHub cannot normalize");
+assert.ok(workflow.includes("node scripts/validate-update-assets.mjs release"),
+  "Installer and updater manifest URL must be checked in CI before the release is published");
+assert.ok(workflow.includes("node scripts/test-update-assets.mjs"),
+  "404 regression test must run on every build");
 assert.match(main, /autoUpdater\.channel\s*=\s*"alpha"/, "Electron updater must use the alpha channel");
 assert.match(main, /autoUpdater\.allowPrerelease\s*=\s*true/, "Alpha updates must be eligible");
 assert.match(main, /autoUpdater\.allowDowngrade\s*=\s*false/, "Channel changes must not trigger a downgrade");

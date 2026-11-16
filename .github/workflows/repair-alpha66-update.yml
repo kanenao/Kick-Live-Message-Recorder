@@ -1,0 +1,52 @@
+name: α66 update URL recovery (one-time)
+on:
+  push:
+    branches:
+      - hotfix/alpha66-update-manifest-404
+permissions:
+  contents: write
+jobs:
+  repair-alpha66-manifests:
+    if: ${{ github.event.head_commit.message == 'repair-release-v0.3.3-alpha.66' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Download already-published installer and channel manifests
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p repair
+          gh release download v0.3.3-alpha.66 --repo "$GITHUB_REPOSITORY" --dir repair \
+            --pattern "*.yml" --pattern "*.exe" --pattern "*.exe.blockmap"
+      - name: Verify installer integrity and repair wrong URLs
+        run: node scripts/repair-release-update-metadata.mjs repair
+      - name: Upload repaired manifests and backwards-compatible installer alias
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release upload v0.3.3-alpha.66 \
+            repair/alpha.yml repair/beta.yml repair/latest.yml \
+            repair/Kick-Live-Message-Recorder-Setup-0.3.3-alpha.66.exe \
+            repair/Kick-Live-Message-Recorder-Setup-0.3.3-alpha.66.exe.blockmap \
+            --repo "$GITHUB_REPOSITORY" --clobber
+      - name: Confirm repaired remote files and both filenames exist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p verify
+          gh release download v0.3.3-alpha.66 --repo "$GITHUB_REPOSITORY" --dir verify --pattern "*.yml"
+          for name in alpha beta latest; do
+            cmp "repair/$name.yml" "verify/$name.yml"
+            grep -F 'Kick.Live.Message.Recorder.Setup.0.3.3-alpha.66.exe' "verify/$name.yml"
+          done
+          gh release view v0.3.3-alpha.66 --repo "$GITHUB_REPOSITORY" --json assets \
+            --jq '.assets[].name' | grep -Fx 'Kick-Live-Message-Recorder-Setup-0.3.3-alpha.66.exe'
+          gh release view v0.3.3-alpha.66 --repo "$GITHUB_REPOSITORY" --json assets \
+            --jq '.assets[].name' | grep -Fx 'Kick.Live.Message.Recorder.Setup.0.3.3-alpha.66.exe'
