@@ -832,6 +832,52 @@ function LibraryChannelAvatar({ displayName, picture }: { displayName: string; p
   </div>;
 }
 
+function LibraryRecordingThumbnail({ filePath, onPlay }: { filePath: string | null; onPlay: () => void }) {
+  const elementRef = useRef<HTMLButtonElement>(null);
+  const [visible, setVisible] = useState(false);
+  const [thumbnail, setThumbnail] = useState<string | null>(null);
+
+  useEffect(() => {
+    setVisible(false);
+    setThumbnail(null);
+    if (!filePath) return;
+    const node = elementRef.current;
+    if (!node) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setVisible(true);
+      return;
+    }
+    // Off-screen broadcasts must not start hundreds of FFmpeg extractions at once.
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) {
+        setVisible(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: "140px" });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [filePath]);
+
+  useEffect(() => {
+    if (!visible || !filePath || !window.kickRecorder?.getRecordingThumbnail) return;
+    let active = true;
+    void window.kickRecorder.getRecordingThumbnail(filePath).then(data => {
+      if (active && data?.startsWith("data:image/jpeg;base64,")) setThumbnail(data);
+    }).catch(() => {
+      // Video and its actions remain visible if FFmpeg cannot extract a frame.
+    });
+    return () => { active = false; };
+  }, [visible, filePath]);
+
+  return <button ref={elementRef} type="button" className="recording-session-thumbnail"
+    onClick={onPlay} disabled={!filePath}
+    title={filePath ? "動画を再生" : "録画動画がありません"}
+    aria-label={filePath ? "動画を再生" : "録画動画なし"}>
+    {thumbnail ? <img src={thumbnail} alt="録画動画から抽出したサムネイル" loading="lazy"
+      onError={() => setThumbnail(null)} /> : <span aria-hidden="true">{filePath ? "▶" : "☷"}</span>}
+  </button>;
+}
+
 export default function App() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [recordingOnlyChannels, setRecordingOnlyChannels] = useState<Channel[]>([]);
@@ -901,6 +947,7 @@ export default function App() {
   const [libraryTypeFilter, setLibraryTypeFilter] = useState<"all" | "videos" | "comments" | "articles">("all");
   const [isLoadingLibraryLogs, setIsLoadingLibraryLogs] = useState(false);
   const [expandedLibraryVideosChannel, setExpandedLibraryVideosChannel] = useState<string | null>(null);
+  const [expandedLibrarySessions, setExpandedLibrarySessions] = useState<Record<string, boolean>>({});
   const [libraryCommentsChannel, setLibraryCommentsChannel] = useState<string | null>(null);
   const [libraryComments, setLibraryComments] = useState<LibraryCommentMessage[]>([]);
   const [isLoadingLibraryComments, setIsLoadingLibraryComments] = useState(false);
@@ -2448,9 +2495,8 @@ export default function App() {
                         <div className="recording-session-list" role="region" tabIndex={0} aria-label={group.displayName + "の配信別録画"}>
                           {group.sessions.map(session => <article className="recording-session-card" key={session.id}>
                             <div className="recording-session-head">
-                              <div className="recording-session-thumbnail">
-                                {session.article?.videoPreviewAvailable ? <ArticleBroadcastFrame article={session.article} /> : <span aria-hidden="true">▶</span>}
-                              </div>
+                              <LibraryRecordingThumbnail filePath={session.videos[0]?.path ?? null}
+                                onPlay={() => { if (session.videos[0]) void openRecordingFile(session.videos[0].path); }} />
                               <div className="recording-session-heading">
                                 <div className="recording-session-tags">
                                   <span className={session.kind === "LIVE" ? "session-kind-live" : "session-kind-vod"}>{session.kind}</span>
@@ -2462,7 +2508,15 @@ export default function App() {
                                 <small>{Number.isFinite(Date.parse(session.startedAt)) ? new Date(session.startedAt).toLocaleString("ja-JP") : "日時未取得"}</small>
                                 <small>動画 {session.videos.length}件 ・ コメント {session.logs.length}件 ・ AI記事 {session.article ? "あり" : "なし"}</small>
                               </div>
+                              <div className="recording-session-quick-actions">
+                                {session.videos.length > 0 && <button className="primary-small" onClick={() => void openRecordingFile(session.videos[0].path)}>再生</button>}
+                                <button className="small-action" aria-expanded={Boolean(expandedLibrarySessions[session.id])}
+                                  onClick={() => setExpandedLibrarySessions(current => ({
+                                    ...current, [session.id]: !current[session.id]
+                                  }))}>{expandedLibrarySessions[session.id] ? "詳細を閉じる" : "ファイル・コメント"}</button>
+                              </div>
                             </div>
+                            {expandedLibrarySessions[session.id] && <>
                             {session.article && <div className="recording-session-article">
                               <strong>AI配信記事：{session.article.headline}</strong>
                               <p>{session.article.aiSummary || session.article.paragraphs?.[0] || "記事を見ると内容を確認できます。"}</p>
@@ -2533,6 +2587,7 @@ export default function App() {
                                 setTab("articles");
                               }}>この録画から記事を生成</button>
                             </div>}
+                            </>}
                           </article>)}
                         </div>
                       </div>}
