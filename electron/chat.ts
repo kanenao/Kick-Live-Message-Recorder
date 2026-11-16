@@ -171,7 +171,7 @@ export class KickChatReceiver {
   private readonly seenEventIds = new Set<string>();
   private readonly seenEventOrder: string[] = [];
   private readonly recentMessages: KickChatMessage[] = [];
-  private readonly broadcastSessions = new Map<string, string>();
+  private readonly broadcastSessions = new Map<string, { stem: string; startedAt: string }>();
 
   constructor(
     private readonly getOutputDirectory: () => string,
@@ -200,10 +200,11 @@ export class KickChatReceiver {
         !Number.isFinite(Date.parse(startedAt))) return;
     const normalized = slug.toLowerCase();
     // Don't rotate an in-progress chat file merely because a profile display name changed.
-    if (this.broadcastSessions.has(normalized)) return;
-    this.broadcastSessions.set(normalized, broadcastFileStem({
-      slug: normalized, displayName, startedAt, kind: "LIVE"
-    }));
+    if (this.broadcastSessions.get(normalized)?.startedAt === startedAt) return;
+    this.broadcastSessions.set(normalized, {
+      startedAt,
+      stem: broadcastFileStem({ slug: normalized, displayName, startedAt, kind: "LIVE" })
+    });
   }
 
   clearBroadcastSession(slug: string): void {
@@ -532,7 +533,7 @@ export class KickChatReceiver {
       mkdirSync(channelDirectory, { recursive: true });
       // Without a verified broadcast start, preserve the legacy per-day filename;
       // never mislabel the first comment time as the actual broadcast start.
-      const fileStem = this.broadcastSessions.get(message.channelSlug) ?? day;
+      const fileStem = this.broadcastSessions.get(message.channelSlug)?.stem ?? day;
       appendFileSync(join(channelDirectory, fileStem + ".jsonl"), JSON.stringify(message) + "\n", "utf8");
     }
 
