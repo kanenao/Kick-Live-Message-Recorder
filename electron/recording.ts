@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve, sep } from "node:path";
-import { decideLiveRecordingRecovery, hasLiveRecordingStalled, LIVE_RECORDING_WATCHDOG_INTERVAL_MS, type LiveProbeResult } from "./recording-recovery";
+import { decideLiveRecordingRecovery, hasLiveRecordingStalled, LIVE_RECORDING_WATCHDOG_INTERVAL_MS, LIVE_RECORDING_FORCE_KILL_TIMEOUT_MS, type LiveProbeResult } from "./recording-recovery";
 
 export type RecordingEvent = {
   slug: string;
@@ -41,6 +41,7 @@ type ActiveRecording = {
   isVod: boolean;
   streamStartedAt: string | null;
   watchdogTimer: NodeJS.Timeout | null;
+  terminationTimer: NodeJS.Timeout | null;
   bytesAtLastCheck: number;
   lastByteGrowthAt: number;
   attemptStartedAt: number;
@@ -267,6 +268,7 @@ export class KickRecordingManager {
       isVod,
       streamStartedAt: typeof options.streamStartedAt === "string" ? options.streamStartedAt : null,
       watchdogTimer: null,
+      terminationTimer: null,
       bytesAtLastCheck: 0,
       lastByteGrowthAt: Date.now(),
       attemptStartedAt: 0,
@@ -279,6 +281,28 @@ export class KickRecordingManager {
     this.launch(sessionId, slug, session);
 
     return { ok: true, outputDirectory };
+  }
+
+  private interruptChild(session: ActiveRecording, child: ChildProcessWithoutNullStreams): void {
+    if (session.terminationTimer) return;
+    // First request graceful shutdown so yt-dlp / FFmpeg can finalize the video.
+    try { child.kill("SIGINT"); } catch { try { child.kill(); } catch { /* already gone */ } }
+    session.terminationTimer = setTimeout(() => {
+      session.terminationTimer = null;
+      if (session.child !== child || typeof child.exitCode === "number" || child.signalCode) return;
+      console.warn("録画プロセスが停止要求に応答しません。強制終了を試みます。");
+      // Windows: terminate the whole yt-dlp/FFmpeg process tree to avoid orphan
+      // encoders that keep the recording file locked.
+      if (process.platform === "win32" && typeof child.pid === "number" && child.pid > 0) {
+        try {
+          const terminator = spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"],
+            { windowsHide: true, stdio: "ignore" });
+          terminator.once("error", () => { try { child.kill("SIGKILL"); } catch { /* done */ } });
+          return;
+        } catch { /* fall through */ }
+      }
+      try { child.kill("SIGKILL"); } catch { /* already gone */ }
+    }, LIVE_RECORDING_FORCE_KILL_TIMEOUT_MS);
   }
 
   private launch(sessionId: string, slug: string, session: ActiveRecording): void {
@@ -340,7 +364,7 @@ export class KickRecordingManager {
           session.stallDetected = true;
           this.onEvent({ slug, status: "starting", isVod: false,
             message: "映像ファイルが3分間増えていないため、録画を再接続しています。" });
-          try { child.kill("SIGINT"); } catch { child.kill(); }
+          this.interruptChild(session, child);
         }
       }, LIVE_RECORDING_WATCHDOG_INTERVAL_MS);
     }
@@ -349,6 +373,7 @@ export class KickRecordingManager {
       if (attemptSettled) return;
       attemptSettled = true;
       if (session.watchdogTimer) { clearInterval(session.watchdogTimer); session.watchdogTimer = null; }
+      if (session.terminationTimer) { clearTimeout(session.terminationTimer); session.terminationTimer = null; }
       void this.finishAttempt(sessionId, slug, session, code, signal, error);
     };
 
@@ -398,6 +423,9 @@ export class KickRecordingManager {
     session.child = null;
     const savedFiles = savedVideoFiles(session);
     const savedPath = savedFiles[0];
+    const currentPrefix = basename(session.filePath);
+    const attemptProducedVideo = savedFiles.some(file =>
+      basename(file).startsWith(currentPrefix + "."));
 
     // A stop request may be issued while waiting for the API. Never restart a
     // manually stopped session, nor emit stale messages for a replaced session.
@@ -442,7 +470,8 @@ export class KickRecordingManager {
         if (probe && !probe.isLive) {
           await new Promise<void>(resolve => setTimeout(resolve, 2500));
           const confirmation = await this.probeLive(slug);
-          probe = confirmation?.isLive === false ? confirmation : confirmation;
+          // Unknown status is not confirmation that a LIVE ended.
+          probe = confirmation;
         }
       } catch {
         probe = null;
@@ -462,7 +491,7 @@ export class KickRecordingManager {
     }
     const decision = decideLiveRecordingRecovery({
       probe, expectedStreamStartedAt: session.streamStartedAt,
-      code, savedFileCount: savedFiles.length, runtimeMs,
+      code, savedFileCount: savedFiles.length, runtimeMs, attemptProducedVideo,
       failuresUsed: session.retriesUsed, maxFailures: session.maxRetries,
       fatalError, stalled: session.stallDetected
     });
@@ -516,11 +545,7 @@ export class KickRecordingManager {
     }
 
     if (session.child) {
-      try {
-        session.child.kill("SIGINT");
-      } catch {
-        session.child.kill();
-      }
+      this.interruptChild(session, session.child);
     } else {
       this.active.delete(sessionId);
       const files = savedVideoFiles(session);
@@ -539,11 +564,7 @@ export class KickRecordingManager {
         session.retryTimer = null;
       }
       if (session.child) {
-        try {
-          session.child.kill("SIGINT");
-        } catch {
-          session.child.kill();
-        }
+        this.interruptChild(session, session.child);
       } else {
         this.active.delete(sessionId);
       }
