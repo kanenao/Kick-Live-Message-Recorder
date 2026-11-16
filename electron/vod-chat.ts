@@ -14,6 +14,7 @@ import {
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createVodChatAssHeader, VodChatAssComposer } from "./vod-chat-ass";
+import { broadcastFileStem } from "./recording-filenames";
 
 const execFileAsync = promisify(execFile);
 type JsonRecord = Record<string, unknown>;
@@ -287,6 +288,15 @@ async function fetchVodMetadata(identity: VodIdentity, signal: AbortSignal): Pro
   };
 }
 
+/** Shared VOD broadcast metadata for video and comments: the date is when it was streamed. */
+export async function getVodBroadcastDetails(url: string, signal: AbortSignal = AbortSignal.timeout(12_000)): Promise<{
+  startedAt: string; displayName: string
+}> {
+  const identity = parseVodUrl(url);
+  const metadata = await fetchVodMetadata(identity, signal);
+  return { startedAt: metadata.startAt.toISOString(), displayName: identity.slug };
+}
+
 function formatOffset(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));
   const hours = Math.floor(total / 3600);
@@ -349,27 +359,17 @@ function normalizeMessage(
   };
 }
 
-function timestampForFilename(date: Date): string {
-  const pad = (value: number): string => String(value).padStart(2, "0");
-  return [
-    date.getFullYear(),
-    pad(date.getMonth() + 1),
-    pad(date.getDate()),
-    "_",
-    pad(date.getHours()),
-    pad(date.getMinutes()),
-    pad(date.getSeconds())
-  ].join("");
-}
-
-function getOutputPaths(directory: string, identity: VodIdentity): { jsonl: string; txt: string; ass: string } {
+function getOutputPaths(directory: string, identity: VodIdentity, metadata: VodMetadata): { jsonl: string; txt: string; ass: string } {
   const channelDirectory = join(directory, "Chat", identity.slug);
   mkdirSync(channelDirectory, { recursive: true });
-  const base = "VOD_" + identity.videoId + "_" + timestampForFilename(new Date());
+  const base = broadcastFileStem({
+    slug: identity.slug, displayName: identity.slug, startedAt: metadata.startAt.toISOString(),
+    kind: "VOD", videoId: identity.videoId
+  });
   let name = base;
-  let suffix = 1;
-  while (existsSync(join(channelDirectory, name + ".jsonl")) || existsSync(join(channelDirectory, name + ".txt")) || existsSync(join(channelDirectory, name + ".ass"))) {
-    name = base + "_" + suffix++;
+  let suffix = 2;
+  while (["jsonl", "txt", "ass"].some(ext => existsSync(join(channelDirectory, name + "." + ext)))) {
+    name = base + "_take" + suffix++;
   }
   return {
     jsonl: join(channelDirectory, name + ".jsonl"),
@@ -547,7 +547,7 @@ export class KickVodChatDownloader {
       }
 
       if (signal.aborted) throw new Error("コメント取得を停止しました。");
-      const outputPaths = getOutputPaths(outputDirectory, identity);
+      const outputPaths = getOutputPaths(outputDirectory, identity, metadata);
       const jsonlTemp = join(temporaryDirectory, "result.jsonl");
       const txtTemp = join(temporaryDirectory, "result.txt");
       const assTemp = join(temporaryDirectory, "result.ass");
