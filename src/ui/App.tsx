@@ -1201,6 +1201,16 @@ export default function App() {
   }, [tab, isDesktop]);
 
   useEffect(() => {
+    if (tab !== "library" || !libraryCommentsChannel || !libraryLoadedOnceRef.current) return;
+    // A visible comment viewer must not keep displaying old JSONL rows after
+    // the last log was removed in Explorer.
+    if (commentLogFiles.some(log => log.channelSlug.toLowerCase() === libraryCommentsChannel.toLowerCase())) return;
+    setLibraryCommentsChannel(null);
+    setLibraryComments([]);
+    setLibraryCommentsError("");
+  }, [tab, libraryCommentsChannel, commentLogFiles]);
+
+  useEffect(() => {
     if (!isDesktop || !window.kickRecorder) return;
     return window.kickRecorder.onLiveArticleCaptureStatus(status => setLiveArticleCaptureStatus(status));
   }, [isDesktop]);
