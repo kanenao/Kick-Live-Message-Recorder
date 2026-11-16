@@ -1,11 +1,20 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { decideLiveRecordingRecovery, hasLiveRecordingStalled } from "../electron/recording-recovery.ts";
 import { KickRecordingManager } from "../electron/recording.ts";
+
+const mainSource = readFileSync(new URL("../electron/main.ts", import.meta.url), "utf8");
+assert.doesNotMatch(mainSource, /if \(!live \|\| wasLive\) continue/,
+  "LIVE polling must recover stopped recorders, not skip all continuing streams");
+assert.match(mainSource, /const deliberatelyStopped = manuallyStoppedLiveBroadcasts\.has\(result\.slug\)/,
+  "Explicit user stop must suppress automatic recording restart");
+assert.match(mainSource, /if \(!wasLive && state\.settings\.notifyOnLive\)/,
+  "LIVE start notifications must not repeat every polling interval");
+
 
 const base = {
   probe: { isLive: true, startedAt: "2026-11-16T09:00:00Z" },
