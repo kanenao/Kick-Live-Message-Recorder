@@ -59,6 +59,7 @@
       "verifyUpdateCodeSignature": false
     },
     "nsis": {
+      "artifactName": "Kick-Live-Message-Recorder-Setup-${version}.${ext}",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
