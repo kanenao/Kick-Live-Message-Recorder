@@ -20,11 +20,13 @@ const base = {
   probe: { isLive: true, startedAt: "2026-11-16T09:00:00Z" },
   expectedStreamStartedAt: "2026-11-16T09:00:00Z",
   code: 0, savedFileCount: 1, runtimeMs: 5 * 60_000,
-  failuresUsed: 5, maxFailures: 5, fatalError: false, stalled: false
+  failuresUsed: 5, maxFailures: 5, fatalError: false, stalled: false, attemptProducedVideo: true
 };
 const check = extra => decideLiveRecordingRecovery({ ...base, ...extra });
 assert.equal(check({}).action, "retry", "exit 0 must not end an ongoing LIVE");
 assert.equal(check({}).nextFailures, 1, "healthy segments reset consecutive failure count");
+assert.equal(check({ attemptProducedVideo: false, savedFileCount: 2 }).action, "error",
+  "older saved segment must not hide failure to record the current reconnect attempt");
 assert.equal(check({ probe: { isLive: false, startedAt: null } }).action, "complete");
 assert.equal(check({ probe: { isLive: false, startedAt: null }, savedFileCount: 0 }).action, "error");
 assert.equal(check({ probe: null, runtimeMs: 1000, failuresUsed: 5 }).action, "error");
@@ -34,6 +36,11 @@ assert.equal(check({ probe: { isLive: true, startedAt: "2026-11-16T10:00:00Z" } 
   "Do not mix the next broadcast into a previous session");
 assert.equal(hasLiveRecordingStalled(0, 179_999), false);
 assert.equal(hasLiveRecordingStalled(0, 180_000), true);
+assert.match(mainSource, /const confirmedOffline = !live && offlinePolls >= 3/,
+  "single offline response must not remove the manual-stop lock");
+assert.match(mainSource, /if \(!result\.found\) continue;/,
+  "unknown API results must not be treated as offline");
+
 
 const directory = mkdtempSync(join(tmpdir(), "kick-live-recovery-"));
 const events = [];

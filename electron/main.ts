@@ -629,6 +629,7 @@ const liveArticleManager = new LiveStreamArticleManager(
 
 // Intentional user stop must not be undone by background auto-recording during the same LIVE.
 const manuallyStoppedLiveBroadcasts = new Map<string, string | null>();
+const backgroundConfirmedOfflinePolls = new Map<string, number>();
 const autoRecordingRetryNotBefore = new Map<string, number>();
 
 async function resolveCurrentKickLive(slug: string): Promise<{ isLive: boolean; startedAt: string | null } | null> {
@@ -1088,6 +1089,7 @@ async function runBackgroundMonitor(): Promise<void> {
 
   if (!state.settings.autoMonitorEnabled || slugs.length === 0 || !getKickCredentialsStatus().configured) {
     backgroundPreviousLiveState.clear();
+    backgroundConfirmedOfflinePolls.clear();
     publishBackgroundMonitorStatus({
       running: false, enabled: state.settings.autoMonitorEnabled, monitoredChannels: slugs.length,
       intervalSeconds: state.settings.monitorIntervalSeconds, lastError: backgroundChatLastError,
@@ -1109,9 +1111,16 @@ async function runBackgroundMonitor(): Promise<void> {
     // Skip additional profile lookups to prioritize the LIVE status request.
     const results = await checkKickChannels(slugs, false);
     for (const result of results) {
-      const live = result.found && result.isLive;
+      // Missing channel data is not proof that a LIVE stopped (temporary API errors).
+      if (!result.found) continue;
+      const live = result.isLive;
       const wasLive = backgroundPreviousLiveState.get(result.slug) === true;
-      backgroundPreviousLiveState.set(result.slug, live);
+      const offlinePolls = live ? 0 : (backgroundConfirmedOfflinePolls.get(result.slug) ?? 0) + 1;
+      if (live) backgroundConfirmedOfflinePolls.delete(result.slug);
+      else backgroundConfirmedOfflinePolls.set(result.slug, offlinePolls);
+      const confirmedOffline = !live && offlinePolls >= 3;
+      // Retain LIVE state through isolated false readings to prevent spurious end/start.
+      if (live || confirmedOffline) backgroundPreviousLiveState.set(result.slug, live);
       const articleMetadata = {
         slug: result.slug, displayName: result.displayName || result.slug,
         streamTitle: result.streamTitle, categoryName: result.categoryName,
@@ -1120,10 +1129,10 @@ async function runBackgroundMonitor(): Promise<void> {
       if (live) {
         liveArticleManager.startOrUpdate(articleMetadata);
         if (liveArticleManager.hasSession(result.slug)) startArticleFrameCapture(result.slug);
-      } else if (wasLive) {
+      } else if (wasLive && confirmedOffline) {
         void stopArticleFrameCapture(result.slug).finally(() => liveArticleManager.finishStream(articleMetadata));
       }
-      if (result.found && !live) {
+      if (confirmedOffline) {
         manuallyStoppedLiveBroadcasts.delete(result.slug);
         autoRecordingRetryNotBefore.delete(result.slug);
       }
@@ -1166,7 +1175,12 @@ async function runBackgroundMonitor(): Promise<void> {
       if (!wasLive && state.settings.notifyOnLive) notifyBackgroundLive(result, recordingStarted, commentCaptureEnabled);
     }
     for (const key of [...backgroundPreviousLiveState.keys()]) {
-      if (!slugs.includes(key)) backgroundPreviousLiveState.delete(key);
+      if (!slugs.includes(key)) {
+        backgroundPreviousLiveState.delete(key);
+        backgroundConfirmedOfflinePolls.delete(key);
+        manuallyStoppedLiveBroadcasts.delete(key);
+        autoRecordingRetryNotBefore.delete(key);
+      }
     }
     const lastCheckAt = new Date().toISOString();
     publishBackgroundMonitorStatus({
@@ -1216,6 +1230,7 @@ function configureBackgroundServices(): void {
   if (!enabled) {
     backgroundMonitorWasEnabled = false;
     backgroundPreviousLiveState.clear();
+    backgroundConfirmedOfflinePolls.clear();
     publishBackgroundMonitorStatus({
       enabled: state.settings.autoMonitorEnabled, running: false, monitoredChannels: slugs.length,
       intervalSeconds: state.settings.monitorIntervalSeconds, lastError: backgroundChatLastError,
