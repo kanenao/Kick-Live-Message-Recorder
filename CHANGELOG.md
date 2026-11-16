@@ -1,6 +1,15 @@
 # 更新履歴
 
-> mainブランチは旧開発コードを保持しています。公開済みα版のソースとリリースノートは [v0.3.3-alpha.66](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.3.3-alpha.66) を参照してください。
+> mainブランチは旧開発コードを保持しています。公開済みα版のソースとリリースノートは [v0.3.4-alpha.67](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.3.4-alpha.67) を参照してください。
+
+## 0.3.4-alpha.67（公開済みα版）
+
+- Kickの動画とコメントファイルに、配信者名・チャンネル名・実際の配信開始日時を共通のファイル名として採用。
+- LIVE録画とJSONLの同一配信名、VOD動画とJSONL・TXT・ASSの同一日時／UUID名に対応。
+- LIVE配信開始日時が取得不能な場合は録画・コメント保存開始時刻を共通使用。VODの日時が取れない場合は `date-unknown` と明示。
+- Windowsの禁止文字を安全に置換し、再録画・再接続時に既存ファイルを上書きしない命名処理を追加。
+- 新旧の録画・コメントをライブラリで識別し、コメント付き動画生成との互換性を維持。
+- 旧ファイルを一括リネームせず、保存済みデータ・AI記事の参照を保護。回帰テスト・Windowsビルド成功。
 
 ## 0.3.3-alpha.66（公開済みα版）
 
