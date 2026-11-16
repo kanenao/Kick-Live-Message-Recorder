@@ -630,6 +630,7 @@ const liveArticleManager = new LiveStreamArticleManager(
 // Intentional user stop must not be undone by background auto-recording during the same LIVE.
 const manuallyStoppedLiveBroadcasts = new Map<string, string | null>();
 const backgroundConfirmedOfflinePolls = new Map<string, number>();
+const liveRecordingFileTimes = new Map<string, string>();
 const autoRecordingRetryNotBefore = new Map<string, number>();
 
 async function resolveCurrentKickLive(slug: string): Promise<{ isLive: boolean; startedAt: string | null } | null> {
@@ -1134,11 +1135,15 @@ async function runBackgroundMonitor(): Promise<void> {
       }
       if (confirmedOffline) {
         chatReceiver.clearBroadcastSession(result.slug);
+        liveRecordingFileTimes.delete(result.slug);
         manuallyStoppedLiveBroadcasts.delete(result.slug);
         autoRecordingRetryNotBefore.delete(result.slug);
       }
       if (!live) continue;
-      chatReceiver.setBroadcastSession(result.slug, result.startedAt, result.displayName || result.slug);
+      const filenameStart = result.startedAt ??
+        (liveRecordingFileTimes.get(result.slug) || new Date().toISOString());
+      liveRecordingFileTimes.set(result.slug, filenameStart);
+      chatReceiver.setBroadcastSession(result.slug, filenameStart, result.displayName || result.slug);
 
       const manualStopStream = manuallyStoppedLiveBroadcasts.get(result.slug);
       if (manualStopStream !== undefined && manualStopStream && result.startedAt &&
@@ -1166,6 +1171,7 @@ async function runBackgroundMonitor(): Promise<void> {
             retryCount: state.settings.recordingRetryCount,
             retryDelaySeconds: state.settings.recordingRetryDelaySeconds,
             streamStartedAt: result.startedAt,
+            filenameStartedAt: filenameStart,
             displayName: result.displayName || result.slug
           });
           recordingStarted = true;
@@ -1527,13 +1533,18 @@ function registerIpcHandlers(): void {
         // Manual recording must remain usable when Kick API is unavailable.
       }
     }
-    if (sourceUrl === undefined && startedAt) {
-      chatReceiver.setBroadcastSession(requestedSlug, startedAt, displayName);
+    const filenameStartedAt = sourceUrl === undefined
+      ? startedAt ?? liveRecordingFileTimes.get(requestedSlug) ?? new Date().toISOString()
+      : null;
+    if (sourceUrl === undefined) {
+      liveRecordingFileTimes.set(requestedSlug, filenameStartedAt!);
+      chatReceiver.setBroadcastSession(requestedSlug, filenameStartedAt!, displayName);
     }
     const result = recordingManager.start(slug, getRecordingOutputDirectory(), {
       retryCount: settings.recordingRetryCount,
       retryDelaySeconds: settings.recordingRetryDelaySeconds,
       streamStartedAt: startedAt,
+      filenameStartedAt: filenameStartedAt ?? undefined,
       displayName
     }, sourceUrl);
     if (sourceUrl === undefined && typeof slug === "string") {
