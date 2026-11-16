@@ -91,11 +91,13 @@ export class KickVodDownloadManager {
 
   private readonly onChange: (job: VodDownloadJob) => void;
   private readonly spawnProcess: typeof spawn;
+  private readonly resolveBroadcastInfo?: (url: string) => Promise<{ startedAt: string; displayName: string }>;
 
   constructor(onChange: (job: VodDownloadJob) => void, spawnProcess: typeof spawn = spawn,
-    private readonly resolveBroadcastInfo?: (url: string) => Promise<{ startedAt: string; displayName: string }>) {
+    resolveBroadcastInfo?: (url: string) => Promise<{ startedAt: string; displayName: string }>) {
     this.onChange = onChange;
     this.spawnProcess = spawnProcess;
+    this.resolveBroadcastInfo = resolveBroadcastInfo;
   }
 
   hasActiveDownloads(): boolean {
