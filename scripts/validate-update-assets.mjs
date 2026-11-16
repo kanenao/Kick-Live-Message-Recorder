@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createReadStream, existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 export function inspectReleaseManifest(manifest, version, expectedFileName, expectedHash, expectedSize) {
   const versionMatch = manifest.match(/^version:\s*(\S+)\s*$/m);
@@ -49,7 +50,7 @@ export async function validateReleaseArtifacts(directory, version) {
   return { installer: expectedFileName, bytes: expectedSize, version };
 }
 
-if (process.argv[1] && import.meta.url === new URL("file://" + process.argv[1].replaceAll("\\", "/")).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const directory = process.argv[2] || "release";
   const version = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
   await validateReleaseArtifacts(directory, version);
