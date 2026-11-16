@@ -420,7 +420,7 @@ jobs:
     name: α63のインストーラーと自動更新情報を公開
     runs-on: ubuntu-latest
     needs: [quality, windows-installer]
-    if: \${{ github.event_name == 'push' && github.ref == 'refs/heads/release/v0.3.0-alpha.63' && github.event.head_commit.message == 'release-publish-v0.3.0-alpha.63' }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/release/v0.3.0-alpha.63' && github.event.head_commit.message == 'release-publish-v0.3.0-alpha.63' }}
     permissions:
       contents: write
     steps:
@@ -443,20 +443,20 @@ jobs:
           shopt -s nullglob
           installers=(release/*.exe)
           blockmaps=(release/*.blockmap)
-          test "\${#installers[@]}" -eq 1
-          test "\${#blockmaps[@]}" -ge 1
-          [[ "\${installers[0]}" == *"0.3.0-alpha.63.exe" ]]
-          test "$(stat -c%s "\${installers[0]}")" -gt 10000000
+          test "${#installers[@]}" -eq 1
+          test "${#blockmaps[@]}" -ge 1
+          [[ "${installers[0]}" == *"0.3.0-alpha.63.exe" ]]
+          test "$(stat -c%s "${installers[0]}")" -gt 10000000
           test -s release/alpha.yml
           test -s release/latest.yml
           grep -F "version: $version" release/alpha.yml
           grep -F "version: $version" release/latest.yml
           cmp release/alpha.yml release/latest.yml
-          sha256sum "\${installers[0]}"
+          sha256sum "${installers[0]}"
       - name: 検査済みα63のタグとPre-releaseを公開
         shell: bash
         env:
-          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           tag="v0.3.0-alpha.63"
