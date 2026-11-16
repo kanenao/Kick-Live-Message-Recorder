@@ -43,7 +43,7 @@ jobs:
       - name: VOD ASS字幕生成テスト
         run: node --experimental-strip-types scripts/test-vod-chat-ass.mjs
       - name: 複数VODのダウンロード・経過時間・停止テスト
-        run: node --experimental-strip-types scripts/test-vod-download-queue.mjs
+        run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-vod-download-queue.mjs
       - name: 配信単位の録画・コメント・AI記事の分類テスト
         run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-library-sessions.mjs
       - name: LIVE録画の途中切断・自動復旧・手動停止テスト
