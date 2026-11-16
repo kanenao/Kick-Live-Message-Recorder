@@ -57,6 +57,7 @@ type VodIdentity = {
 type VodMetadata = {
   channelId: string;
   title: string;
+  displayName: string;
   startAt: Date;
   durationSeconds: number;
 };
@@ -248,6 +249,7 @@ async function fetchVodMetadata(identity: VodIdentity, signal: AbortSignal): Pro
     return {
       channelId: String(channelId),
       title: readString(livestream.session_title) ?? identity.slug,
+      displayName: readString(asRecord(channel.user).username) ?? readString(asRecord(channel.user).name) ?? identity.slug,
       startAt: parseDate(livestream.start_time),
       durationSeconds: toDurationSeconds(livestream.duration, "milliseconds")
     };
@@ -283,6 +285,7 @@ async function fetchVodMetadata(identity: VodIdentity, signal: AbortSignal): Pro
   return {
     channelId: String(channelId),
     title: readString(video.title) ?? identity.slug,
+    displayName: readString(asRecord(owner.user).username) ?? readString(asRecord(owner.user).name) ?? readString(owner.username) ?? identity.slug,
     startAt: parseDate(video.start_time),
     durationSeconds: toDurationSeconds(video.duration, "seconds")
   };
@@ -294,7 +297,7 @@ export async function getVodBroadcastDetails(url: string, signal: AbortSignal = 
 }> {
   const identity = parseVodUrl(url);
   const metadata = await fetchVodMetadata(identity, signal);
-  return { startedAt: metadata.startAt.toISOString(), displayName: identity.slug };
+  return { startedAt: metadata.startAt.toISOString(), displayName: metadata.displayName };
 }
 
 function formatOffset(seconds: number): string {
@@ -363,7 +366,7 @@ function getOutputPaths(directory: string, identity: VodIdentity, metadata: VodM
   const channelDirectory = join(directory, "Chat", identity.slug);
   mkdirSync(channelDirectory, { recursive: true });
   const base = broadcastFileStem({
-    slug: identity.slug, displayName: identity.slug, startedAt: metadata.startAt.toISOString(),
+    slug: identity.slug, displayName: metadata.displayName, startedAt: metadata.startAt.toISOString(),
     kind: "VOD", videoId: identity.videoId
   });
   let name = base;
