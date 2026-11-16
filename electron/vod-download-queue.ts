@@ -96,6 +96,10 @@ export class KickVodDownloadManager {
     this.spawnProcess = spawnProcess;
   }
 
+  hasActiveDownloads(): boolean {
+    return [...this.jobs.values()].some(job => job.data.status === "queued" || job.data.status === "downloading");
+  }
+
   list(): VodDownloadJob[] {
     return [...this.jobs.values()].map(job => ({ ...job.data })).reverse();
   }
