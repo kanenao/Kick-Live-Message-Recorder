@@ -201,7 +201,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.3.5-alpha.68";
+const APP_VERSION = "0.3.6-alpha.69";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -229,6 +229,17 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.3.6-alpha.69",
+    title: "録画ライブラリのアイコン・配信者名からKickページへ移動",
+    changes: [
+      "録画ライブラリで配信者のプロフィール画像をクリックするとKick公式ユーザーページを開く",
+      "配信者名のクリック・タッチでも同じプロフィールページへ移動できるよう改善",
+      "Kickのチャンネル名から正しいURLを生成し、Windows既定のブラウザーで開く",
+      "タッチ・キーボード操作の対応とクリック可能な表示、URLの安全性チェックを追加",
+      "録画・コメント・AI記事と動画サムネイルの保存処理は変更しない"
+    ]
+  },
   {
     version: "0.3.5-alpha.68",
     title: "録画ライブラリをコンパクト化・動画フレームのサムネイルに対応",
