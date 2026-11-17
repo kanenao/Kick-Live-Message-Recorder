@@ -1,6 +1,14 @@
 # 更新履歴
 
-> mainブランチは旧開発コードを保持しています。公開済みα版のソースとリリースノートは [v0.3.7-alpha.70](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.3.7-alpha.70) を参照してください。
+> mainブランチは旧開発コードを保持しています。公開済みα版のソースとリリースノートは [v0.3.8-alpha.71](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.3.8-alpha.71) を参照してください。
+
+## 0.3.8-alpha.71（公開済みα版）
+
+- ASS字幕のemote削除をON/OFFで指定可能に変更（初期値はON）。
+- `[emote:ID:name]` をASS出力時だけ除去し、emoteのみの字幕を省略。OFFの場合は従来どおり名前を表示。
+- コメント付き動画生成と過去配信コメント取得のASSに対応し、設定保存・プレビューも連動。
+- 元のJSONL・TXT・録画動画・AI記事は保持。
+- GitHub Actionsで型チェック、ASS字幕テスト、Windowsインストーラー生成、配布ファイルの整合性確認が成功。Pre-releaseを公開。
 
 ## 0.3.7-alpha.70（公開済みα版）
 
