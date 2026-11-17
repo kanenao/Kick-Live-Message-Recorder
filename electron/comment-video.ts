@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import { createInterface } from "node:readline";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { isPathInsideDirectory } from "./recording";
-import { formatKickEmoteTokens } from "./emote-filter";
+import { formatKickEmoteTokens } from "./vod-chat-ass";
 import { resolveVideoTimelineAnchor, type VideoTimelineSyncSource } from "./recording-timeline";
 
 const execFileAsync = promisify(execFile);

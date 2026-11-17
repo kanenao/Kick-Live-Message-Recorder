@@ -1,4 +1,9 @@
-import { formatKickEmoteTokens } from "./emote-filter";
+/** Kick emote markers are removed only for ASS rendering; source chat remains intact. */
+export function formatKickEmoteTokens(content: string, removeEmotes: boolean): string {
+  return content.replace(/\[emote:\d+:([^\]\r\n]+)\]/g, (_token, name: string) =>
+    removeEmotes ? " " : name
+  ).replace(/[ \t]{2,}/g, " ").trim();
+}
 
 export type VodChatAssMessage = {
   content: string;

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { formatKickEmoteTokens } from "../electron/emote-filter.ts";
 import {
   createVodChatAssHeader,
   escapeVodAssText,
+  formatKickEmoteTokens,
   formatVodAssTimestamp,
   VodChatAssComposer
 } from "../electron/vod-chat-ass.ts";
