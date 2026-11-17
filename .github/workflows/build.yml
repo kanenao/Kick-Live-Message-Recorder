@@ -47,9 +47,9 @@ jobs:
       - name: 動画サムネイル抽出のファイル安全性テスト
         run: node --experimental-strip-types scripts/test-recording-thumbnails.mjs
       - name: VOD ASS字幕生成テスト
-        run: node --experimental-strip-types scripts/test-vod-chat-ass.mjs
+        run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-vod-chat-ass.mjs
       - name: ニコ生風ASSの自動調整・衝突防止テスト
-        run: node --experimental-strip-types scripts/test-nico-ass-auto.mjs
+        run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-nico-ass-auto.mjs
       - name: ASS自動調整のUI・設定連携テスト
         run: node scripts/test-nico-ass-auto-ui.mjs
       - name: 複数VODのダウンロード・経過時間・停止テスト
