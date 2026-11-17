@@ -518,3 +518,16 @@
   .recording-library-page .recording-session-file{flex-wrap:wrap}
   .recording-library-page .recording-session-file-type{flex:0 0 75px}
 }
+
+/* 配信者のアイコンと名前から公式Kickユーザーページを開く */
+.recording-channel-avatar{padding:0;appearance:none;cursor:pointer}
+.recording-channel-avatar:hover{border-color:#53d998;filter:brightness(1.09)}
+.recording-channel-avatar:focus-visible,.recording-channel-profile-link:focus-visible{
+  outline:2px solid #75f2b0;outline-offset:3px
+}
+.recording-channel-profile-link{display:block;max-width:100%;width:max-content;
+  padding:0;border:0;background:none;color:#eff5ff;font:inherit;font-size:14px;
+  font-weight:700;line-height:1.5;text-align:left;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;cursor:pointer
+}
+.recording-channel-profile-link:hover{text-decoration:underline;text-underline-offset:3px;color:#70edaf}
