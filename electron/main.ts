@@ -61,6 +61,12 @@ type AppSettings = {
   notifyOnLive: boolean;
   showRecordingPreview: boolean;
   removeEmotesFromAss: boolean;
+  vodAssCrossingSeconds: number;
+  vodAssSpeedPercent: number;
+  vodAssEntryOffsetPx: number;
+  vodAssRowLimit: number;
+  vodAssCollisionGap: number;
+  vodAssDelaySeconds: number;
   aiArticleEnabled: boolean;
   aiArticleProvider: "ollama" | "openai";
   aiArticleOllamaUrl: string;
@@ -95,6 +101,12 @@ const DEFAULT_STATE: AppState = {
     notifyOnLive: true,
     showRecordingPreview: true,
     removeEmotesFromAss: true,
+  vodAssCrossingSeconds: 6,
+  vodAssSpeedPercent: 100,
+  vodAssEntryOffsetPx: 16,
+  vodAssRowLimit: 16,
+  vodAssCollisionGap: 40,
+  vodAssDelaySeconds: 0,
     aiArticleEnabled: false,
     aiArticleProvider: "ollama",
     aiArticleOllamaUrl: "http://127.0.0.1:11434",
@@ -886,6 +898,18 @@ function normalizeState(input: unknown): AppState {
       notifyOnLive: settings.notifyOnLive !== false,
       showRecordingPreview: settings.showRecordingPreview !== false,
       removeEmotesFromAss: settings.removeEmotesFromAss !== false,
+      vodAssCrossingSeconds: typeof settings.vodAssCrossingSeconds === "number" && Number.isFinite(settings.vodAssCrossingSeconds)
+        ? Math.max(2, Math.min(15, settings.vodAssCrossingSeconds)) : 6,
+      vodAssSpeedPercent: typeof settings.vodAssSpeedPercent === "number" && Number.isFinite(settings.vodAssSpeedPercent)
+        ? Math.max(50, Math.min(200, settings.vodAssSpeedPercent)) : 100,
+      vodAssEntryOffsetPx: typeof settings.vodAssEntryOffsetPx === "number" && Number.isFinite(settings.vodAssEntryOffsetPx)
+        ? Math.round(Math.max(0, Math.min(300, settings.vodAssEntryOffsetPx))) : 16,
+      vodAssRowLimit: typeof settings.vodAssRowLimit === "number" && Number.isFinite(settings.vodAssRowLimit)
+        ? Math.round(Math.max(1, Math.min(18, settings.vodAssRowLimit))) : 16,
+      vodAssCollisionGap: typeof settings.vodAssCollisionGap === "number" && Number.isFinite(settings.vodAssCollisionGap)
+        ? Math.round(Math.max(0, Math.min(200, settings.vodAssCollisionGap))) : 40,
+      vodAssDelaySeconds: typeof settings.vodAssDelaySeconds === "number" && Number.isFinite(settings.vodAssDelaySeconds)
+        ? Math.max(-10, Math.min(10, settings.vodAssDelaySeconds)) : 0,
       aiArticleEnabled: settings.aiArticleEnabled === true,
       aiArticleProvider: settings.aiArticleProvider === "openai" ? "openai" : "ollama",
       aiArticleOllamaUrl: typeof settings.aiArticleOllamaUrl === "string" && /^https?:\/\//i.test(settings.aiArticleOllamaUrl) ? settings.aiArticleOllamaUrl.slice(0, 300) : "http://127.0.0.1:11434",
@@ -1478,9 +1502,9 @@ function registerIpcHandlers(): void {
     return chatReceiver.listRecentMessages(boundedLimit);
   });
 
-  ipcMain.handle("vod-chat:start", (event, url: unknown, removeEmotes: unknown) => {
+  ipcMain.handle("vod-chat:start", (event, url: unknown, removeEmotes: unknown, assOptions: unknown) => {
     assertTrustedSender(event);
-    return vodChatDownloader.start(url, getRecordingOutputDirectory(), removeEmotes !== false);
+    return vodChatDownloader.start(url, getRecordingOutputDirectory(), removeEmotes !== false, assOptions);
   });
 
   ipcMain.handle("vod-chat:stop", event => {

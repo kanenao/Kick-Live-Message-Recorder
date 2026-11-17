@@ -26,6 +26,12 @@ type KickRecorderAppState = {
     notifyOnLive: boolean;
     showRecordingPreview: boolean;
     removeEmotesFromAss: boolean;
+    vodAssCrossingSeconds: number;
+    vodAssSpeedPercent: number;
+    vodAssEntryOffsetPx: number;
+    vodAssRowLimit: number;
+    vodAssCollisionGap: number;
+    vodAssDelaySeconds: number;
     aiArticleEnabled: boolean;
     aiArticleProvider: "ollama" | "openai";
     aiArticleOllamaUrl: string;
@@ -232,7 +238,10 @@ declare global {
       stopChatReceiver: () => Promise<KickRecorderChatStatus>;
       getChatReceiverStatus: () => Promise<KickRecorderChatStatus>;
       listChatMessages: (limit: number) => Promise<KickRecorderChatMessage[]>;
-      startVodChatDownload: (url: string, removeEmotes?: boolean) => Promise<{ ok: true; outputDirectory: string }>;
+      startVodChatDownload: (url: string, removeEmotes?: boolean, assOptions?: {
+        crossingSeconds?: number; speedPercent?: number; entryOffsetPx?: number;
+        rowLimit?: number; collisionGap?: number; delaySeconds?: number;
+      }) => Promise<{ ok: true; outputDirectory: string }>;
       stopVodChatDownload: () => Promise<{ ok: true }>;
       onVodChatStatus: (callback: (event: KickRecorderVodChatEvent) => void) => () => void;
       copyText: (value: string) => Promise<{ ok: boolean }>;

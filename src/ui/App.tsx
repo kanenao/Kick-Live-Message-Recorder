@@ -48,6 +48,12 @@ type AppSettings = {
   notifyOnLive: boolean;
   showRecordingPreview: boolean;
   removeEmotesFromAss: boolean;
+  vodAssCrossingSeconds: number;
+  vodAssSpeedPercent: number;
+  vodAssEntryOffsetPx: number;
+  vodAssRowLimit: number;
+  vodAssCollisionGap: number;
+  vodAssDelaySeconds: number;
   aiArticleEnabled: boolean;
   aiArticleProvider: "ollama" | "openai";
   aiArticleOllamaUrl: string;
@@ -202,7 +208,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.3.9-alpha.72";
+const APP_VERSION = "0.4.0-alpha.73";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -230,6 +236,16 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.4.0-alpha.73",
+    title: "過去配信ASSのニコ生風コメント調整",
+    changes: [
+      "過去配信のASS出力で画面横断時間・速度・画面右端からの進入余白・コメント同期を調整可能",
+      "最大行数とコメント間隔を設定でき、混雑時に同じ行へ強制的に重ねない",
+      "おすすめ設定への戻し操作と設定保存に対応",
+      "JSONL・TXTの元コメントや録画・記事は変更しない"
+    ]
+  },
   {
     version: "0.3.9-alpha.72",
     title: "配信記事メニューの不要な改行文字を除去",
@@ -683,6 +699,12 @@ const DEFAULT_SETTINGS: AppSettings = {
   notifyOnLive: true,
   showRecordingPreview: true,
   removeEmotesFromAss: true,
+  vodAssCrossingSeconds: 6,
+  vodAssSpeedPercent: 100,
+  vodAssEntryOffsetPx: 16,
+  vodAssRowLimit: 16,
+  vodAssCollisionGap: 40,
+  vodAssDelaySeconds: 0,
   aiArticleEnabled: false,
   aiArticleProvider: "ollama",
   aiArticleOllamaUrl: "http://127.0.0.1:11434",
@@ -758,6 +780,18 @@ function normalizeState(value: unknown): PersistedState {
       notifyOnLive: settings.notifyOnLive !== false,
       showRecordingPreview: settings.showRecordingPreview !== false,
       removeEmotesFromAss: settings.removeEmotesFromAss !== false,
+      vodAssCrossingSeconds: typeof settings.vodAssCrossingSeconds === "number" && Number.isFinite(settings.vodAssCrossingSeconds)
+        ? Math.max(2, Math.min(15, settings.vodAssCrossingSeconds)) : 6,
+      vodAssSpeedPercent: typeof settings.vodAssSpeedPercent === "number" && Number.isFinite(settings.vodAssSpeedPercent)
+        ? Math.max(50, Math.min(200, settings.vodAssSpeedPercent)) : 100,
+      vodAssEntryOffsetPx: typeof settings.vodAssEntryOffsetPx === "number" && Number.isFinite(settings.vodAssEntryOffsetPx)
+        ? Math.round(Math.max(0, Math.min(300, settings.vodAssEntryOffsetPx))) : 16,
+      vodAssRowLimit: typeof settings.vodAssRowLimit === "number" && Number.isFinite(settings.vodAssRowLimit)
+        ? Math.round(Math.max(1, Math.min(18, settings.vodAssRowLimit))) : 16,
+      vodAssCollisionGap: typeof settings.vodAssCollisionGap === "number" && Number.isFinite(settings.vodAssCollisionGap)
+        ? Math.round(Math.max(0, Math.min(200, settings.vodAssCollisionGap))) : 40,
+      vodAssDelaySeconds: typeof settings.vodAssDelaySeconds === "number" && Number.isFinite(settings.vodAssDelaySeconds)
+        ? Math.max(-10, Math.min(10, settings.vodAssDelaySeconds)) : 0,
       aiArticleEnabled: settings.aiArticleEnabled === true,
       aiArticleProvider: settings.aiArticleProvider === "openai" ? "openai" : "ollama",
       aiArticleOllamaUrl: typeof settings.aiArticleOllamaUrl === "string" ? settings.aiArticleOllamaUrl.slice(0, 300) : "http://127.0.0.1:11434",
@@ -1905,7 +1939,14 @@ export default function App() {
     setVodChatActive(true);
     setVodChatStatus("過去コメントの取得を準備しています...");
     try {
-      const result = await window.kickRecorder.startVodChatDownload(vodUrl.trim().split(/\s+/)[0], settings.removeEmotesFromAss);
+      const result = await window.kickRecorder.startVodChatDownload(vodUrl.trim().split(/\s+/)[0], settings.removeEmotesFromAss, {
+        crossingSeconds: settings.vodAssCrossingSeconds,
+        speedPercent: settings.vodAssSpeedPercent,
+        entryOffsetPx: settings.vodAssEntryOffsetPx,
+        rowLimit: settings.vodAssRowLimit,
+        collisionGap: settings.vodAssCollisionGap,
+        delaySeconds: settings.vodAssDelaySeconds
+      });
       setVodChatStatus("コメント取得を開始しました。保存先：" + result.outputDirectory);
     } catch (error) {
       setVodChatActive(false);
@@ -2495,12 +2536,25 @@ export default function App() {
           </div>
           <p className="settings-help">コメント取得は現在1番組ずつの処理です。複数URLを貼り付けた場合は先頭のURLが対象になります。ダウンロード一覧はアプリ再起動でリセットされますが、完成した動画は録画ライブラリに残ります。</p>
           <label className="comment-video-checkbox"><input type="checkbox" checked={settings.removeEmotesFromAss} onChange={event => setSettings(previous => ({ ...previous, removeEmotesFromAss: event.target.checked }))} disabled={vodChatActive} /><span>ASS出力時にemoteを削除する（JSONL・TXTの原文は保持）</span></label>
+          <div className="settings-subsection">
+            <div className="settings-subheading"><h3>過去配信ASSの流れ方（ニコ生風）</h3><span className="api-state connected">ASS専用</span></div>
+            <div className="comment-video-settings-grid">
+              <label className="comment-video-field"><span>画面横断の基準時間（秒）</span><input type="number" min="2" max="15" step="0.5" value={settings.vodAssCrossingSeconds} onChange={event => setSettings(previous => ({ ...previous, vodAssCrossingSeconds: Math.max(2, Math.min(15, Number(event.target.value) || 6)) }))} disabled={vodChatActive} /><small>初期値6秒。小さいほど速く横切ります。</small></label>
+              <label className="comment-video-field"><span>流れる速度（%）</span><input type="number" min="50" max="200" step="5" value={settings.vodAssSpeedPercent} onChange={event => setSettings(previous => ({ ...previous, vodAssSpeedPercent: Math.max(50, Math.min(200, Number(event.target.value) || 100)) }))} disabled={vodChatActive} /><small>100%が標準、200%で2倍速。</small></label>
+              <label className="comment-video-field"><span>右端から入る余白（px）</span><input type="number" min="0" max="300" step="8" value={settings.vodAssEntryOffsetPx} onChange={event => setSettings(previous => ({ ...previous, vodAssEntryOffsetPx: Math.max(0, Math.min(300, Number(event.target.value) || 0)) }))} disabled={vodChatActive} /><small>0なら画面右端から、数値を大きくすると画面外から少し遅れて入ります。</small></label>
+              <label className="comment-video-field"><span>投稿時刻との同期ずれ（秒）</span><input type="number" min="-10" max="10" step="0.1" value={settings.vodAssDelaySeconds} onChange={event => setSettings(previous => ({ ...previous, vodAssDelaySeconds: Math.max(-10, Math.min(10, Number(event.target.value) || 0)) }))} disabled={vodChatActive} /><small>＋は遅らせ、－は早めに出します。</small></label>
+              <label className="comment-video-field"><span>最大コメント行数</span><input type="number" min="1" max="18" step="1" value={settings.vodAssRowLimit} onChange={event => setSettings(previous => ({ ...previous, vodAssRowLimit: Math.round(Math.max(1, Math.min(18, Number(event.target.value) || 1))) }))} disabled={vodChatActive} /><small>同時コメントが集中しても同じ行に無理に重ねません。</small></label>
+              <label className="comment-video-field"><span>同じ行の最小間隔（px）</span><input type="number" min="0" max="200" step="4" value={settings.vodAssCollisionGap} onChange={event => setSettings(previous => ({ ...previous, vodAssCollisionGap: Math.round(Math.max(0, Math.min(200, Number(event.target.value) || 0))) }))} disabled={vodChatActive} /><small>コメントの後端と次のコメントの先頭の距離です。</small></label>
+            </div>
+            <div className="comment-video-actions"><button className="small-action" type="button" disabled={vodChatActive} onClick={() => setSettings(previous => ({ ...previous, vodAssCrossingSeconds: 6, vodAssSpeedPercent: 100, vodAssEntryOffsetPx: 16, vodAssDelaySeconds: 0, vodAssRowLimit: 16, vodAssCollisionGap: 40 }))}>ニコ生風おすすめ設定に戻す</button></div>
+            <p className="settings-help">これらの設定はASSファイルだけに適用されます。JSONL・TXTは元のコメントと投稿時刻を保持します。コメント付き動画側の速度・文字サイズ設定は別項目です。</p>
+          </div>
           <div className="add-channel vod-chat-actions">
             <button className="primary-small" onClick={() => void downloadPastBroadcastChat()} disabled={!isDesktop || vodChatActive}>過去配信のコメントを取得（JSONL・TXT・ASS）</button>
             {vodChatActive && <button className="remove" onClick={() => void stopPastBroadcastChat()}>コメント取得を停止</button>}
           </div>
           {vodChatStatus && <div className="api-message" role="status">{vodChatStatus}</div>}
-          <div className="notice">公開状態で取得可能なVODが対象です。コメントは配信開始からの経過時刻・投稿者名・本文を保持し、ChatフォルダーにJSONL・TXT・ASSで保存します。ASSはニコ生風の右から左へ流れる字幕です。Kick側の非公開設定やアクセス制限、API仕様変更により取得できない場合があります。</div>
+          <div className="notice">公開状態で取得可能なVODが対象です。コメントは配信開始からの経過時刻・投稿者名・本文を保持し、ChatフォルダーにJSONL・TXT・ASSで保存します。ASSは画面右から左へ流れるニコ生風字幕で、上の速度・進入位置・行数・間隔・同期タイミングを変更できます。Kick側の非公開設定やアクセス制限、API仕様変更により取得できない場合があります。</div>
         </section>
         <div className="setting-row">
           <div><strong>録画専用チャンネルの録画・コメント取得</strong><small>チャンネル一覧の「録画＋コメント取得」から映像とコメントを同時に開始できます。ONならアプリ起動時もコメントへ自動接続します。</small></div>

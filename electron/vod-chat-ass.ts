@@ -10,17 +10,57 @@ export type VodChatAssMessage = {
   timeInSeconds: number;
 };
 
-type AssLane = { startSeconds: number; width: number };
+type AssLane = { startSeconds: number; endSeconds: number; width: number };
+
+export type VodChatAssOptions = {
+  crossingSeconds?: number;
+  speedPercent?: number;
+  entryOffsetPx?: number;
+  rowLimit?: number;
+  collisionGap?: number;
+  delaySeconds?: number;
+};
 
 const PLAY_RES_X = 1920;
 const PLAY_RES_Y = 1080;
 const FONT_NAME = "ＭＳ Ｐゴシック";
 const FONT_SIZE = 44;
-const SCROLL_SPEED = 220;
-const LANE_COUNT = 18;
 const LANE_TOP = 24;
 const LANE_GAP = 56;
-const MIN_COMMENT_GAP = 84;
+
+const DEFAULT_OPTIONS: Required<VodChatAssOptions> = {
+  crossingSeconds: 6,
+  speedPercent: 100,
+  entryOffsetPx: 16,
+  rowLimit: 16,
+  collisionGap: 40,
+  delaySeconds: 0
+};
+
+function boundedOption(
+  source: Record<string, unknown>, key: keyof VodChatAssOptions,
+  fallback: number, minimum: number, maximum: number
+): number {
+  const value = source[key];
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.min(maximum, Math.max(minimum, value))
+    : fallback;
+}
+
+/** Untrusted UI/IPC options are clamped before changing ASS timing or lane allocation. */
+export function normalizeVodChatAssOptions(value: unknown): Required<VodChatAssOptions> {
+  const source = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  return {
+    crossingSeconds: boundedOption(source, "crossingSeconds", DEFAULT_OPTIONS.crossingSeconds, 2, 15),
+    speedPercent: boundedOption(source, "speedPercent", DEFAULT_OPTIONS.speedPercent, 50, 200),
+    entryOffsetPx: Math.round(boundedOption(source, "entryOffsetPx", DEFAULT_OPTIONS.entryOffsetPx, 0, 300)),
+    rowLimit: Math.round(boundedOption(source, "rowLimit", DEFAULT_OPTIONS.rowLimit, 1, 18)),
+    collisionGap: Math.round(boundedOption(source, "collisionGap", DEFAULT_OPTIONS.collisionGap, 0, 200)),
+    delaySeconds: boundedOption(source, "delaySeconds", DEFAULT_OPTIONS.delaySeconds, -10, 10)
+  };
+}
 
 export function formatVodAssTimestamp(seconds: number): string {
   const safeSeconds = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
@@ -80,59 +120,58 @@ export function createVodChatAssHeader(channelSlug: string, title: string): stri
   ].join("\n");
 }
 
-/** Right-to-left Nico-style comments, preserving all comments with bounded lane reuse. */
+/** Nico-style right-to-left flow with adjustable entry, timing and collision-safe lanes. */
 export class VodChatAssComposer {
-  private readonly lanes: Array<AssLane | null> = Array.from({ length: LANE_COUNT }, () => null);
+  private readonly lanes: Array<AssLane | null>;
   private readonly durationSeconds: number;
   private readonly removeEmotes: boolean;
+  private readonly options: Required<VodChatAssOptions>;
 
-  constructor(durationSeconds: number, removeEmotes = false) {
+  constructor(durationSeconds: number, removeEmotes = false, options: unknown = {}) {
     this.durationSeconds = durationSeconds;
     this.removeEmotes = removeEmotes;
+    this.options = normalizeVodChatAssOptions(options);
+    this.lanes = Array.from({ length: this.options.rowLimit }, () => null);
     if (!Number.isFinite(durationSeconds) || durationSeconds <= 0 || durationSeconds > 7 * 24 * 60 * 60) {
       throw new Error("VODの再生時間が正しくありません。");
     }
   }
 
   createDialogue(message: VodChatAssMessage): string | null {
-    if (!Number.isFinite(message.timeInSeconds) || message.timeInSeconds < 0 ||
-      message.timeInSeconds >= this.durationSeconds) return null;
+    if (!Number.isFinite(message.timeInSeconds)) return null;
+    const start = message.timeInSeconds + this.options.delaySeconds;
+    if (start < 0 || start >= this.durationSeconds) return null;
     const text = escapeVodAssText(message.content, this.removeEmotes);
     if (!text) return null;
 
-    const start = message.timeInSeconds;
     const width = estimateTextWidth(text) + 32;
+    const entranceX = PLAY_RES_X + this.options.entryOffsetPx;
+    const speed = (PLAY_RES_X / this.options.crossingSeconds) * (this.options.speedPercent / 100);
+    const travelSeconds = (entranceX + width) / speed;
+    const end = Math.min(this.durationSeconds, start + travelSeconds);
+    if (end <= start) return null;
+
     let laneIndex = -1;
-    let earliestRelease = Number.POSITIVE_INFINITY;
-    let fallbackLane = 0;
     for (let index = 0; index < this.lanes.length; index += 1) {
       const previous = this.lanes[index];
-      if (!previous) {
+      // A new comment may enter only after the previous trailing edge has cleared the gap.
+      const clearance = previous
+        ? speed * (start - previous.startSeconds) - previous.width
+        : Number.POSITIVE_INFINITY;
+      if (!previous || start >= previous.endSeconds || clearance >= this.options.collisionGap) {
         laneIndex = index;
         break;
-      }
-      const gapAtStart = (start - previous.startSeconds) * SCROLL_SPEED - previous.width;
-      if (gapAtStart >= MIN_COMMENT_GAP) {
-        laneIndex = index;
-        break;
-      }
-      const releaseAt = previous.startSeconds + (previous.width + MIN_COMMENT_GAP) / SCROLL_SPEED;
-      if (releaseAt < earliestRelease) {
-        earliestRelease = releaseAt;
-        fallbackLane = index;
       }
     }
-    if (laneIndex < 0) laneIndex = fallbackLane;
-    this.lanes[laneIndex] = { startSeconds: start, width };
+    // Never reuse an occupied lane while comments overlap. Skip only when all lanes are full.
+    if (laneIndex < 0) return null;
+    this.lanes[laneIndex] = { startSeconds: start, endSeconds: end, width };
 
     const y = LANE_TOP + laneIndex * LANE_GAP;
-    const moveDuration = (PLAY_RES_X + width + 32) / SCROLL_SPEED;
-    const end = Math.min(this.durationSeconds, start + moveDuration);
-    if (end <= start) return null;
-    const moveMilliseconds = Math.max(1, Math.round(moveDuration * 1000));
-    const tags = "{\\move(" + (PLAY_RES_X + 16) + "," + y + "," + Math.round(-width) + "," + y +
+    const moveMilliseconds = Math.max(1, Math.round((end - start) * 1000));
+    const tags = "{\\\\move(" + entranceX + "," + y + "," + Math.round(-width) + "," + y +
       ",0," + moveMilliseconds + ")" +
-      "\\fn" + FONT_NAME + "\\b1\\1c&H00FFFFFF&\\bord3.2\\shad1}";
+      "\\\\fn" + FONT_NAME + "\\\\b1\\\\1c&H00FFFFFF&\\\\bord3.2\\\\shad1}";
     return "Dialogue: 0," + formatVodAssTimestamp(start) + "," + formatVodAssTimestamp(end) +
       ",Default,,0,0,0,," + tags + text;
   }

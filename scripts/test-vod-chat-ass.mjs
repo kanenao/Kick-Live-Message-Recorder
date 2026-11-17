@@ -4,6 +4,7 @@ import {
   escapeVodAssText,
   formatKickEmoteTokens,
   formatVodAssTimestamp,
+  normalizeVodChatAssOptions,
   VodChatAssComposer
 } from "../electron/vod-chat-ass.ts";
 
@@ -48,4 +49,33 @@ assert.notEqual(first, second, "同時刻のコメントは別レーンへ配置
 assert.equal(composer.createDialogue({ content: "配信終了後", timeInSeconds: 3600 }), null);
 assert.equal(composer.createDialogue({ content: " ", timeInSeconds: 10 }), null);
 assert.equal(composer.createDialogue({ content: "負の時刻", timeInSeconds: -1 }), null);
-console.log("VOD ASS字幕生成テスト成功（タイムスタンプ・文字エスケープ・同時刻レーン・時間範囲）");
+// Slow/fast flow, right-edge entrance, sync offset, and collision-aware overflow.
+const tuned = new VodChatAssComposer(120, false, {
+  crossingSeconds: 4, speedPercent: 150, entryOffsetPx: 180,
+  rowLimit: 1, collisionGap: 50, delaySeconds: 1.5
+});
+const tunedFirst = tuned.createDialogue({ content: "一つ目", timeInSeconds: 12 });
+assert.ok(tunedFirst?.startsWith("Dialogue: 0,0:00:13.50,"));
+assert.ok(tunedFirst?.includes("\\move(2100,24,"), "右端より外側から進入する");
+assert.equal(tuned.createDialogue({ content: "二つ目", timeInSeconds: 12 }), null,
+  "すべての行が使用中なら無理に重ねずスキップする");
+assert.ok(tuned.createDialogue({ content: "次のコメント", timeInSeconds: 18 }),
+  "先行コメントが通過した行は再利用できる");
+const slow = new VodChatAssComposer(120, false, { crossingSeconds: 6, speedPercent: 50, rowLimit: 1 });
+const fast = new VodChatAssComposer(120, false, { crossingSeconds: 6, speedPercent: 200, rowLimit: 1 });
+const getEnd = (dialogue) => dialogue.split(",")[2];
+const slowEnd = getEnd(slow.createDialogue({ content: "速度確認", timeInSeconds: 10 }));
+const fastEnd = getEnd(fast.createDialogue({ content: "速度確認", timeInSeconds: 10 }));
+assert.ok(slowEnd > fastEnd, "ゆっくりの方が画面移動時間が長い");
+const burst = new VodChatAssComposer(120, true, { rowLimit: 3 });
+assert.equal([0,1,2,3,4].filter(() => burst.createDialogue({ content: "同時刻", timeInSeconds: 5 }) !== null).length, 3,
+  "同時刻の大量コメントは3行に制限し、重なりを発生させない");
+const bounds = normalizeVodChatAssOptions({ crossingSeconds: 0, speedPercent: Infinity, entryOffsetPx: 99999, rowLimit: 99, collisionGap: -100, delaySeconds: -999 });
+assert.equal(bounds.crossingSeconds, 2);
+assert.equal(bounds.speedPercent, 100);
+assert.equal(bounds.entryOffsetPx, 300);
+assert.equal(bounds.rowLimit, 18);
+assert.equal(bounds.collisionGap, 0);
+assert.equal(bounds.delaySeconds, -10);
+assert.equal(new VodChatAssComposer(10, false, { delaySeconds: -3 }).createDialogue({ content: "早すぎ", timeInSeconds: 1 }), null);
+console.log("VOD ASS字幕生成テスト成功（速度・進入位置・同期・行数・衝突防止・emote除去）");

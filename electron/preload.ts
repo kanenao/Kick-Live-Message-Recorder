@@ -23,6 +23,12 @@ type AppSettings = {
   notifyOnLive: boolean;
   showRecordingPreview: boolean;
   removeEmotesFromAss: boolean;
+  vodAssCrossingSeconds: number;
+  vodAssSpeedPercent: number;
+  vodAssEntryOffsetPx: number;
+  vodAssRowLimit: number;
+  vodAssCollisionGap: number;
+  vodAssDelaySeconds: number;
   aiArticleEnabled: boolean;
   aiArticleProvider: "ollama" | "openai";
   aiArticleOllamaUrl: string;
@@ -241,8 +247,11 @@ const api = {
   stopChatReceiver: (): Promise<ChatReceiverStatus> => ipcRenderer.invoke("chat:stop"),
   getChatReceiverStatus: (): Promise<ChatReceiverStatus> => ipcRenderer.invoke("chat:get-status"),
   listChatMessages: (limit: number): Promise<ChatMessage[]> => ipcRenderer.invoke("chat:list", limit),
-  startVodChatDownload: (url: string, removeEmotes = true): Promise<{ ok: true; outputDirectory: string }> =>
-    ipcRenderer.invoke("vod-chat:start", url, removeEmotes),
+  startVodChatDownload: (url: string, removeEmotes = true, assOptions?: {
+    crossingSeconds?: number; speedPercent?: number; entryOffsetPx?: number;
+    rowLimit?: number; collisionGap?: number; delaySeconds?: number;
+  }): Promise<{ ok: true; outputDirectory: string }> =>
+    ipcRenderer.invoke("vod-chat:start", url, removeEmotes, assOptions),
   stopVodChatDownload: (): Promise<{ ok: true }> => ipcRenderer.invoke("vod-chat:stop"),
   onVodChatStatus: (callback: (event: VodChatEvent) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, event: VodChatEvent): void => callback(event);
