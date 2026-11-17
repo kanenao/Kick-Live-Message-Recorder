@@ -5,12 +5,12 @@ export function formatKickEmoteTokens(content: string, removeEmotes: boolean): s
   ).replace(/[ \t]{2,}/g, " ").trim();
 }
 
+import { computeNicoAssProfile, reserveNicoAssLane, updateNicoAssActivity, type NicoAssLane } from "./nico-ass-auto";
+
 export type VodChatAssMessage = {
   content: string;
   timeInSeconds: number;
 };
-
-type AssLane = { startSeconds: number; endSeconds: number; width: number };
 
 export type VodChatAssOptions = {
   crossingSeconds?: number;
@@ -19,6 +19,7 @@ export type VodChatAssOptions = {
   rowLimit?: number;
   collisionGap?: number;
   delaySeconds?: number;
+  autoFlow?: boolean;
 };
 
 const PLAY_RES_X = 1920;
@@ -34,7 +35,8 @@ const DEFAULT_OPTIONS: Required<VodChatAssOptions> = {
   entryOffsetPx: 16,
   rowLimit: 16,
   collisionGap: 40,
-  delaySeconds: 0
+  delaySeconds: 0,
+  autoFlow: true
 };
 
 function boundedOption(
@@ -58,7 +60,8 @@ export function normalizeVodChatAssOptions(value: unknown): Required<VodChatAssO
     entryOffsetPx: Math.round(boundedOption(source, "entryOffsetPx", DEFAULT_OPTIONS.entryOffsetPx, 0, 300)),
     rowLimit: Math.round(boundedOption(source, "rowLimit", DEFAULT_OPTIONS.rowLimit, 1, 18)),
     collisionGap: Math.round(boundedOption(source, "collisionGap", DEFAULT_OPTIONS.collisionGap, 0, 200)),
-    delaySeconds: boundedOption(source, "delaySeconds", DEFAULT_OPTIONS.delaySeconds, -10, 10)
+    delaySeconds: boundedOption(source, "delaySeconds", DEFAULT_OPTIONS.delaySeconds, -10, 10),
+    autoFlow: source.autoFlow !== false
   };
 }
 
@@ -120,12 +123,15 @@ export function createVodChatAssHeader(channelSlug: string, title: string): stri
   ].join("\n");
 }
 
-/** Nico-style right-to-left flow with adjustable entry, timing and collision-safe lanes. */
+/** Nico-style right-to-left movement, automatically adjusted by default. */
 export class VodChatAssComposer {
-  private readonly lanes: Array<AssLane | null>;
+  private readonly lanes: Array<NicoAssLane | null>;
   private readonly durationSeconds: number;
   private readonly removeEmotes: boolean;
   private readonly options: Required<VodChatAssOptions>;
+  private activity = 0;
+  private lastMessageSeconds: number | null = null;
+  private laneCursor = 0;
 
   constructor(durationSeconds: number, removeEmotes = false, options: unknown = {}) {
     this.durationSeconds = durationSeconds;
@@ -139,36 +145,36 @@ export class VodChatAssComposer {
 
   createDialogue(message: VodChatAssMessage): string | null {
     if (!Number.isFinite(message.timeInSeconds)) return null;
-    const start = message.timeInSeconds + this.options.delaySeconds;
-    if (start < 0 || start >= this.durationSeconds) return null;
+    const requestedStart = message.timeInSeconds + this.options.delaySeconds;
+    if (requestedStart < 0 || requestedStart >= this.durationSeconds) return null;
     const text = escapeVodAssText(message.content, this.removeEmotes);
     if (!text) return null;
 
     const width = estimateTextWidth(text) + 32;
-    const entranceX = PLAY_RES_X + this.options.entryOffsetPx;
-    const speed = (PLAY_RES_X / this.options.crossingSeconds) * (this.options.speedPercent / 100);
-    const travelSeconds = (entranceX + width) / speed;
-    const end = Math.min(this.durationSeconds, start + travelSeconds);
-    if (end <= start) return null;
-
-    let laneIndex = -1;
-    for (let index = 0; index < this.lanes.length; index += 1) {
-      const previous = this.lanes[index];
-      // A new comment may enter only after the previous trailing edge has cleared the gap.
-      const clearance = previous
-        ? speed * (start - previous.startSeconds) - previous.width
-        : Number.POSITIVE_INFINITY;
-      if (!previous || start >= previous.endSeconds || clearance >= this.options.collisionGap) {
-        laneIndex = index;
-        break;
-      }
+    if (this.options.autoFlow) {
+      this.activity = updateNicoAssActivity(this.activity,
+        this.lastMessageSeconds === null ? 0 : Math.max(0, requestedStart - this.lastMessageSeconds));
+      this.lastMessageSeconds = requestedStart;
     }
-    // Never reuse an occupied lane while comments overlap. Skip only when all lanes are full.
-    if (laneIndex < 0) return null;
-    this.lanes[laneIndex] = { startSeconds: start, endSeconds: end, width };
-
+    const profile = this.options.autoFlow
+      ? computeNicoAssProfile(PLAY_RES_X, width, FONT_SIZE, this.activity)
+      : null;
+    const entranceX = PLAY_RES_X + (profile?.entryOffsetPx ?? this.options.entryOffsetPx);
+    const speed = profile?.speed ??
+      (PLAY_RES_X / this.options.crossingSeconds) * (this.options.speedPercent / 100);
+    const allocation = reserveNicoAssLane(
+      this.lanes, requestedStart, this.durationSeconds, entranceX, width, speed,
+      profile?.gapPx ?? this.options.collisionGap,
+      this.options.autoFlow ? 1.2 : 0,
+      this.options.autoFlow ? this.laneCursor : 0
+    );
+    if (!allocation) return null;
+    const { laneIndex, start, end, travelSeconds } = allocation;
+    this.lanes[laneIndex] = { start, end, speed, width, entryX: entranceX };
+    if (this.options.autoFlow) this.laneCursor = (laneIndex + 1) % this.lanes.length;
     const y = LANE_TOP + laneIndex * LANE_GAP;
-    const moveMilliseconds = Math.max(1, Math.round((end - start) * 1000));
+    // Maintain speed at video boundaries instead of making the final line accelerate.
+    const moveMilliseconds = Math.max(1, Math.round(travelSeconds * 1000));
     const tags = "{\\\\move(" + entranceX + "," + y + "," + Math.round(-width) + "," + y +
       ",0," + moveMilliseconds + ")" +
       "\\\\fn" + FONT_NAME + "\\\\b1\\\\1c&H00FFFFFF&\\\\bord3.2\\\\shad1}";
