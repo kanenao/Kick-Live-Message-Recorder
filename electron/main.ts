@@ -61,6 +61,7 @@ type AppSettings = {
   notifyOnLive: boolean;
   showRecordingPreview: boolean;
   removeEmotesFromAss: boolean;
+  assAutoFlow: boolean;
   vodAssCrossingSeconds: number;
   vodAssSpeedPercent: number;
   vodAssEntryOffsetPx: number;
@@ -101,6 +102,7 @@ const DEFAULT_STATE: AppState = {
     notifyOnLive: true,
     showRecordingPreview: true,
     removeEmotesFromAss: true,
+  assAutoFlow: true,
   vodAssCrossingSeconds: 6,
   vodAssSpeedPercent: 100,
   vodAssEntryOffsetPx: 16,
@@ -898,6 +900,7 @@ function normalizeState(input: unknown): AppState {
       notifyOnLive: settings.notifyOnLive !== false,
       showRecordingPreview: settings.showRecordingPreview !== false,
       removeEmotesFromAss: settings.removeEmotesFromAss !== false,
+      assAutoFlow: settings.assAutoFlow !== false,
       vodAssCrossingSeconds: typeof settings.vodAssCrossingSeconds === "number" && Number.isFinite(settings.vodAssCrossingSeconds)
         ? Math.max(2, Math.min(15, settings.vodAssCrossingSeconds)) : 6,
       vodAssSpeedPercent: typeof settings.vodAssSpeedPercent === "number" && Number.isFinite(settings.vodAssSpeedPercent)

@@ -23,6 +23,7 @@ type AppSettings = {
   notifyOnLive: boolean;
   showRecordingPreview: boolean;
   removeEmotesFromAss: boolean;
+  assAutoFlow: boolean;
   vodAssCrossingSeconds: number;
   vodAssSpeedPercent: number;
   vodAssEntryOffsetPx: number;
@@ -107,7 +108,7 @@ type LibraryCommentMessage = {
 type CommentVideoOptions = {
   videoPath: string; chatPath?: string; chatPaths?: string[]; delaySeconds?: number; fontFamily?: "ms-pgothic" | "meiryo" | "yu-gothic" | "arial"; fontSize?: number;
   displaySeconds?: number; speedPercent?: number; rowLimit?: number; collisionGap?: number; opacity?: number;
-  quality?: "high" | "standard" | "compact"; position?: "scroll" | "top" | "bottom"; showUsername?: boolean; removeEmotes?: boolean;
+  quality?: "high" | "standard" | "compact"; position?: "scroll" | "top" | "bottom"; showUsername?: boolean; removeEmotes?: boolean; autoFlow?: boolean;
 };
 type StreamArticle = {
   id: string; slug: string; displayName: string; headline: string; streamTitle?: string; category: string; startedAt: string;
@@ -249,7 +250,7 @@ const api = {
   listChatMessages: (limit: number): Promise<ChatMessage[]> => ipcRenderer.invoke("chat:list", limit),
   startVodChatDownload: (url: string, removeEmotes = true, assOptions?: {
     crossingSeconds?: number; speedPercent?: number; entryOffsetPx?: number;
-    rowLimit?: number; collisionGap?: number; delaySeconds?: number;
+    rowLimit?: number; collisionGap?: number; delaySeconds?: number; autoFlow?: boolean;
   }): Promise<{ ok: true; outputDirectory: string }> =>
     ipcRenderer.invoke("vod-chat:start", url, removeEmotes, assOptions),
   stopVodChatDownload: (): Promise<{ ok: true }> => ipcRenderer.invoke("vod-chat:stop"),

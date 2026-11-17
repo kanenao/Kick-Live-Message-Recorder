@@ -19,6 +19,7 @@ import { createInterface } from "node:readline";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { isPathInsideDirectory } from "./recording";
 import { formatKickEmoteTokens } from "./vod-chat-ass";
+import { computeNicoAssProfile, reserveNicoAssLane, updateNicoAssActivity } from "./nico-ass-auto";
 import { resolveVideoTimelineAnchor, type VideoTimelineSyncSource } from "./recording-timeline";
 
 const execFileAsync = promisify(execFile);
@@ -56,6 +57,7 @@ export type CommentVideoOptions = {
   position?: CommentVideoPosition;
   showUsername?: boolean;
   removeEmotes?: boolean;
+  autoFlow?: boolean;
 };
 
 export type CommentVideoEvent = {
@@ -79,6 +81,7 @@ type LaneState = {
   end: number;
   speed: number;
   width: number;
+  entryX: number;
 };
 
 const COMMENT_FONT_FAMILIES: Record<CommentVideoFontFamily, string> = {
@@ -593,7 +596,8 @@ export class KickCommentVideoGenerator {
       quality: values.quality === "high" || values.quality === "compact" ? values.quality : "standard",
       position: normalizeCommentVideoPosition(values.position),
       showUsername: values.showUsername === true,
-      removeEmotes: values.removeEmotes !== false
+      removeEmotes: values.removeEmotes !== false,
+      autoFlow: values.autoFlow !== false
     };
 
     const controller = new AbortController();
@@ -758,7 +762,7 @@ export class KickCommentVideoGenerator {
       const topMargin = Math.max(18, Math.round(info.height * 0.02));
       const usableHeight = Math.max(1, info.height - topMargin * 2 - options.fontSize);
       const visibleRows = Math.max(1, Math.floor(usableHeight / lineHeight) + 1);
-      const laneCount = Math.min(options.rowLimit, visibleRows);
+      const laneCount = options.autoFlow ? Math.min(20, visibleRows) : Math.min(options.rowLimit, visibleRows);
       const laneSpacing = laneCount > 1 ? usableHeight / (laneCount - 1) : 0;
       const lanes: Array<LaneState | null> = Array.from({ length: laneCount }, () => null);
       // ニコ生風に、文章の長さで速度が変わらないよう画面幅を基準に一定速度で流す。
@@ -786,6 +790,9 @@ export class KickCommentVideoGenerator {
         value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
         return ((value ^ (value >>> 14)) >>> 0) % lanes.length;
       };
+      let flowActivity = 0;
+      let previousAutoMessageTime: number | null = null;
+      let autoLaneCursor = 0;
       let generated = 0;
       let skipped = 0;
       let batch: string[] = [];
@@ -798,37 +805,55 @@ export class KickCommentVideoGenerator {
           ? comment.position ?? "scroll"
           : options.position;
         const isScrolling = commentPosition === "scroll";
-        const start = comment.seconds;
-        // 文字が長いコメントは、画面を出切るまでの時間だけ長くする。
+        let start = comment.seconds;
+        if (isScrolling && options.autoFlow) {
+          flowActivity = updateNicoAssActivity(flowActivity,
+            previousAutoMessageTime === null ? 0 : Math.max(0, start - previousAutoMessageTime));
+          previousAutoMessageTime = start;
+        }
+        const autoProfile = isScrolling && options.autoFlow
+          ? computeNicoAssProfile(info.width, width, options.fontSize, flowActivity)
+          : null;
+        const speed = autoProfile?.speed ?? scrollPixelsPerSecond;
+        const entranceX = info.width + (autoProfile?.entryOffsetPx ?? 16);
         const commentMoveDuration = isScrolling
-          ? (info.width + width + 32) / scrollPixelsPerSecond
+          ? (entranceX + width) / speed
           : options.displaySeconds;
 
         if (isScrolling) {
-          const speed = scrollPixelsPerSecond;
-          const laneStart = nextLaneStart();
-          for (let offset = 0; offset < lanes.length; offset += 1) {
-            // 横スクロールは文字幅・速度差・時間差・指定間隔を調べ、衝突しない行だけを再利用。
-            const index = (laneStart + offset) % lanes.length;
-            const previous = lanes[index];
-            if (!previous || comment.seconds >= previous.end) {
-              laneIndex = index;
-              break;
+          if (autoProfile) {
+            const reservation = reserveNicoAssLane(
+              lanes, start, info.duration, entranceX, width, speed,
+              autoProfile.gapPx, 1.2, autoLaneCursor
+            );
+            if (reservation) {
+              laneIndex = reservation.laneIndex;
+              start = reservation.start;
+              lanes[laneIndex] = { start, end: reservation.end, speed, width, entryX: entranceX };
+              autoLaneCursor = (laneIndex + 1) % lanes.length;
             }
-            const overlap = Math.max(0, Math.min(commentMoveDuration, previous.end - comment.seconds));
-            const gapNeeded = options.collisionGap +
-              Math.max(0, speed - previous.speed) * overlap;
-            // 先行コメントの後端と、次コメントの進入位置の実距離で衝突を判定。
-            const currentGap = previous.speed * Math.max(0, comment.seconds - previous.start) - previous.width;
-            if (currentGap >= gapNeeded) {
-              laneIndex = index;
-              break;
+          } else {
+            const laneStart = nextLaneStart();
+            for (let offset = 0; offset < lanes.length; offset += 1) {
+              const index = (laneStart + offset) % lanes.length;
+              const previous = lanes[index];
+              if (!previous || comment.seconds >= previous.end) {
+                laneIndex = index;
+                break;
+              }
+              const overlap = Math.max(0, Math.min(commentMoveDuration, previous.end - comment.seconds));
+              const gapNeeded = options.collisionGap +
+                Math.max(0, speed - previous.speed) * overlap;
+              const currentGap = previous.speed * Math.max(0, comment.seconds - previous.start) - previous.width;
+              if (currentGap >= gapNeeded) {
+                laneIndex = index;
+                break;
+              }
             }
-          }
-
-          if (laneIndex >= 0) {
-            const end = Math.min(info.duration, start + commentMoveDuration);
-            lanes[laneIndex] = { start, end, speed, width };
+            if (laneIndex >= 0) {
+              const end = Math.min(info.duration, start + commentMoveDuration);
+              lanes[laneIndex] = { start, end, speed, width, entryX: entranceX };
+            }
           }
         } else {
           // 上・下固定は同一行の表示終了時刻を管理。空いている行を優先する。
@@ -857,7 +882,7 @@ export class KickCommentVideoGenerator {
 
         if (isScrolling) {
           const y = Math.round(topMargin + laneIndex * laneSpacing);
-          tags = "{\\move(" + (info.width + 16) + "," + y + "," + Math.round(-width) + "," + y +
+          tags = "{\\move(" + entranceX + "," + y + "," + Math.round(-width) + "," + y +
             ",0," + Math.max(1, Math.round(commentMoveDuration * 1000)) + ")" +
             "\\fn" + COMMENT_FONT_FAMILIES[options.fontFamily] + "\\b1\\1c" + color +
             "\\alpha&H" + alpha + "&\\bord3.2\\shad1}";

@@ -26,6 +26,7 @@ type KickRecorderAppState = {
     notifyOnLive: boolean;
     showRecordingPreview: boolean;
     removeEmotesFromAss: boolean;
+    assAutoFlow: boolean;
     vodAssCrossingSeconds: number;
     vodAssSpeedPercent: number;
     vodAssEntryOffsetPx: number;
@@ -240,7 +241,7 @@ declare global {
       listChatMessages: (limit: number) => Promise<KickRecorderChatMessage[]>;
       startVodChatDownload: (url: string, removeEmotes?: boolean, assOptions?: {
         crossingSeconds?: number; speedPercent?: number; entryOffsetPx?: number;
-        rowLimit?: number; collisionGap?: number; delaySeconds?: number;
+        rowLimit?: number; collisionGap?: number; delaySeconds?: number; autoFlow?: boolean;
       }) => Promise<{ ok: true; outputDirectory: string }>;
       stopVodChatDownload: () => Promise<{ ok: true }>;
       onVodChatStatus: (callback: (event: KickRecorderVodChatEvent) => void) => () => void;
@@ -285,7 +286,7 @@ declare global {
       listRecentCommentMessages: (channelSlug: string, limit?: number) => Promise<KickRecorderLibraryCommentMessage[]>;
       listCommentFileMessages: (channelSlug: string, fileName: string, limit?: number) => Promise<KickRecorderLibraryCommentMessage[]>;
       previewCommentVideo: (input: { videoPath: string; chatPaths: string[]; delaySeconds?: number; removeEmotes?: boolean }) => Promise<KickRecorderCommentVideoPreview>;
-      startCommentVideo: (options: { videoPath: string; chatPath?: string; chatPaths?: string[]; delaySeconds?: number; fontFamily?: "ms-pgothic" | "meiryo" | "yu-gothic" | "arial"; fontSize?: number; displaySeconds?: number; speedPercent?: number; rowLimit?: number; collisionGap?: number; opacity?: number; quality?: "high" | "standard" | "compact"; position?: "scroll" | "top" | "bottom" | "command"; showUsername?: boolean; removeEmotes?: boolean }) => Promise<{ ok: true; outputPath: string }>;
+      startCommentVideo: (options: { videoPath: string; chatPath?: string; chatPaths?: string[]; delaySeconds?: number; fontFamily?: "ms-pgothic" | "meiryo" | "yu-gothic" | "arial"; fontSize?: number; displaySeconds?: number; speedPercent?: number; rowLimit?: number; collisionGap?: number; opacity?: number; quality?: "high" | "standard" | "compact"; position?: "scroll" | "top" | "bottom" | "command"; showUsername?: boolean; removeEmotes?: boolean; autoFlow?: boolean }) => Promise<{ ok: true; outputPath: string }>;
       stopCommentVideo: () => Promise<{ ok: true }>;
       onCommentVideoStatus: (callback: (event: KickRecorderCommentVideoEvent) => void) => () => void;
       onRecordingStatus: (callback: (event: KickRecorderRecordingEvent) => void) => () => void;
