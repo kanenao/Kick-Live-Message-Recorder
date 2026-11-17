@@ -1,6 +1,13 @@
 # 更新履歴
 
-> mainブランチは旧開発コードを保持しています。公開済みα版のソースとリリースノートは [v0.3.8-alpha.71](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.3.8-alpha.71) を参照してください。
+> mainブランチは旧開発コードを保持しています。公開済みα版のソースとリリースノートは [v0.3.9-alpha.72](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.3.9-alpha.72) を参照してください。
+
+## 0.3.9-alpha.72（公開済みα版）
+
+- 左側メニューの「配信記事」直前に表示されていたリテラル `\\n` を削除。
+- JSX内の改行記法を正しく修正し、CSSの不要文字も整理。
+- 自動回帰テストと型チェック・Windowsインストーラー生成・更新情報の整合性検査に成功。
+- 配信記事・録画データ・コメントの元ファイルは保持。
 
 ## 0.3.8-alpha.71（公開済みα版）
 
