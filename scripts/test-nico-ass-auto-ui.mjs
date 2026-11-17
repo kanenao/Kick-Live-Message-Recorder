@@ -1,0 +1,12 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+const ui = readFileSync(new URL("../src/ui/App.tsx", import.meta.url), "utf8");
+const main = readFileSync(new URL("../electron/main.ts", import.meta.url), "utf8");
+const encoder = readFileSync(new URL("../electron/comment-video.ts", import.meta.url), "utf8");
+const vod = readFileSync(new URL("../electron/vod-chat-ass.ts", import.meta.url), "utf8");
+assert.ok(ui.includes("assAutoFlow: true") && main.includes("assAutoFlow: true"), "自動調整の初期値はON");
+assert.ok(ui.includes("checked={settings.assAutoFlow}"), "自動調整を画面から切り替えられる");
+assert.ok(ui.includes("autoFlow: settings.assAutoFlow"), "過去配信ASS・コメント付き動画の両方へ設定を送る");
+assert.ok(encoder.includes("reserveNicoAssLane("), "動画生成の字幕配置に自動レーン計算を利用");
+assert.ok(vod.includes("reserveNicoAssLane("), "過去配信ASSにも同じ自動レーン計算を利用");
+console.log("ニコ生風ASS自動調整のUI・設定保存・両経路への連携テスト成功");

@@ -210,7 +210,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.4.0-alpha.73";
+const APP_VERSION = "0.4.1-alpha.74";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -238,6 +238,16 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.4.1-alpha.74",
+    title: "ニコ生風ASSのコメント速度・入り方を自動調整",
+    changes: [
+      "過去配信ASSとコメント付き動画のASSに自動調整ON/OFFを追加（初期値ON）",
+      "コメントの長さと直近の投稿密度で速度・画面右端からの進入距離を計算",
+      "前後コメントの速度差を考慮して追い越しを防ぎ、必要なら最大1.2秒入場時刻を調整",
+      "手動モードを維持し、元のJSONL・TXT・動画・記事は変更しない"
+    ]
+  },
   {
     version: "0.4.0-alpha.73",
     title: "過去配信ASSのニコ生風コメント調整",
