@@ -201,7 +201,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.3.6-alpha.69";
+const APP_VERSION = "0.3.7-alpha.70";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -229,6 +229,17 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.3.7-alpha.70",
+    title: "録画ライブラリのコメントログを個別にごみ箱へ移動",
+    changes: [
+      "配信別のコメントJSONLに削除ボタンを追加し、ファイル名を確認してからWindowsのごみ箱へ移動",
+      "削除後は動画ライブラリのコメント数・配信カード・コメントプレビューをすぐ更新",
+      "削除したファイルをコメント付き動画生成の選択からも自動解除",
+      "録画中のLIVEコメントとVODコメント取得中の削除を保護",
+      "録画動画・AI記事・別のログ・TXT/ASSなどは同時削除せず、元データを保護"
+    ]
+  },
   {
     version: "0.3.6-alpha.69",
     title: "録画ライブラリのアイコン・配信者名からKickページへ移動",
