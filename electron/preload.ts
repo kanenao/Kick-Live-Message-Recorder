@@ -320,6 +320,7 @@ const api = {
   generateStreamArticle: (input: { videoPath: string; slug: string; displayName?: string; category?: string; headline?: string; chatPaths?: string[] }): Promise<StreamArticle> =>
     ipcRenderer.invoke("articles:generate", input),
   listCommentLogFiles: (): Promise<CommentLogFile[]> => ipcRenderer.invoke("comment-video:list-logs"),
+  deleteCommentLog: (filePath: string): Promise<{ ok: true; name: string }> => ipcRenderer.invoke("library:delete-comment-log", filePath),
   listRecentCommentMessages: (channelSlug: string, limit = 100): Promise<LibraryCommentMessage[]> =>
     ipcRenderer.invoke("library:recent-comments", channelSlug, limit),
   listCommentFileMessages: (channelSlug: string, fileName: string, limit = 100): Promise<LibraryCommentMessage[]> =>
