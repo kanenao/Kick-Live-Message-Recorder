@@ -18,6 +18,7 @@ import { tmpdir } from "node:os";
 import { createInterface } from "node:readline";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { isPathInsideDirectory } from "./recording";
+import { formatKickEmoteTokens } from "./emote-filter";
 import { resolveVideoTimelineAnchor, type VideoTimelineSyncSource } from "./recording-timeline";
 
 const execFileAsync = promisify(execFile);
@@ -54,6 +55,7 @@ export type CommentVideoOptions = {
   quality?: "high" | "standard" | "compact";
   position?: CommentVideoPosition;
   showUsername?: boolean;
+  removeEmotes?: boolean;
 };
 
 export type CommentVideoEvent = {
@@ -216,7 +218,6 @@ function estimateTextWidth(text: string, fontSize: number): number {
 
 function escapeAssText(value: string): string {
   return value
-    .replace(/\[emote:\d+:([^\]]+)\]/g, "$1")
     .replace(/[\r\n\t]+/g, " ")
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "")
     .replace(/\\/g, "\\\\")
@@ -479,8 +480,7 @@ export async function previewCommentVideo(
     }
 
     const username = readString(raw.senderUsername) ?? readString(raw.username) ?? "";
-    const cleanRawContent = content
-      .replace(/\[emote:\d+:([^\]]+)\]/g, "$1")
+    const cleanRawContent = formatKickEmoteTokens(content, values.removeEmotes !== false)
       .replace(/[\r\n\t]+/g, " ")
       .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "")
       .trim()
@@ -592,7 +592,8 @@ export class KickCommentVideoGenerator {
       opacity: boundedNumber(values.opacity, 100, 20, 100),
       quality: values.quality === "high" || values.quality === "compact" ? values.quality : "standard",
       position: normalizeCommentVideoPosition(values.position),
-      showUsername: values.showUsername === true
+      showUsername: values.showUsername === true,
+      removeEmotes: values.removeEmotes !== false
     };
 
     const controller = new AbortController();
@@ -698,13 +699,13 @@ export class KickCommentVideoGenerator {
         if (!Number.isFinite(seconds) || seconds < 0 || seconds > info.duration) continue;
 
         const username = readString(raw.senderUsername) ?? readString(raw.username) ?? "";
-        const cleanContent = content
-          .replace(/\[emote:\d+:([^\]]+)\]/g, "$1")
+        const cleanContent = formatKickEmoteTokens(content, options.removeEmotes)
           .replace(/[\r\n\t]+/g, " ")
           .trim();
         const resolved = options.position === "command"
           ? resolveCommentPosition(raw, cleanContent)
           : { text: cleanContent };
+        if (!resolved.text) continue; // Avoid username-only subtitles for emote-only comments
         const displayContent = options.showUsername && username
           ? username + " : " + resolved.text
           : resolved.text;

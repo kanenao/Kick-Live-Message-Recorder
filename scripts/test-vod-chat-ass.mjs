@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { formatKickEmoteTokens } from "../electron/emote-filter.ts";
 import {
   createVodChatAssHeader,
   escapeVodAssText,
@@ -15,6 +16,18 @@ assert.ok(escaped.includes("\\{"));
 assert.ok(escaped.includes("\\}"));
 assert.ok(escaped.includes("Nice"));
 assert.ok(!escaped.includes("\n"));
+
+assert.equal(formatKickEmoteTokens("こんにちは [emote:123:Nice] ありがとう", true), "こんにちは ありがとう");
+assert.equal(formatKickEmoteTokens(" [emote:123:Nice] [emote:456:Pog] ", true), "");
+assert.equal(formatKickEmoteTokens("こんにちは [emote:123:Nice]", false), "こんにちは Nice");
+assert.equal(formatKickEmoteTokens("emoteは普通の単語です", true), "emoteは普通の単語です");
+assert.equal(escapeVodAssText("ありがとう [emote:123:Nice]", true), "ありがとう");
+
+const filteredComposer = new VodChatAssComposer(3600, true);
+assert.equal(filteredComposer.createDialogue({ content: "[emote:123:Nice]", timeInSeconds: 10 }), null);
+const filteredDialogue = filteredComposer.createDialogue({ content: "おはよう [emote:123:Nice] ございます", timeInSeconds: 11 });
+assert.ok(filteredDialogue?.includes("おはよう ございます"));
+assert.ok(!filteredDialogue?.includes("Nice"));
 
 const header = createVodChatAssHeader("sample_channel", "過去配信タイトル");
 assert.ok(header.includes("[Script Info]"));

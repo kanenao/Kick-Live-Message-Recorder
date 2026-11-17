@@ -47,6 +47,7 @@ type AppSettings = {
   recordingRetryDelaySeconds: number;
   notifyOnLive: boolean;
   showRecordingPreview: boolean;
+  removeEmotesFromAss: boolean;
   aiArticleEnabled: boolean;
   aiArticleProvider: "ollama" | "openai";
   aiArticleOllamaUrl: string;
@@ -661,6 +662,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   recordingRetryDelaySeconds: 10,
   notifyOnLive: true,
   showRecordingPreview: true,
+  removeEmotesFromAss: true,
   aiArticleEnabled: false,
   aiArticleProvider: "ollama",
   aiArticleOllamaUrl: "http://127.0.0.1:11434",
@@ -735,6 +737,7 @@ function normalizeState(value: unknown): PersistedState {
         : 10,
       notifyOnLive: settings.notifyOnLive !== false,
       showRecordingPreview: settings.showRecordingPreview !== false,
+      removeEmotesFromAss: settings.removeEmotesFromAss !== false,
       aiArticleEnabled: settings.aiArticleEnabled === true,
       aiArticleProvider: settings.aiArticleProvider === "openai" ? "openai" : "ollama",
       aiArticleOllamaUrl: typeof settings.aiArticleOllamaUrl === "string" ? settings.aiArticleOllamaUrl.slice(0, 300) : "http://127.0.0.1:11434",
@@ -1474,7 +1477,8 @@ export default function App() {
     void window.kickRecorder.previewCommentVideo({
       videoPath: selectedCommentVideoPath,
       chatPaths: selectedCommentLogPaths,
-      delaySeconds: commentVideoDelay
+      delaySeconds: commentVideoDelay,
+      removeEmotes: settings.removeEmotesFromAss
     }).then(result => {
       if (!active) return;
       setCommentVideoPreviewResult(result);
@@ -1486,7 +1490,7 @@ export default function App() {
       if (active) setCommentVideoPreviewLoading(false);
     });
     return () => { active = false; };
-  }, [tab, isDesktop, selectedCommentVideoPath, selectedCommentLogPaths, commentVideoDelay, libraryRefreshKey, settings.outputDirectory]);
+  }, [tab, isDesktop, selectedCommentVideoPath, selectedCommentLogPaths, commentVideoDelay, libraryRefreshKey, settings.outputDirectory, settings.removeEmotesFromAss]);
 
   useEffect(() => {
     if (!selectedCommentVideoPath && recordingFiles.length > 0) setSelectedCommentVideoPath(recordingFiles[0].path);
@@ -1881,7 +1885,7 @@ export default function App() {
     setVodChatActive(true);
     setVodChatStatus("過去コメントの取得を準備しています...");
     try {
-      const result = await window.kickRecorder.startVodChatDownload(vodUrl.trim().split(/\s+/)[0]);
+      const result = await window.kickRecorder.startVodChatDownload(vodUrl.trim().split(/\s+/)[0], settings.removeEmotesFromAss);
       setVodChatStatus("コメント取得を開始しました。保存先：" + result.outputDirectory);
     } catch (error) {
       setVodChatActive(false);
@@ -2025,7 +2029,8 @@ export default function App() {
         position: commentVideoPosition,
         fontFamily: commentVideoFontFamily, fontSize: commentVideoFontSize, displaySeconds: commentVideoDuration,
         speedPercent: commentVideoSpeed, rowLimit: commentVideoRows, collisionGap: commentVideoGap,
-        opacity: commentVideoOpacity, quality: commentVideoQuality, showUsername: commentVideoShowUsername
+        opacity: commentVideoOpacity, quality: commentVideoQuality, showUsername: commentVideoShowUsername,
+        removeEmotes: settings.removeEmotesFromAss
       });
       setCommentVideoOutputPath(result.outputPath);
     } catch (error) {
@@ -2468,6 +2473,7 @@ export default function App() {
             })}
           </div>
           <p className="settings-help">コメント取得は現在1番組ずつの処理です。複数URLを貼り付けた場合は先頭のURLが対象になります。ダウンロード一覧はアプリ再起動でリセットされますが、完成した動画は録画ライブラリに残ります。</p>
+          <label className="comment-video-checkbox"><input type="checkbox" checked={settings.removeEmotesFromAss} onChange={event => setSettings(previous => ({ ...previous, removeEmotesFromAss: event.target.checked }))} disabled={vodChatActive} /><span>ASS出力時にemoteを削除する（JSONL・TXTの原文は保持）</span></label>
           <div className="add-channel vod-chat-actions">
             <button className="primary-small" onClick={() => void downloadPastBroadcastChat()} disabled={!isDesktop || vodChatActive}>過去配信のコメントを取得（JSONL・TXT・ASS）</button>
             {vodChatActive && <button className="remove" onClick={() => void stopPastBroadcastChat()}>コメント取得を停止</button>}
@@ -2759,13 +2765,14 @@ export default function App() {
                 <label className="comment-video-field"><span>出力画質</span><select value={commentVideoQuality} onChange={event => setCommentVideoQuality(event.target.value as "high" | "standard" | "compact")} disabled={commentVideoBusy}><option value="high">高画質・大きめ</option><option value="standard">標準（おすすめ）</option><option value="compact">容量優先</option></select><small>利用可能なH.264エンコーダーを優先し、ない場合は互換形式へ切り替えます。</small></label>
               </div>
               <label className="comment-video-checkbox"><input type="checkbox" checked={commentVideoShowUsername} onChange={event => setCommentVideoShowUsername(event.target.checked)} disabled={commentVideoBusy} /><span>コメントに投稿者名も表示する</span></label>
+              <label className="comment-video-checkbox"><input type="checkbox" checked={settings.removeEmotesFromAss} onChange={event => setSettings(previous => ({ ...previous, removeEmotesFromAss: event.target.checked }))} disabled={commentVideoBusy} /><span>ASS出力時にemoteを削除する（emoteだけのコメントは出力しない）</span></label>
             </div>
             <div
               className="comment-video-preview"
               key={[
                 commentVideoFontFamily, commentVideoFontSize, commentVideoDuration,
                 commentVideoSpeed, commentVideoRows, commentVideoGap, commentVideoOpacity,
-                commentVideoShowUsername, commentVideoDelay, commentVideoPosition, selectedCommentVideoPath,
+                commentVideoShowUsername, commentVideoDelay, commentVideoPosition, settings.removeEmotesFromAss, selectedCommentVideoPath,
                 selectedCommentLogPaths.join(","),
                 commentVideoPreviewResult?.comments.map(comment => comment.content + comment.color).join("|")
               ].join(":")}

@@ -22,6 +22,7 @@ type AppSettings = {
   preventSystemSleep: boolean;
   notifyOnLive: boolean;
   showRecordingPreview: boolean;
+  removeEmotesFromAss: boolean;
   aiArticleEnabled: boolean;
   aiArticleProvider: "ollama" | "openai";
   aiArticleOllamaUrl: string;
@@ -100,7 +101,7 @@ type LibraryCommentMessage = {
 type CommentVideoOptions = {
   videoPath: string; chatPath?: string; chatPaths?: string[]; delaySeconds?: number; fontFamily?: "ms-pgothic" | "meiryo" | "yu-gothic" | "arial"; fontSize?: number;
   displaySeconds?: number; speedPercent?: number; rowLimit?: number; collisionGap?: number; opacity?: number;
-  quality?: "high" | "standard" | "compact"; position?: "scroll" | "top" | "bottom"; showUsername?: boolean;
+  quality?: "high" | "standard" | "compact"; position?: "scroll" | "top" | "bottom"; showUsername?: boolean; removeEmotes?: boolean;
 };
 type StreamArticle = {
   id: string; slug: string; displayName: string; headline: string; streamTitle?: string; category: string; startedAt: string;
@@ -240,8 +241,8 @@ const api = {
   stopChatReceiver: (): Promise<ChatReceiverStatus> => ipcRenderer.invoke("chat:stop"),
   getChatReceiverStatus: (): Promise<ChatReceiverStatus> => ipcRenderer.invoke("chat:get-status"),
   listChatMessages: (limit: number): Promise<ChatMessage[]> => ipcRenderer.invoke("chat:list", limit),
-  startVodChatDownload: (url: string): Promise<{ ok: true; outputDirectory: string }> =>
-    ipcRenderer.invoke("vod-chat:start", url),
+  startVodChatDownload: (url: string, removeEmotes = true): Promise<{ ok: true; outputDirectory: string }> =>
+    ipcRenderer.invoke("vod-chat:start", url, removeEmotes),
   stopVodChatDownload: (): Promise<{ ok: true }> => ipcRenderer.invoke("vod-chat:stop"),
   onVodChatStatus: (callback: (event: VodChatEvent) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, event: VodChatEvent): void => callback(event);

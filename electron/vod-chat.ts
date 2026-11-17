@@ -405,7 +405,7 @@ export class KickVodChatDownloader {
     return this.controller !== null;
   }
 
-  start(inputUrl: unknown, outputDirectory: string): { ok: true; outputDirectory: string } {
+  start(inputUrl: unknown, outputDirectory: string, removeEmotes = true): { ok: true; outputDirectory: string } {
     if (this.controller) throw new Error("別の過去配信コメントを取得中です。完了または停止してから再度実行してください。");
     const identity = parseVodUrl(inputUrl);
     const directory = outputDirectory.trim();
@@ -421,7 +421,7 @@ export class KickVodChatDownloader {
       message: "VOD情報を確認し、過去コメントの取得を開始しています。"
     });
 
-    void this.run(identity, directory, controller.signal).then(result => {
+    void this.run(identity, directory, controller.signal, removeEmotes).then(result => {
       this.onEvent({
         status: "completed",
         slug: identity.slug,
@@ -461,7 +461,8 @@ export class KickVodChatDownloader {
   private async run(
     identity: VodIdentity,
     outputDirectory: string,
-    signal: AbortSignal
+    signal: AbortSignal,
+    removeEmotes: boolean
   ): Promise<{ pages: number; messageCount: number; jsonlPath: string; txtPath: string; assPath: string }> {
     const temporaryDirectory = mkdtempSync(join(tmpdir(), "kick-vod-chat-"));
     const pageFiles: string[] = [];
@@ -554,7 +555,7 @@ export class KickVodChatDownloader {
       const jsonlTemp = join(temporaryDirectory, "result.jsonl");
       const txtTemp = join(temporaryDirectory, "result.txt");
       const assTemp = join(temporaryDirectory, "result.ass");
-      const assComposer = new VodChatAssComposer(metadata.durationSeconds);
+      const assComposer = new VodChatAssComposer(metadata.durationSeconds, removeEmotes);
       writeFileSync(jsonlTemp, "", "utf8");
       writeFileSync(assTemp, createVodChatAssHeader(identity.slug, metadata.title), "utf8");
       writeFileSync(txtTemp, [
