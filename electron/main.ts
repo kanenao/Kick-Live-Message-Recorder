@@ -60,6 +60,7 @@ type AppSettings = {
   recordingRetryDelaySeconds: number;
   notifyOnLive: boolean;
   showRecordingPreview: boolean;
+  removeEmotesFromAss: boolean;
   aiArticleEnabled: boolean;
   aiArticleProvider: "ollama" | "openai";
   aiArticleOllamaUrl: string;
@@ -93,6 +94,7 @@ const DEFAULT_STATE: AppState = {
     recordingRetryDelaySeconds: 10,
     notifyOnLive: true,
     showRecordingPreview: true,
+    removeEmotesFromAss: true,
     aiArticleEnabled: false,
     aiArticleProvider: "ollama",
     aiArticleOllamaUrl: "http://127.0.0.1:11434",
@@ -883,6 +885,7 @@ function normalizeState(input: unknown): AppState {
         : 10,
       notifyOnLive: settings.notifyOnLive !== false,
       showRecordingPreview: settings.showRecordingPreview !== false,
+      removeEmotesFromAss: settings.removeEmotesFromAss !== false,
       aiArticleEnabled: settings.aiArticleEnabled === true,
       aiArticleProvider: settings.aiArticleProvider === "openai" ? "openai" : "ollama",
       aiArticleOllamaUrl: typeof settings.aiArticleOllamaUrl === "string" && /^https?:\/\//i.test(settings.aiArticleOllamaUrl) ? settings.aiArticleOllamaUrl.slice(0, 300) : "http://127.0.0.1:11434",
@@ -1475,9 +1478,9 @@ function registerIpcHandlers(): void {
     return chatReceiver.listRecentMessages(boundedLimit);
   });
 
-  ipcMain.handle("vod-chat:start", (event, url: unknown) => {
+  ipcMain.handle("vod-chat:start", (event, url: unknown, removeEmotes: unknown) => {
     assertTrustedSender(event);
-    return vodChatDownloader.start(url, getRecordingOutputDirectory());
+    return vodChatDownloader.start(url, getRecordingOutputDirectory(), removeEmotes !== false);
   });
 
   ipcMain.handle("vod-chat:stop", event => {

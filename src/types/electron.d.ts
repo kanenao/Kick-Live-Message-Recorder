@@ -25,6 +25,7 @@ type KickRecorderAppState = {
     preventSystemSleep: boolean;
     notifyOnLive: boolean;
     showRecordingPreview: boolean;
+    removeEmotesFromAss: boolean;
     aiArticleEnabled: boolean;
     aiArticleProvider: "ollama" | "openai";
     aiArticleOllamaUrl: string;
@@ -231,7 +232,7 @@ declare global {
       stopChatReceiver: () => Promise<KickRecorderChatStatus>;
       getChatReceiverStatus: () => Promise<KickRecorderChatStatus>;
       listChatMessages: (limit: number) => Promise<KickRecorderChatMessage[]>;
-      startVodChatDownload: (url: string) => Promise<{ ok: true; outputDirectory: string }>;
+      startVodChatDownload: (url: string, removeEmotes?: boolean) => Promise<{ ok: true; outputDirectory: string }>;
       stopVodChatDownload: () => Promise<{ ok: true }>;
       onVodChatStatus: (callback: (event: KickRecorderVodChatEvent) => void) => () => void;
       copyText: (value: string) => Promise<{ ok: boolean }>;
@@ -274,8 +275,8 @@ declare global {
       deleteCommentLog: (filePath: string) => Promise<{ ok: true; name: string }>;
       listRecentCommentMessages: (channelSlug: string, limit?: number) => Promise<KickRecorderLibraryCommentMessage[]>;
       listCommentFileMessages: (channelSlug: string, fileName: string, limit?: number) => Promise<KickRecorderLibraryCommentMessage[]>;
-      previewCommentVideo: (input: { videoPath: string; chatPaths: string[]; delaySeconds?: number }) => Promise<KickRecorderCommentVideoPreview>;
-      startCommentVideo: (options: { videoPath: string; chatPath?: string; chatPaths?: string[]; delaySeconds?: number; fontFamily?: "ms-pgothic" | "meiryo" | "yu-gothic" | "arial"; fontSize?: number; displaySeconds?: number; speedPercent?: number; rowLimit?: number; collisionGap?: number; opacity?: number; quality?: "high" | "standard" | "compact"; position?: "scroll" | "top" | "bottom" | "command"; showUsername?: boolean }) => Promise<{ ok: true; outputPath: string }>;
+      previewCommentVideo: (input: { videoPath: string; chatPaths: string[]; delaySeconds?: number; removeEmotes?: boolean }) => Promise<KickRecorderCommentVideoPreview>;
+      startCommentVideo: (options: { videoPath: string; chatPath?: string; chatPaths?: string[]; delaySeconds?: number; fontFamily?: "ms-pgothic" | "meiryo" | "yu-gothic" | "arial"; fontSize?: number; displaySeconds?: number; speedPercent?: number; rowLimit?: number; collisionGap?: number; opacity?: number; quality?: "high" | "standard" | "compact"; position?: "scroll" | "top" | "bottom" | "command"; showUsername?: boolean; removeEmotes?: boolean }) => Promise<{ ok: true; outputPath: string }>;
       stopCommentVideo: () => Promise<{ ok: true }>;
       onCommentVideoStatus: (callback: (event: KickRecorderCommentVideoEvent) => void) => () => void;
       onRecordingStatus: (callback: (event: KickRecorderRecordingEvent) => void) => () => void;

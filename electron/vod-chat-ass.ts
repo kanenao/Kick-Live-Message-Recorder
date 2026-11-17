@@ -1,3 +1,10 @@
+/** Kick emote markers are removed only for ASS rendering; source chat remains intact. */
+export function formatKickEmoteTokens(content: string, removeEmotes: boolean): string {
+  return content.replace(/\[emote:\d+:([^\]\r\n]+)\]/g, (_token, name: string) =>
+    removeEmotes ? " " : name
+  ).replace(/[ \t]{2,}/g, " ").trim();
+}
+
 export type VodChatAssMessage = {
   content: string;
   timeInSeconds: number;
@@ -28,9 +35,8 @@ export function formatVodAssTimestamp(seconds: number): string {
     String(second).padStart(2, "0") + "." + String(centiseconds).padStart(2, "0");
 }
 
-export function escapeVodAssText(value: string): string {
-  return value
-    .replace(/\[emote:\d+:([^\]]+)\]/g, "$1")
+export function escapeVodAssText(value: string, removeEmotes = false): string {
+  return formatKickEmoteTokens(value, removeEmotes)
     .replace(/[\r\n\t]+/g, " ")
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "")
     .replace(/\\/g, "\\\\")
@@ -78,9 +84,11 @@ export function createVodChatAssHeader(channelSlug: string, title: string): stri
 export class VodChatAssComposer {
   private readonly lanes: Array<AssLane | null> = Array.from({ length: LANE_COUNT }, () => null);
   private readonly durationSeconds: number;
+  private readonly removeEmotes: boolean;
 
-  constructor(durationSeconds: number) {
+  constructor(durationSeconds: number, removeEmotes = false) {
     this.durationSeconds = durationSeconds;
+    this.removeEmotes = removeEmotes;
     if (!Number.isFinite(durationSeconds) || durationSeconds <= 0 || durationSeconds > 7 * 24 * 60 * 60) {
       throw new Error("VODの再生時間が正しくありません。");
     }
@@ -89,7 +97,7 @@ export class VodChatAssComposer {
   createDialogue(message: VodChatAssMessage): string | null {
     if (!Number.isFinite(message.timeInSeconds) || message.timeInSeconds < 0 ||
       message.timeInSeconds >= this.durationSeconds) return null;
-    const text = escapeVodAssText(message.content);
+    const text = escapeVodAssText(message.content, this.removeEmotes);
     if (!text) return null;
 
     const start = message.timeInSeconds;
