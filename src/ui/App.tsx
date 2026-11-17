@@ -202,7 +202,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.3.7-alpha.70";
+const APP_VERSION = "0.3.8-alpha.71";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -230,6 +230,17 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.3.8-alpha.71",
+    title: "ASS字幕出力のemote削除オプション",
+    changes: [
+      "コメント付き動画のASS字幕出力でemote削除のON/OFFを選択可能（初期値ON）",
+      "Kick emote [emote:ID:name] のみ除去し、文章部分は保持。emoteのみのコメントは字幕を生成しない",
+      "過去配信のコメント取得（JSONL・TXT・ASS）のASSにも設定を反映",
+      "コメント表示プレビューにも設定を反映し、設定をアプリに保存",
+      "元のJSONL・TXT、録画動画、AI記事は変更しない"
+    ]
+  },
   {
     version: "0.3.7-alpha.70",
     title: "録画ライブラリのコメントログを個別にごみ箱へ移動",
