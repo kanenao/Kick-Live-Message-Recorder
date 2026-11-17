@@ -967,6 +967,7 @@ export default function App() {
   const [recordingSessions, setRecordingSessions] = useState<LibrarySession[]>([]);
   const [isLoadingRecordings, setIsLoadingRecordings] = useState(false);
   const [deletingRecordingPath, setDeletingRecordingPath] = useState<string | null>(null);
+  const [deletingCommentLogPath, setDeletingCommentLogPath] = useState<string | null>(null);
   const [recordingMessage, setRecordingMessage] = useState("");
   const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
   const libraryLoadedOnceRef = useRef(false);
@@ -1916,6 +1917,45 @@ export default function App() {
     }
   }
 
+  async function deleteCommentLogFromLibrary(log: CommentLogFile) {
+    if (!window.kickRecorder || deletingCommentLogPath) return;
+    const confirmed = window.confirm(
+      "コメントログ「" + log.name + "」をWindowsのごみ箱へ移動しますか？\n\n" +
+      "動画・AI記事など、他のファイルは削除しません。"
+    );
+    if (!confirmed) return;
+
+    setDeletingCommentLogPath(log.path);
+    setRecordingMessage("");
+    try {
+      const result = await window.kickRecorder.deleteCommentLog(log.path);
+      setCommentLogFiles(current => current.filter(file => file.path !== log.path));
+      setRecordingSessions(current => current.map(session => ({
+        ...session, logs: session.logs.filter(file => file.path !== log.path)
+      })).filter(session => session.videos.length > 0 || session.logs.length > 0));
+      setSelectedCommentLogPaths(current => current.filter(path => path !== log.path));
+      // Discard previews and prevent in-flight reads from restoring deleted data.
+      libraryLogRequestRef.current += 1;
+      setLibrarySelectedLogPath(null);
+      setLibraryLogMessages([]);
+      setLibraryLogError("");
+      setLibraryLogLoading(false);
+      if (libraryCommentsChannel === log.channelSlug) {
+        libraryCommentRequestRef.current += 1;
+        setLibraryCommentsChannel(null);
+        setLibraryComments([]);
+        setLibraryCommentsError("");
+        setIsLoadingLibraryComments(false);
+      }
+      setLibraryRefreshKey(value => value + 1);
+      setRecordingMessage("コメントログ「" + result.name + "」をごみ箱へ移動しました。");
+    } catch (error) {
+      setRecordingMessage(error instanceof Error ? error.message : "コメントログを削除できませんでした。");
+    } finally {
+      setDeletingCommentLogPath(null);
+    }
+  }
+
   async function deleteRecordingFromLibrary(filePath: string, fileName: string) {
     if (!window.kickRecorder || deletingRecordingPath) return;
     const confirmed = window.confirm(`「${fileName}」を完全に削除しますか？\n\n削除したファイルは元に戻せません。`);
@@ -2600,6 +2640,10 @@ export default function App() {
                                   </button>
                                   <button className="small-action" onClick={() => void openRecordingFile(log.path)}>開く</button>
                                   <button className="small-action" onClick={() => void revealRecordingFile(log.path)}>場所</button>
+                                  <button className="danger-small" onClick={() => void deleteCommentLogFromLibrary(log)}
+                                    disabled={deletingCommentLogPath !== null}>
+                                    {deletingCommentLogPath === log.path ? "削除中..." : "削除"}
+                                  </button>
                                 </div>
                               </div>
                               {librarySelectedLogPath === log.path && <div className="recording-session-log-preview" role="region" aria-label={log.name + "の保存済みコメント"}>
