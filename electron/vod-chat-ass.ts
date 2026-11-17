@@ -84,9 +84,11 @@ export function createVodChatAssHeader(channelSlug: string, title: string): stri
 export class VodChatAssComposer {
   private readonly lanes: Array<AssLane | null> = Array.from({ length: LANE_COUNT }, () => null);
   private readonly durationSeconds: number;
+  private readonly removeEmotes: boolean;
 
-  constructor(durationSeconds: number, private readonly removeEmotes = false) {
+  constructor(durationSeconds: number, removeEmotes = false) {
     this.durationSeconds = durationSeconds;
+    this.removeEmotes = removeEmotes;
     if (!Number.isFinite(durationSeconds) || durationSeconds <= 0 || durationSeconds > 7 * 24 * 60 * 60) {
       throw new Error("VODの再生時間が正しくありません。");
     }
