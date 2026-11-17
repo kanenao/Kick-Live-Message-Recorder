@@ -250,6 +250,7 @@ declare global {
       listLibrarySessions: () => Promise<KickRecorderLibrarySession[]>;
       listRecordings: () => Promise<KickRecorderRecordingFile[]>;
       getRecordingThumbnail: (filePath: string) => Promise<string | null>;
+      openKickProfile: (channelSlug: string) => Promise<{ ok: true }>;
       deleteRecording: (filePath: string) => Promise<{ ok: true; name: string }>;
       openRecording: (filePath: string) => Promise<{ ok: true }>;
       revealRecording: (filePath: string) => Promise<{ ok: true }>;

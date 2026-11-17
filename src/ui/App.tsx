@@ -833,15 +833,19 @@ function ArticleBroadcastFrame({ article }: { article: StreamArticle }) {
   </figure>;
 }
 
-function LibraryChannelAvatar({ displayName, picture }: { displayName: string; picture: string | null }) {
+function LibraryChannelAvatar({ displayName, picture, onOpenProfile }: {
+  displayName: string; picture: string | null; onOpenProfile: () => void
+}) {
   const [failed, setFailed] = useState(false);
   useEffect(() => { setFailed(false); }, [picture]);
   const safePicture = typeof picture === "string" && /^https:\/\//i.test(picture) ? picture : null;
-  return <div className="recording-channel-avatar" aria-hidden="true">
-    <span>{displayName.slice(0, 1).toUpperCase()}</span>
+  return <button type="button" className="recording-channel-avatar" onClick={onOpenProfile}
+    title={displayName + "のKickユーザーページを開く"}
+    aria-label={displayName + "のKickユーザーページを開く"}>
+    <span aria-hidden="true">{displayName.slice(0, 1).toUpperCase()}</span>
     {safePicture && !failed && <img src={safePicture} alt="" loading="lazy" referrerPolicy="no-referrer"
       onError={() => setFailed(true)} />}
-  </div>;
+  </button>;
 }
 
 function LibraryRecordingThumbnail({ filePath, onPlay }: { filePath: string | null; onPlay: () => void }) {
@@ -1871,6 +1875,18 @@ export default function App() {
       setVodChatStatus(error instanceof Error ? error.message : "コメント取得を停止できませんでした。");
     }
   }
+  async function openKickProfile(channelSlug: string) {
+    if (!window.kickRecorder?.openKickProfile) {
+      setRecordingMessage("Kickユーザーページを開くにはWindowsデスクトップ版を利用してください。");
+      return;
+    }
+    try {
+      await window.kickRecorder.openKickProfile(channelSlug);
+    } catch (error) {
+      setRecordingMessage(error instanceof Error ? error.message : "Kickのユーザーページを開けませんでした。");
+    }
+  }
+
   async function openRecordingFile(filePath: string) {
     if (!window.kickRecorder) return;
     try {
@@ -2483,9 +2499,14 @@ export default function App() {
                 : <div className="recording-channel-list">
                     {filteredRecordingLibraryChannels.map(group => <article className="recording-channel-card" key={group.slug}>
                       <div className="recording-channel-summary">
-                        <LibraryChannelAvatar displayName={group.displayName} picture={group.profilePicture} />
+                        <LibraryChannelAvatar displayName={group.displayName} picture={group.profilePicture}
+                          onOpenProfile={() => void openKickProfile(group.slug)} />
                         <div className="recording-channel-info">
-                          <strong>{group.displayName}</strong>
+                          <button type="button" className="recording-channel-profile-link"
+                            onClick={() => void openKickProfile(group.slug)}
+                            title={group.displayName + "のKickユーザーページを開く"}>
+                            {group.displayName}
+                          </button>
                           <small>@{group.slug}</small>
                           <small>配信 {group.sessions.length}件 ・ 録画動画 {group.videos.length}件 ・ コメントログ {group.logs.length}件{group.latestAt ? " ・ 最終保存 " + new Date(group.latestAt).toLocaleString("ja-JP") : ""}</small>
                         </div>

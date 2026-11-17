@@ -30,6 +30,7 @@ import { detachCaptureIfCurrent, nextManualCaptureRetryDelayMs } from "./live-ca
 import type { VideoFrameSample } from "./video-frames";
 import { deleteRecordingFile, isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
 import { recordingVideoThumbnail } from "./recording-thumbnails";
+import { kickProfileUrl } from "./kick-profile-link";
 
 // Chromiumが提供する標準メニューやコンテキストメニューも日本語で表示する。
 app.commandLine.appendSwitch("lang", "ja-JP");
@@ -1723,6 +1724,14 @@ function registerIpcHandlers(): void {
       filePath,
       target => recordingManager.isFileActive(target) || vodDownloadManager.isFileActive(target)
     );
+  });
+
+  ipcMain.handle("kick:open-profile", async (event, channelSlug: unknown) => {
+    assertTrustedSender(event);
+    // Only the canonical Kick profile path can reach the user's browser.
+    const url = kickProfileUrl(channelSlug);
+    await shell.openExternal(url);
+    return { ok: true };
   });
 
   ipcMain.handle("recording:thumbnail", (event, filePath: unknown) => {
