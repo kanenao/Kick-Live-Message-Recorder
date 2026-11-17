@@ -23,6 +23,7 @@ import { KickVodDownloadManager } from "./vod-download-queue";
 import { listLibrarySessions } from "./library-sessions";
 import { KickCommentVideoGenerator, listCommentLogFiles, previewCommentVideo } from "./comment-video";
 import { listRecentCommentMessages } from "./recording-library";
+import { trashCommentLogFile } from "./comment-log-delete";
 import { deleteStreamArticle, generateStreamArticle, getStreamArticlePreview, listStreamArticles } from "./articles";
 import { LiveStreamArticleManager } from "./live-articles";
 import { startLiveVideoFrameCapture, type LiveVideoFrameStatus } from "./live-video-frames";
@@ -1712,6 +1713,16 @@ function registerIpcHandlers(): void {
   ipcMain.handle("comment-video:stop", event => {
     assertTrustedSender(event);
     return commentVideoGenerator.stop();
+  });
+
+  ipcMain.handle("library:delete-comment-log", async (event, filePath: unknown) => {
+    assertTrustedSender(event);
+    return trashCommentLogFile(
+      getRecordingOutputDirectory(),
+      filePath,
+      path => chatReceiver.isFileActive(path) || vodChatDownloader.isRunning(),
+      path => shell.trashItem(path)
+    );
   });
 
   ipcMain.handle("recording:delete", (event, filePath: unknown) => {
