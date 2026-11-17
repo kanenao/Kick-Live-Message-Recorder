@@ -131,7 +131,7 @@
 .live-now-footer .monitor-error{margin:0;color:#e3a3a3}
 @media(max-width:900px){.live-stream-grid{grid-template-columns:1fr}}
 @media(max-width:760px){.live-stream-meta{grid-template-columns:1fr 1fr}.live-stream-meta>div:last-child{grid-column:1/-1}}
-\n
+
 .comment-video-intro{font-size:11px;line-height:1.7;color:#aab3c0;margin:-5px 0 18px}
 .comment-video-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .comment-video-settings-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}

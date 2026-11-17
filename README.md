@@ -2,26 +2,32 @@
 
 Kick配信の映像・音声・コメントを録画・保存するWindowsデスクトップアプリです。24時間の配信監視、コメント付き動画の生成、映像・音声・コメントを組み合わせたAI配信記事に対応しています。
 
-> **最新公開版：0.3.7-alpha.70（α版）**  
-> **次期α版：0.3.8-alpha.71（ASS emote削除・公開準備中）**  
+> **最新公開版：0.3.8-alpha.71（α版）**  
+> **次期α版：0.3.9-alpha.72（配信記事の不要な文字を修正・公開準備中）**  
 > 現在の開発・テスト対象はα版です。過去に公開したβ版は履歴として保持し、製品版は未完成のため公開・自動更新していません。
 
 ## バージョン・ダウンロード
 
 | 区分 | バージョン | 状態 |
 |---|---|---|
-| 最新公開α版 | `0.3.7-alpha.70` | GitHub ReleasesのPre-release |
+| 最新公開α版 | `0.3.8-alpha.71` | GitHub ReleasesのPre-release |
 | 旧β版（履歴） | `0.1.0-beta.50` | 公開済み・保持 |
-| 次期α版 | `0.3.8-alpha.71` | ASS字幕のemote削除機能を検証中 |
+| 次期α版 | `0.3.9-alpha.72` | 配信記事メニューの不要文字を修正・検証中 |
 
-- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.3.7-alpha.70)
-- [α版公開候補ブランチ](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/release/v0.3.8-alpha.71)
+- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.3.8-alpha.71)
+- [α版公開候補ブランチ](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/release/v0.3.9-alpha.72)
 - [バージョン更新履歴（CHANGELOG）](CHANGELOG.md)
 - [α版・製品版の運用方針](docs/RELEASE_CHANNELS.md)
 
 α版の録画継続機能は開発中のため、実際の長時間LIVE配信での検証は引き続き必要です。
 
-## 0.3.8-alpha.71 のASS字幕改善（公開準備中）
+## 0.3.9-alpha.72 の配信記事の表示修正（公開準備中）
+
+- 左メニューの「配信記事」の上に現れていた不要な `\\n` の文字列を削除しました。
+- JSXソースに文字列として紛れ込んでいた改行表記を実際の改行に直し、メニューの並びを正常化しました。
+- 再発防止の自動テストを追加。既存のAI記事・録画・コメントは変更しません。
+
+## 0.3.8-alpha.71 のASS字幕改善（公開済み）
 
 - **「ASS出力時にemoteを削除する」**を追加。初期状態はONで、コメント付き動画の設定と過去配信コメント取得の両方から切り替えられます。
 - ONでは `[emote:123:Nice]` のようなKickのemoteマーカーを除去し、残りの文章をそのままASSへ出力。emoteだけのコメントはスキップします。
