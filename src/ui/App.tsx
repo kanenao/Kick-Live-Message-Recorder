@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getRecordingChannelSlug } from "../shared/recording-library";
+import { computeNicoAssProfile } from "../../electron/nico-ass-auto";
 import { parseReleaseNotes, splitReleaseNoteInline } from "../shared/release-notes";
 
 function ReleaseNoteInlineText({ value }: { value: string }) {
@@ -48,6 +49,7 @@ type AppSettings = {
   notifyOnLive: boolean;
   showRecordingPreview: boolean;
   removeEmotesFromAss: boolean;
+  assAutoFlow: boolean;
   vodAssCrossingSeconds: number;
   vodAssSpeedPercent: number;
   vodAssEntryOffsetPx: number;
@@ -699,6 +701,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   notifyOnLive: true,
   showRecordingPreview: true,
   removeEmotesFromAss: true,
+  assAutoFlow: true,
   vodAssCrossingSeconds: 6,
   vodAssSpeedPercent: 100,
   vodAssEntryOffsetPx: 16,
@@ -780,6 +783,7 @@ function normalizeState(value: unknown): PersistedState {
       notifyOnLive: settings.notifyOnLive !== false,
       showRecordingPreview: settings.showRecordingPreview !== false,
       removeEmotesFromAss: settings.removeEmotesFromAss !== false,
+      assAutoFlow: settings.assAutoFlow !== false,
       vodAssCrossingSeconds: typeof settings.vodAssCrossingSeconds === "number" && Number.isFinite(settings.vodAssCrossingSeconds)
         ? Math.max(2, Math.min(15, settings.vodAssCrossingSeconds)) : 6,
       vodAssSpeedPercent: typeof settings.vodAssSpeedPercent === "number" && Number.isFinite(settings.vodAssSpeedPercent)
@@ -1945,7 +1949,8 @@ export default function App() {
         entryOffsetPx: settings.vodAssEntryOffsetPx,
         rowLimit: settings.vodAssRowLimit,
         collisionGap: settings.vodAssCollisionGap,
-        delaySeconds: settings.vodAssDelaySeconds
+        delaySeconds: settings.vodAssDelaySeconds,
+        autoFlow: settings.assAutoFlow
       });
       setVodChatStatus("コメント取得を開始しました。保存先：" + result.outputDirectory);
     } catch (error) {
@@ -2091,7 +2096,8 @@ export default function App() {
         fontFamily: commentVideoFontFamily, fontSize: commentVideoFontSize, displaySeconds: commentVideoDuration,
         speedPercent: commentVideoSpeed, rowLimit: commentVideoRows, collisionGap: commentVideoGap,
         opacity: commentVideoOpacity, quality: commentVideoQuality, showUsername: commentVideoShowUsername,
-        removeEmotes: settings.removeEmotesFromAss
+        removeEmotes: settings.removeEmotesFromAss,
+        autoFlow: settings.assAutoFlow
       });
       setCommentVideoOutputPath(result.outputPath);
     } catch (error) {
@@ -2538,16 +2544,18 @@ export default function App() {
           <label className="comment-video-checkbox"><input type="checkbox" checked={settings.removeEmotesFromAss} onChange={event => setSettings(previous => ({ ...previous, removeEmotesFromAss: event.target.checked }))} disabled={vodChatActive} /><span>ASS出力時にemoteを削除する（JSONL・TXTの原文は保持）</span></label>
           <div className="settings-subsection">
             <div className="settings-subheading"><h3>過去配信ASSの流れ方（ニコ生風）</h3><span className="api-state connected">ASS専用</span></div>
+            <label className="comment-video-checkbox"><input type="checkbox" checked={settings.assAutoFlow} onChange={event => setSettings(previous => ({ ...previous, assAutoFlow: event.target.checked }))} disabled={vodChatActive} /><span>コメントの速度・画面右端からの入り方を自動調整する（おすすめ）</span></label>
+            <p className="settings-help">自動ONではコメントの長さ・直近の投稿密度から速度、進入位置、行を決め、必要なら最大1.2秒ずらして重なりを防ぎます。OFFで手動設定を使えます。</p>
             <div className="comment-video-settings-grid">
-              <label className="comment-video-field"><span>画面横断の基準時間（秒）</span><input type="number" min="2" max="15" step="0.5" value={settings.vodAssCrossingSeconds} onChange={event => setSettings(previous => ({ ...previous, vodAssCrossingSeconds: Math.max(2, Math.min(15, Number(event.target.value) || 6)) }))} disabled={vodChatActive} /><small>初期値6秒。小さいほど速く横切ります。</small></label>
-              <label className="comment-video-field"><span>流れる速度（%）</span><input type="number" min="50" max="200" step="5" value={settings.vodAssSpeedPercent} onChange={event => setSettings(previous => ({ ...previous, vodAssSpeedPercent: Math.max(50, Math.min(200, Number(event.target.value) || 100)) }))} disabled={vodChatActive} /><small>100%が標準、200%で2倍速。</small></label>
-              <label className="comment-video-field"><span>右端から入る余白（px）</span><input type="number" min="0" max="300" step="8" value={settings.vodAssEntryOffsetPx} onChange={event => setSettings(previous => ({ ...previous, vodAssEntryOffsetPx: Math.max(0, Math.min(300, Number(event.target.value) || 0)) }))} disabled={vodChatActive} /><small>0なら画面右端から、数値を大きくすると画面外から少し遅れて入ります。</small></label>
+              <label className="comment-video-field"><span>画面横断の基準時間（秒）</span><input type="number" min="2" max="15" step="0.5" value={settings.vodAssCrossingSeconds} onChange={event => setSettings(previous => ({ ...previous, vodAssCrossingSeconds: Math.max(2, Math.min(15, Number(event.target.value) || 6)) }))} disabled={vodChatActive || settings.assAutoFlow} /><small>初期値6秒。小さいほど速く横切ります。</small></label>
+              <label className="comment-video-field"><span>流れる速度（%）</span><input type="number" min="50" max="200" step="5" value={settings.vodAssSpeedPercent} onChange={event => setSettings(previous => ({ ...previous, vodAssSpeedPercent: Math.max(50, Math.min(200, Number(event.target.value) || 100)) }))} disabled={vodChatActive || settings.assAutoFlow} /><small>100%が標準、200%で2倍速。</small></label>
+              <label className="comment-video-field"><span>右端から入る余白（px）</span><input type="number" min="0" max="300" step="8" value={settings.vodAssEntryOffsetPx} onChange={event => setSettings(previous => ({ ...previous, vodAssEntryOffsetPx: Math.max(0, Math.min(300, Number(event.target.value) || 0)) }))} disabled={vodChatActive || settings.assAutoFlow} /><small>0なら画面右端から、数値を大きくすると画面外から少し遅れて入ります。</small></label>
               <label className="comment-video-field"><span>投稿時刻との同期ずれ（秒）</span><input type="number" min="-10" max="10" step="0.1" value={settings.vodAssDelaySeconds} onChange={event => setSettings(previous => ({ ...previous, vodAssDelaySeconds: Math.max(-10, Math.min(10, Number(event.target.value) || 0)) }))} disabled={vodChatActive} /><small>＋は遅らせ、－は早めに出します。</small></label>
-              <label className="comment-video-field"><span>最大コメント行数</span><input type="number" min="1" max="18" step="1" value={settings.vodAssRowLimit} onChange={event => setSettings(previous => ({ ...previous, vodAssRowLimit: Math.round(Math.max(1, Math.min(18, Number(event.target.value) || 1))) }))} disabled={vodChatActive} /><small>同時コメントが集中しても同じ行に無理に重ねません。</small></label>
-              <label className="comment-video-field"><span>同じ行の最小間隔（px）</span><input type="number" min="0" max="200" step="4" value={settings.vodAssCollisionGap} onChange={event => setSettings(previous => ({ ...previous, vodAssCollisionGap: Math.round(Math.max(0, Math.min(200, Number(event.target.value) || 0))) }))} disabled={vodChatActive} /><small>コメントの後端と次のコメントの先頭の距離です。</small></label>
+              <label className="comment-video-field"><span>最大コメント行数</span><input type="number" min="1" max="18" step="1" value={settings.vodAssRowLimit} onChange={event => setSettings(previous => ({ ...previous, vodAssRowLimit: Math.round(Math.max(1, Math.min(18, Number(event.target.value) || 1))) }))} disabled={vodChatActive || settings.assAutoFlow} /><small>同時コメントが集中しても同じ行に無理に重ねません。</small></label>
+              <label className="comment-video-field"><span>同じ行の最小間隔（px）</span><input type="number" min="0" max="200" step="4" value={settings.vodAssCollisionGap} onChange={event => setSettings(previous => ({ ...previous, vodAssCollisionGap: Math.round(Math.max(0, Math.min(200, Number(event.target.value) || 0))) }))} disabled={vodChatActive || settings.assAutoFlow} /><small>コメントの後端と次のコメントの先頭の距離です。</small></label>
             </div>
-            <div className="comment-video-actions"><button className="small-action" type="button" disabled={vodChatActive} onClick={() => setSettings(previous => ({ ...previous, vodAssCrossingSeconds: 6, vodAssSpeedPercent: 100, vodAssEntryOffsetPx: 16, vodAssDelaySeconds: 0, vodAssRowLimit: 16, vodAssCollisionGap: 40 }))}>ニコ生風おすすめ設定に戻す</button></div>
-            <p className="settings-help">これらの設定はASSファイルだけに適用されます。JSONL・TXTは元のコメントと投稿時刻を保持します。コメント付き動画側の速度・文字サイズ設定は別項目です。</p>
+            <div className="comment-video-actions"><button className="small-action" type="button" disabled={vodChatActive || settings.assAutoFlow} onClick={() => setSettings(previous => ({ ...previous, vodAssCrossingSeconds: 6, vodAssSpeedPercent: 100, vodAssEntryOffsetPx: 16, vodAssDelaySeconds: 0, vodAssRowLimit: 16, vodAssCollisionGap: 40 }))}>ニコ生風おすすめ設定に戻す</button></div>
+            <p className="settings-help">ONの間は同期ずれだけ手動調整できます。ほかの数値設定はOFFで使用します。これらの設定はASSファイルだけに適用されます。JSONL・TXTは元のコメントと投稿時刻を保持します。コメント付き動画側の速度・文字サイズ設定は別項目です。</p>
           </div>
           <div className="add-channel vod-chat-actions">
             <button className="primary-small" onClick={() => void downloadPastBroadcastChat()} disabled={!isDesktop || vodChatActive}>過去配信のコメントを取得（JSONL・TXT・ASS）</button>
@@ -2803,7 +2811,7 @@ export default function App() {
         {!isDesktop
           ? <div className="empty-state"><div className="empty-icon">✦</div><strong>Windowsデスクトップ版で利用できます</strong><span>ブラウザープレビューでは動画ファイルの読み書きやエンコードを実行できません。</span></div>
           : <>
-            <div className="comment-video-intro">ニコ生風の白文字・太い黒フチでコメントを右から左へ流します。長文も短文と同じ画面上の速度で移動し、同じ行ではコメント同士が追いつかないよう間隔を計算します。元動画は変更せず、CommentVideosフォルダーへ別ファイルとして保存します。</div>
+            <div className="comment-video-intro">ニコ生風の白文字・太い黒フチでコメントを右から左へ流します。自動調整ONでは長文・短文・投稿密度に応じて速度、入場タイミング、行配置を自動計算します。OFFで従来の手動設定を使えます。元動画は変更しません。</div>
             <div className="comment-video-form-grid">
               <label className="comment-video-field"><span>元動画</span>
                 <select value={selectedCommentVideoPath} onChange={event => setSelectedCommentVideoPath(event.target.value)} disabled={commentVideoBusy || isLoadingRecordings}>
@@ -2827,15 +2835,17 @@ export default function App() {
             </div>
             <div className="settings-subsection">
               <div className="settings-subheading"><h3>コメント表示設定</h3><span className="api-state connected">ASS字幕合成</span></div>
+              <label className="comment-video-checkbox"><input type="checkbox" checked={settings.assAutoFlow} onChange={event => setSettings(previous => ({ ...previous, assAutoFlow: event.target.checked }))} disabled={commentVideoBusy} /><span>コメント速度・入り方・重なりを自動調整する（おすすめ）</span></label>
+              <small>自動ONではコメントごとに速度・画面への進入位置・行の間隔を計算します。OFFで横断時間・速度・行数・間隔を手動調整できます。</small>
               <div className="comment-video-settings-grid">
                 <label className="comment-video-field"><span>同期ずれ（秒）</span><input type="number" min="-300" max="300" step="0.1" value={commentVideoDelay} onChange={event => setCommentVideoDelay(Number(event.target.value))} disabled={commentVideoBusy} /><small>＋はコメントを遅らせ、－は早めます。</small></label>
                 <label className="comment-video-field"><span>コメントの表示位置</span><select value={commentVideoPosition} onChange={event => setCommentVideoPosition(event.target.value as "scroll" | "top" | "bottom" | "command")} disabled={commentVideoBusy}><option value="scroll">すべて中央スクロール（naka）</option><option value="top">すべて上部固定（ue）</option><option value="bottom">すべて下部固定（shita）</option><option value="command">コメントごとの指定を優先（ue・naka・shita）</option></select><small>「コメントごとの指定」ではログのmail／commands／positionを読み取ります。本文先頭に @ue・/naka・[shita] を付けた場合も位置指定として扱い、表示時に指定文字を除去します。指定がないコメントは中央スクロールです。</small></label>
                 <label className="comment-video-field"><span>フォント</span><select value={commentVideoFontFamily} onChange={event => setCommentVideoFontFamily(event.target.value as "ms-pgothic" | "meiryo" | "yu-gothic" | "arial")} disabled={commentVideoBusy}><option value="ms-pgothic">ＭＳ Ｐゴシック</option><option value="meiryo">メイリオ</option><option value="yu-gothic">游ゴシック</option><option value="arial">Arial</option></select><small>Windowsにインストールされているフォントを使用します。</small></label>
                 <label className="comment-video-field"><span>文字サイズ</span><input type="number" min="16" max="80" value={commentVideoFontSize} onChange={event => setCommentVideoFontSize(Number(event.target.value))} disabled={commentVideoBusy} /><small>動画の解像度に合わせて調整します。</small></label>
-                <label className="comment-video-field"><span>画面幅の横断時間（秒）</span><input type="number" min="2" max="15" value={commentVideoDuration} onChange={event => setCommentVideoDuration(Number(event.target.value))} disabled={commentVideoBusy} /><small>画面幅を横切る基準時間です。長いコメントは文字幅に応じて表示時間が長くなります。</small></label>
-                <label className="comment-video-field"><span>流れる速度（%）</span><input type="number" min="50" max="200" step="5" value={commentVideoSpeed} onChange={event => setCommentVideoSpeed(Number(event.target.value))} disabled={commentVideoBusy} /><small>100%が標準。小さくするとゆっくり、大きくすると速く流れます。</small></label>
-                <label className="comment-video-field"><span>最大表示行数</span><input type="number" min="1" max="20" value={commentVideoRows} onChange={event => setCommentVideoRows(Number(event.target.value))} disabled={commentVideoBusy} /><small>初期値14行。動画の高さと文字サイズに合わせて実際の表示可能行数は自動調整します。</small></label>
-                <label className="comment-video-field"><span>コメント同士の最小間隔（px）</span><input type="number" min="0" max="200" step="4" value={commentVideoGap} onChange={event => setCommentVideoGap(Number(event.target.value))} disabled={commentVideoBusy} /><small>初期値24px。文字幅と移動速度から同じ行で重ならない間隔を確保します。</small></label>
+                <label className="comment-video-field"><span>画面幅の横断時間（秒）</span><input type="number" min="2" max="15" value={commentVideoDuration} onChange={event => setCommentVideoDuration(Number(event.target.value))} disabled={commentVideoBusy || settings.assAutoFlow} /><small>画面幅を横切る基準時間です。長いコメントは文字幅に応じて表示時間が長くなります。</small></label>
+                <label className="comment-video-field"><span>流れる速度（%）</span><input type="number" min="50" max="200" step="5" value={commentVideoSpeed} onChange={event => setCommentVideoSpeed(Number(event.target.value))} disabled={commentVideoBusy || settings.assAutoFlow} /><small>100%が標準。小さくするとゆっくり、大きくすると速く流れます。</small></label>
+                <label className="comment-video-field"><span>最大表示行数</span><input type="number" min="1" max="20" value={commentVideoRows} onChange={event => setCommentVideoRows(Number(event.target.value))} disabled={commentVideoBusy || settings.assAutoFlow} /><small>初期値14行。動画の高さと文字サイズに合わせて実際の表示可能行数は自動調整します。</small></label>
+                <label className="comment-video-field"><span>コメント同士の最小間隔（px）</span><input type="number" min="0" max="200" step="4" value={commentVideoGap} onChange={event => setCommentVideoGap(Number(event.target.value))} disabled={commentVideoBusy || settings.assAutoFlow} /><small>初期値24px。文字幅と移動速度から同じ行で重ならない間隔を確保します。</small></label>
                 <label className="comment-video-field"><span>文字の不透明度（%）</span><input type="number" min="20" max="100" value={commentVideoOpacity} onChange={event => setCommentVideoOpacity(Number(event.target.value))} disabled={commentVideoBusy} /><small>100で不透明、低いほど透過します。</small></label>
                 <label className="comment-video-field"><span>出力画質</span><select value={commentVideoQuality} onChange={event => setCommentVideoQuality(event.target.value as "high" | "standard" | "compact")} disabled={commentVideoBusy}><option value="high">高画質・大きめ</option><option value="standard">標準（おすすめ）</option><option value="compact">容量優先</option></select><small>利用可能なH.264エンコーダーを優先し、ない場合は互換形式へ切り替えます。</small></label>
               </div>
@@ -2847,7 +2857,7 @@ export default function App() {
               key={[
                 commentVideoFontFamily, commentVideoFontSize, commentVideoDuration,
                 commentVideoSpeed, commentVideoRows, commentVideoGap, commentVideoOpacity,
-                commentVideoShowUsername, commentVideoDelay, commentVideoPosition, settings.removeEmotesFromAss, selectedCommentVideoPath,
+                commentVideoShowUsername, commentVideoDelay, commentVideoPosition, settings.removeEmotesFromAss, settings.assAutoFlow, selectedCommentVideoPath,
                 selectedCommentLogPaths.join(","),
                 commentVideoPreviewResult?.comments.map(comment => comment.content + comment.color).join("|")
               ].join(":")}
@@ -2878,9 +2888,9 @@ export default function App() {
                 <span>{commentVideoFontFamily === "ms-pgothic" ? "ＭＳ Ｐゴシック" : commentVideoFontFamily === "yu-gothic" ? "游ゴシック" : commentVideoFontFamily === "arial" ? "Arial" : "メイリオ"}</span>
                 <span>{Math.max(16, Math.min(80, commentVideoFontSize))}px</span>
                 <span>{commentVideoPosition === "top" ? "全コメント上部固定" : commentVideoPosition === "bottom" ? "全コメント下部固定" : commentVideoPosition === "command" ? "コメント別位置指定" : "全コメント中央スクロール"}</span>
-                <span>速度 {Math.max(50, Math.min(200, commentVideoSpeed))}%</span>
-                <span>間隔 {Math.max(0, Math.min(200, commentVideoGap))}px</span>
-                <span>表示 {Math.max(1, Math.min(20, commentVideoRows, Math.floor((1080 - 26 - Math.max(16, Math.min(80, commentVideoFontSize))) / Math.max(1, Math.max(commentVideoFontSize + 12, commentVideoFontSize * 1.55))) + 1))}行 / 上限 {Math.max(1, Math.min(20, commentVideoRows))}行</span>
+                <span>{settings.assAutoFlow ? "流れる速度：自動" : "速度 " + Math.max(50, Math.min(200, commentVideoSpeed)) + "%"}</span>
+                <span>{settings.assAutoFlow ? "コメント間隔：自動" : "間隔 " + Math.max(0, Math.min(200, commentVideoGap)) + "px"}</span>
+                <span>最大表示行：{settings.assAutoFlow ? "自動" : Math.max(1, Math.min(20, commentVideoRows)) + "行"}</span>
               </div>
               <div className="comment-video-preview-screen" aria-label="設定をリアルタイム反映するコメント表示プレビュー">
                 {(commentVideoPreviewResult?.comments.length
@@ -2894,7 +2904,7 @@ export default function App() {
                         ? comment.position ?? "scroll"
                         : commentVideoPosition;
                       const laneCount = position === "scroll"
-                        ? Math.max(1, Math.min(20, commentVideoRows, visibleRows))
+                        ? (settings.assAutoFlow ? Math.min(20, visibleRows) : Math.max(1, Math.min(20, commentVideoRows, visibleRows)))
                         : fixedRows;
                       return {
                         text: commentVideoShowUsername && comment.username ? comment.username + " : " + comment.content : comment.content,
@@ -2914,7 +2924,7 @@ export default function App() {
                     const fixedRows = Math.max(1, Math.min(20, commentVideoRows, Math.floor((1080 * 0.28 + gap) / Math.max(1, lineHeight + gap))));
                     const position = item.position ?? (commentVideoPosition === "command" ? "scroll" : commentVideoPosition);
                     const allowedRows = position === "scroll"
-                      ? Math.max(1, Math.min(20, commentVideoRows, visibleRows))
+                      ? (settings.assAutoFlow ? Math.min(20, visibleRows) : Math.max(1, Math.min(20, commentVideoRows, visibleRows)))
                       : fixedRows;
                     const positionIndex = items.slice(0, index).filter(previous => {
                       const previousPosition = previous.position ?? (commentVideoPosition === "command" ? "scroll" : commentVideoPosition);
@@ -2930,7 +2940,7 @@ export default function App() {
                   const fixedRows = Math.max(1, Math.min(20, commentVideoRows, Math.floor((1080 * 0.28 + gap) / Math.max(1, lineHeight + gap))));
                   const itemPosition = item.position ?? (commentVideoPosition === "command" ? "scroll" : commentVideoPosition);
                   const laneCount = itemPosition === "scroll"
-                    ? Math.max(1, Math.min(20, commentVideoRows, previewVisibleRows))
+                    ? (settings.assAutoFlow ? Math.min(20, previewVisibleRows) : Math.max(1, Math.min(20, commentVideoRows, previewVisibleRows)))
                     : fixedRows;
                   const laneProgress = item.lane / Math.max(1, laneCount - 1);
                   const top = itemPosition === "top"
@@ -2943,14 +2953,17 @@ export default function App() {
                   const estimatedTextWidth = Array.from(item.text).reduce((total, character) => total + fontSize * ((character.codePointAt(0) ?? 0) <= 0xff ? 0.58 : 1), 0);
                   const baseScrollSeconds = duration * 100 / speed;
                   const estimatedPixelsPerSecond = 1280 / baseScrollSeconds;
-                  const commentScrollSeconds = (1280 + estimatedTextWidth + 32) / estimatedPixelsPerSecond;
-                  const gapDelay = gap / Math.max(1, estimatedPixelsPerSecond);
+                  const autoProfile = settings.assAutoFlow && itemPosition === "scroll"
+                    ? computeNicoAssProfile(1280, estimatedTextWidth + 32, fontSize, Math.min(40, 1 + index))
+                    : null;
+                  const commentScrollSeconds = autoProfile?.moveSeconds ?? (1280 + estimatedTextWidth + 32) / estimatedPixelsPerSecond;
+                  const gapDelay = (autoProfile?.gapPx ?? gap) / Math.max(1, autoProfile?.speed ?? estimatedPixelsPerSecond);
                   return <span
                     className="comment-video-preview-comment"
                     key={index}
                     style={{
                       top: top + "%",
-                      left: itemPosition === "scroll" ? "100%" : "50%",
+                      left: itemPosition === "scroll" ? (settings.assAutoFlow ? "103%" : "100%") : "50%",
                       transform: itemPosition === "scroll" ? undefined : "translateX(-50%)",
                       animationName: itemPosition === "scroll" ? "comment-video-preview-scroll" : "none",
                       maxWidth: itemPosition === "scroll" ? "none" : "92%",
@@ -2969,7 +2982,7 @@ export default function App() {
                   >{commentVideoPreviewResult?.comments.length ? item.text : commentVideoShowUsername ? "@viewer : " + item.text : item.text}</span>;
                 })}
               </div>
-              <small>ニコ生風に本文は白文字・黒フチで統一します。文字の長さにかかわらず移動速度をそろえ、長文は画面を出切るまでの時間を長くします。設定を変更するとプレビューもすぐに描き直します。</small>
+              <small>ニコ生風の白文字・黒フチを再現します。自動ONでは文字幅・投稿密度から移動時間を簡易プレビューに反映します。実際の行・入場時刻はASS生成時に衝突を避けて計算します。</small>
             </div>
             {commentVideoEvent && <div className={commentVideoEvent.status === "error" ? "comment-video-status error" : "comment-video-status"} role="status">
               <div className="comment-video-status-line"><strong>{commentVideoEvent.message}</strong>{commentVideoBusy && <span>{Math.round(commentVideoEvent.percent)}%</span>}</div>
