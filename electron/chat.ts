@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { broadcastFileStem } from "./recording-filenames";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import WebSocket from "ws";
 
 export type KickChatMessage = {
@@ -192,6 +192,19 @@ export class KickChatReceiver {
 
   getDesiredSlugs(): string[] {
     return [...this.desiredSlugs];
+  }
+
+  /** Do not remove a JSONL currently targeted by the live chat recorder. */
+  isFileActive(filePath: string): boolean {
+    if (this.stopping || !this.shouldSaveMessages()) return false;
+    const target = resolve(filePath);
+    return this.desiredSlugs.some(slug => {
+      const directory = join(this.getOutputDirectory(), "Chat", slug);
+      const session = this.broadcastSessions.get(slug);
+      const days = [new Date(), new Date(Date.now() - 24 * 60 * 60 * 1000)];
+      const stems = session ? [session.stem] : days.map(date => date.toISOString().slice(0, 10));
+      return stems.some(stem => target === resolve(directory, stem + ".jsonl"));
+    });
   }
 
   /** Set the actual LIVE start so the saved JSONL uses the same name as the MP4. */
