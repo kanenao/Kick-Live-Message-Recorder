@@ -62,6 +62,8 @@ jobs:
         run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-recording-recovery.mjs
       - name: AI新聞の放送別ログ選択と未登録配信者テスト
         run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-article-sources.mjs
+      - name: AI新聞のLIVE少数コメント自動解析スケジュールテスト
+        run: node --experimental-strip-types scripts/test-live-article-schedule.mjs
       - name: AI新聞のアーカイブ配信時間保持テスト
         run: node --experimental-strip-types scripts/test-article-timeline.mjs
       - name: AI記事応答形式テスト

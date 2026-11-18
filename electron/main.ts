@@ -1743,9 +1743,12 @@ function registerIpcHandlers(): void {
     const article = listStreamArticles(getRecordingOutputDirectory(), slugInput)
       .find(item => item.id === idInput);
     if (!article) throw new Error("再解析する記事が見つかりません。");
-    if (liveArticleManager.isArticleActive(slugInput, idInput) || article.status === "live") {
+    if (liveArticleManager.isArticleActive(slugInput, idInput)) {
       throw new Error("LIVE更新中の記事は再解析できません。放送終了後に実行してください。");
     }
+    // A crash can leave a stale article marked live even though no session is active.
+    // Recover the saved article as an archive instead of making it permanently uneditable.
+    if (article.status === "live") article.status = "completed";
     if (article.sourceVideo && (recordingManager.isFileActive(article.sourceVideo) ||
         vodDownloadManager.isFileActive(article.sourceVideo))) {
       throw new Error("録画中の動画は解析できません。録画完了後に実行してください。");

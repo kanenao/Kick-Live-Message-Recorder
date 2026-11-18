@@ -2326,7 +2326,7 @@ export default function App() {
   }
 
   async function reanalyzeStreamArticle(article: StreamArticle) {
-    if (!window.kickRecorder || reanalyzingArticleId || article.status === "live") return;
+    if (!window.kickRecorder || reanalyzingArticleId) return;
     setReanalyzingArticleId(article.id);
     setArticleMessage("AI記事を再解析しています：" + article.headline);
     try {
@@ -3251,10 +3251,10 @@ export default function App() {
               <div className="article-stats">配信時間 {Math.floor((article.durationSeconds ?? 0) / 60).toLocaleString("ja-JP")}分 ・ コメント {article.commentCount.toLocaleString("ja-JP")}件 ・ 投稿者 {article.uniqueCommenters.toLocaleString("ja-JP")}人 ・ 視聴者数 {article.viewerCount?.toLocaleString("ja-JP") ?? "—"}人（最大 {article.peakViewerCount?.toLocaleString("ja-JP") ?? "—"}人） ・ 分析キーワード {article.keywords.join("、") || "なし"}{article.lastAiUpdateAt ? ` ・ AI更新 ${new Date(article.lastAiUpdateAt).toLocaleTimeString("ja-JP")}` : ""}</div>
               {article.sourceVideo && <div className="comment-video-actions"><button className="small-action" onClick={() => void window.kickRecorder?.openRecording(article.sourceVideo)}>元動画を開く</button><button className="small-action" onClick={() => void window.kickRecorder?.revealRecording(article.sourceVideo)}>録画の保存先</button></div>}
               <div className="comment-video-actions article-card-actions">
-                {article.status !== "live" && <button className="small-action" onClick={() => void reanalyzeStreamArticle(article)}
+                <button className="small-action" onClick={() => void reanalyzeStreamArticle(article)}
                   disabled={reanalyzingArticleId !== null || articleBusy}>
-                  {reanalyzingArticleId === article.id ? "AIで再解析中..." : "映像・音声・コメントでAI再解析"}
-                </button>}
+                  {reanalyzingArticleId === article.id ? "AIで再解析中..." : article.status === "live" ? "LIVE終了後の記事を復旧・再解析" : "映像・音声・コメントでAI再解析"}
+                </button>
                 <button className="remove" onClick={() => void deleteStreamArticle(article)} disabled={deletingArticleId !== null}>
                   {deletingArticleId === article.id ? "削除中..." : "この記事を削除"}
                 </button>

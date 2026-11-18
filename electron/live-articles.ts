@@ -8,6 +8,7 @@ import type { KickChatMessage } from "./chat";
 import { parseAiArticleResponse } from "./ai-response";
 import { saveArticlePreviewFrame } from "./article-preview";
 import { articleDurationForSave } from "./article-timeline";
+import { nextLiveArticleAnalysisDelayMs } from "./article-analysis-policy";
 import { getAudioTranscriptionRetryDelayMs, isRetryableAudioTranscriptionError } from "./audio-retry-policy";
 
 export type LiveArticle = {
@@ -202,16 +203,15 @@ export class LiveStreamArticleManager {
     if (session.finishing || session.analysisInFlight) return;
     const article = session.article;
     const hasPendingVisualAnalysis = Boolean(session.videoFrames?.length) && !article.videoAnalyzed;
-    const hasPendingAnalysis = session.pendingAudioSegments.length > 0 ||
-      session.pendingComments.length >= 12 ||
-      hasPendingVisualAnalysis;
-    if (!hasPendingAnalysis) return;
-
-    const intervalMs = Math.max(30, Math.min(600, this.getConfig().intervalSeconds)) * 1000;
-    const waitMs = session.lastAnalysisAt <= 0
-      ? 0
-      : Math.max(0, intervalMs - (Date.now() - session.lastAnalysisAt));
-    if (session.analysisTimer) clearTimeout(session.analysisTimer);
+    const waitMs = nextLiveArticleAnalysisDelayMs({
+      pendingComments: session.pendingComments.length,
+      pendingAudio: session.pendingAudioSegments.length > 0,
+      pendingVisual: hasPendingVisualAnalysis,
+      lastAnalysisAt: session.lastAnalysisAt,
+      intervalSeconds: this.getConfig().intervalSeconds,
+      now: Date.now()
+    });
+    if (waitMs === null || session.analysisTimer) return;
     session.analysisTimer = setTimeout(() => {
       session.analysisTimer = null;
       if (session.finishing || session.analysisInFlight) return;
@@ -597,6 +597,8 @@ export class LiveStreamArticleManager {
     const intervalMs = Math.max(30, Math.min(600, this.getConfig().intervalSeconds)) * 1000;
     if (session.pendingComments.length >= 12 && Date.now() - session.lastAnalysisAt >= intervalMs && !session.analysisInFlight) {
       void this.analyze(session, false, session.forceAi === true);
+    } else {
+      this.scheduleAnalysis(session);
     }
   }
 
