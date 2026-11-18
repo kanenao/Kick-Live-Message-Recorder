@@ -3,6 +3,7 @@ import { getRecordingChannelSlug } from "../shared/recording-library";
 import { getAvailableArticleChannels, selectAssociatedArticleLogs } from "../shared/article-sources";
 import { computeNicoAssProfile } from "../../electron/nico-ass-auto";
 import { parseReleaseNotes, splitReleaseNoteInline } from "../shared/release-notes";
+import { formatArticleEvidenceTime, type ArticleEvidenceEvent } from "../../electron/article-evidence";
 
 function ReleaseNoteInlineText({ value }: { value: string }) {
   return <>{splitReleaseNoteInline(value).map((part, index) =>
@@ -184,6 +185,7 @@ type StreamArticle = {
   durationSeconds: number; commentCount: number; uniqueCommenters: number; keywords: string[];
   paragraphs: string[]; sourceVideo: string; sourceLogs: string[]; createdAt: string;
   commentEvidenceCount?: number;
+  evidenceTimeline?: ArticleEvidenceEvent[];
   status?: "live" | "completed"; aiGenerated?: boolean; aiSummary?: string; highlights?: string[];
   lastAiUpdateAt?: string | null; viewerCount?: number; peakViewerCount?: number; aiError?: string;
   videoAnalyzed?: boolean; videoFrameCount?: number; videoSummary?: string; videoScenes?: string[]; videoAnalyzedAt?: string | null;
@@ -212,7 +214,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.5.1-alpha.77";
+const APP_VERSION = "0.6.0-alpha.78";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -240,6 +242,17 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.6.0-alpha.78",
+    title: "配信AI新聞：映像・音声・コメントの時刻別根拠を表示",
+    changes: [
+      "LIVEと保存済み配信の記事に時刻付き根拠タイムラインを追加",
+      "コメント、音声文字起こし、映像代表フレームを情報源別に区別して表示",
+      "時刻不明のコメントに架空の時刻を付けず、録画全体から均等に根拠を抽出",
+      "記事の再解析時は古い情報源の根拠を引き継がない",
+      "AIの分割JSONと構造化段落の読み取り改善を統合"
+    ]
+  },
   {
     version: "0.5.1-alpha.77",
     title: "配信AI新聞のOllama応答復旧と記事保護",
@@ -3247,6 +3260,17 @@ export default function App() {
                 <span className={article.commentCount > 0 ? "is-analyzed" : ""}>コメント {article.commentCount.toLocaleString("ja-JP")}件</span>
                 {typeof article.commentEvidenceCount === "number" && <span className={article.commentEvidenceCount > 0 ? "is-analyzed" : ""}>AI参照候補 {article.commentEvidenceCount.toLocaleString("ja-JP")}件</span>}
               </div>
+              {Boolean(article.evidenceTimeline?.length) && <details className="article-evidence-details">
+                <summary>解析に使った時刻付きの情報源（{article.evidenceTimeline?.length ?? 0}件・抜粋）</summary>
+                <p className="article-evidence-note">録画から取得した静止画、受信コメント、音声の文字起こしを時刻順に表示します。AIが内容を検証したことを保証するものではありません。</p>
+                <ol className="article-evidence-list">
+                  {article.evidenceTimeline?.map((event, index) => <li key={event.source + ":" + event.timeSeconds + ":" + index}>
+                    <time>{formatArticleEvidenceTime(event.timeSeconds)}</time>
+                    <span className="article-evidence-source">{event.source === "chat" ? "視聴者コメント" : event.source === "audio" ? "音声文字起こし" : "映像フレーム"}</span>
+                    <span>{event.detail}</span>
+                  </li>)}
+                </ol>
+              </details>}
               {article.videoAnalyzed && <div className="article-video-analysis"><strong>映像から確認した場面（代表フレーム {article.videoFrameCount ?? article.videoScenes?.length ?? 0}枚）</strong><p>{article.videoSummary}</p>{Boolean(article.videoScenes?.length) && <ul>{article.videoScenes?.map((scene, index) => <li key={index}>{scene}</li>)}</ul>}</div>}
               {article.audioAnalyzed && <div className="article-audio-analysis">
                 <strong>音声から確認した内容</strong>
