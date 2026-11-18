@@ -37,3 +37,13 @@ const week = planArticleAudioWindows(7 * 86400);
 assert.equal(week.length, ARTICLE_AUDIO_LONG_SAMPLE_LIMIT);
 assert.ok(week.at(-1).startSeconds > 500000);
 console.log("配信AI新聞：長時間VODの全時間帯・短時間連続音声サンプリング検証成功");
+
+import { readFileSync } from "node:fs";
+const transcriberSource = readFileSync(new URL("../electron/audio-transcription.ts", import.meta.url), "utf8");
+const articleSource = readFileSync(new URL("../electron/live-articles.ts", import.meta.url), "utf8");
+const uiSource = readFileSync(new URL("../src/ui/App.tsx", import.meta.url), "utf8");
+assert.match(transcriberSource, /planArticleAudioWindows\(recordingDuration\)/, "音声抽出処理で分散サンプルを使う");
+assert.match(transcriberSource, /-ss", window.startSeconds\.toFixed\(3\)/, "録画後半へ正しくシークする");
+assert.match(articleSource, /article\.audioSamplingMode = articleAudioSamplingMode\(article\.durationSeconds\)/);
+assert.match(uiSource, /audioSamplingMode === "distributed"/, "AI記事に抜粋解析の注意書きがある");
+console.log("配信AI新聞：長時間VOD音声抽出と記事上の注意書きの連携テスト成功");
