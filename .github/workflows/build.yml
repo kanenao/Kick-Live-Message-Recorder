@@ -36,6 +36,8 @@ jobs:
         run: node --experimental-strip-types scripts/test-recording-timeline.mjs
       - name: 録画ライブラリのコメント読込テスト
         run: node --experimental-strip-types scripts/test-library-comments.mjs
+      - name: コメント保存失敗・巨大JSONL末尾読込の自動不具合検出
+        run: node --experimental-strip-types scripts/test-chat-log-safety.mjs
       - name: 録画ライブラリのコメント削除・データ保護テスト
         run: node --experimental-strip-types scripts/test-library-comment-delete.mjs
       - name: 録画ライブラリのファイル分類テスト
