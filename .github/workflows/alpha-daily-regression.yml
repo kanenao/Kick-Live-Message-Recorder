@@ -1,0 +1,118 @@
+name: Kick α版・毎日の自動不具合検出
+
+on:
+  schedule:
+    # 18:40 UTC = 03:40 JST: nightly regression on default-branch workflow.
+    - cron: "40 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    name: 最新公開α版・開発中のα版を特定
+    runs-on: ubuntu-latest
+    outputs:
+      refs: ${{ steps.targets.outputs.refs }}
+    steps:
+      - name: 最新Releaseと同一リポジトリの最新α開発PRを取得
+        id: targets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          release_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100")"
+          latest_tag="$(jq -r '
+            [.[] | select(.tag_name | test("^v[0-9]+[.][0-9]+[.][0-9]+-alpha[.][0-9]+$"))]
+            | sort_by(.tag_name | split("-alpha.")[1] | tonumber)
+            | last | .tag_name // empty
+          ' <<< "$release_json")"
+          pr_json="$(gh api "repos/${GITHUB_REPOSITORY}/pulls?state=open&per_page=100")"
+          latest_pr="$(jq -r '
+            [.[] | select(.head.repo.full_name == .base.repo.full_name)
+            | select(.head.ref | test("^feature/alpha[0-9]+"))
+            | { ref: .head.ref, version: (.head.ref | capture("^feature/alpha(?<num>[0-9]+)").num | tonumber) }]
+            | sort_by(.version) | last | .ref // empty
+          ' <<< "$pr_json")"
+          refs="$(jq -cn --arg released "$latest_tag" --arg development "$latest_pr" '
+            [$released, $development] | map(select(length > 0)) | unique
+          ')"
+          if [[ "$(jq 'length' <<< "$refs")" -lt 1 ]]; then
+            echo "α版のテスト対象がありません。" >&2
+            exit 1
+          fi
+          echo "refs=$refs" >> "$GITHUB_OUTPUT"
+          echo "今夜の対象: $refs" >> "$GITHUB_STEP_SUMMARY"
+
+  regression:
+    name: 自動回帰テスト・型チェック・ビルド (${{ matrix.ref }})
+    needs: discover
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        ref: ${{ fromJson(needs.discover.outputs.refs) }}
+    steps:
+      - name: 確認対象のα版コードを取得
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: アプリの依存関係をインストール
+        run: npm install --no-audit --no-fund --no-package-lock
+      - name: すべての既存回帰テストを自動実行
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=0
+          for test_script in scripts/test-*.mjs; do
+            echo "::group::${test_script}"
+            node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs "$test_script"
+            echo "::endgroup::"
+            count=$((count + 1))
+          done
+          if [[ "$count" -lt 15 ]]; then
+            echo "回帰テスト数が少なすぎます: $count" >&2
+            exit 1
+          fi
+          echo "$count 件の自動回帰テストを確認" >> "$GITHUB_STEP_SUMMARY"
+      - name: TypeScript型チェック
+        run: npm run typecheck
+      - name: Electronアプリビルド
+        run: npm run build
+
+  report:
+    name: 失敗時に重複しないGitHub Issueを作成
+    needs: [discover, regression]
+    if: ${{ always() && needs.discover.result == 'success' && needs.regression.result == 'failure' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: 失敗をIssueに報告（リリースや自動マージはしない）
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          issue_title="[Kick α版・自動検出] 回帰テスト失敗"
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 --json number,title --jq '.[] | select(.title == "[Kick α版・自動検出] 回帰テスト失敗") | .number' | head -n 1)"
+          if [[ -n "$existing" ]]; then
+            echo "既存Issue #$existing に記録済みです。重複Issueを作成しません。" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$issue_title" --body "
+          定期的なKick α版の不具合検出で回帰テスト・型チェック・ビルドのいずれかが失敗しました。
+
+          - 実行ログ: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          - 対象: 現在公開済みの最新α版と最新の開発α版PR
+          - 調査: ログで最初に失敗したテスト名とコミットSHAを確認してから修正PRを作成
+          - 注意: 自動マージ・自動リリース・録画／コメントの削除は行いません。
+          "
