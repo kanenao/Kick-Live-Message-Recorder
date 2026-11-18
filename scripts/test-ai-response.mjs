@@ -171,7 +171,15 @@ assert.equal(sectioned.headline, "配信記事");
 assert.equal(sectioned.paragraphs.length, 2);
 assert.match(sectioned.paragraphs[0], /前半.*コメント/s);
 assert.match(sectioned.paragraphs[1], /後半.*振り返り/s);
-assert.equal(sectioned.summary, sectioned.paragraphs[0].slice(0, 500));
+assert.equal(sectioned.summary, "映像とコメントから配信を分析しました。", "明示的なsummaryを優先");
+const sectionOnly = parseAiArticleResponse({ message: {
+  content: JSON.stringify({ sections: [
+    { heading: "前半", text: "視聴者コメントを記録しました。" },
+    { title: "後半", body: "放送の出来事を振り返りました。" }
+  ] })
+} }, "元の番組名");
+assert.equal(sectionOnly.paragraphs.length, 2);
+assert.equal(sectionOnly.summary, sectionOnly.paragraphs[0].slice(0, 500), "summaryがない場合だけ本文から補完");
 
 // Reasoning / analysis chunks must not be mixed into the article body.
 const withReasoning = {
