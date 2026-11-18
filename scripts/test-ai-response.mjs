@@ -56,7 +56,7 @@ assert.equal(
       ]
     }]
   }),
-  "{\"headline\":\"test\",\n\"summary\":\"ok\"}"
+  "{\"headline\":\"test\",\"summary\":\"ok\"}"
 );
 
 // Refusals are diagnostics, not article text.
@@ -148,3 +148,38 @@ assert.match(
   describeEmptyAiResponse({ choices: [{ finish_reason: "length" }], usage: { output_tokens: 1800 } }),
   /finish_reason=length.*output_tokens=1800/
 );
+
+// Some providers split typed text chunks in the middle of a JSON string.
+// The chunks must be concatenated exactly, without inserting synthetic newlines.
+const splitJson = JSON.stringify({
+  headline: "配信記事",
+  summary: "映像とコメントから配信を分析しました。",
+  sections: [
+    { heading: "前半", text: "視聴者からコメントが集まりました。" },
+    { title: "後半", body: "配信を振り返りました。" }
+  ]
+});
+const splitPosition = splitJson.indexOf("コメント") + 2;
+const chunks = [
+  { type: "output_text", text: splitJson.slice(0, splitPosition) },
+  { type: "output_text", text: splitJson.slice(splitPosition) }
+];
+const chunkedPayload = { output: [{ type: "message", content: chunks }] };
+assert.equal(extractAiResponseText(chunkedPayload), splitJson);
+const sectioned = parseAiArticleResponse(chunkedPayload, "元の番組名");
+assert.equal(sectioned.headline, "配信記事");
+assert.equal(sectioned.paragraphs.length, 2);
+assert.match(sectioned.paragraphs[0], /前半.*コメント/s);
+assert.match(sectioned.paragraphs[1], /後半.*振り返り/s);
+assert.equal(sectioned.summary, sectioned.paragraphs[0].slice(0, 500));
+
+// Reasoning / analysis chunks must not be mixed into the article body.
+const withReasoning = {
+  output: [{ type: "message", content: [
+    { type: "reasoning", text: "internal analysis - not an article" },
+    { type: "output_text", text: splitJson }
+  ] }]
+};
+assert.equal(extractAiResponseText(withReasoning), splitJson);
+assert.equal(parseAiArticleResponse(withReasoning).paragraphs.length, 2);
+console.log("AI記事分割応答・構造化段落・reasoning分離テスト成功");

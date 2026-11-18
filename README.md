@@ -2,26 +2,33 @@
 
 Kick配信の映像・音声・コメントを録画・保存するWindowsデスクトップアプリです。24時間の配信監視、コメント付き動画の生成、映像・音声・コメントを組み合わせたAI配信記事に対応しています。
 
-> **最新公開版：0.4.2-alpha.75（α版）**  
-> **次期α版：0.5.0-alpha.76（配信AI新聞のフル強化・公開準備中）**  
+> **最新公開版：0.5.0-alpha.76（α版）**  
+> **次期α版：0.5.1-alpha.77（配信AI新聞のAI応答解析を改良中）**  
 > 現在の開発・テスト対象はα版です。過去に公開したβ版は履歴として保持し、製品版は未完成のため公開・自動更新していません。
 
 ## バージョン・ダウンロード
 
 | 区分 | バージョン | 状態 |
 |---|---|---|
-| 最新公開α版 | `0.4.2-alpha.75` | GitHub ReleasesのPre-release |
+| 最新公開α版 | `0.5.0-alpha.76` | GitHub ReleasesのPre-release |
 | 旧β版（履歴） | `0.1.0-beta.50` | 公開済み・保持 |
-| 次期α版 | `0.5.0-alpha.76` | 配信AI新聞の再解析・未登録配信者・コメントの配信別紐付けを検証中 |
+| 次期α版 | `0.5.1-alpha.77` | AI分割応答・構造化段落の解析を改善中（未公開） |
 
-- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.4.2-alpha.75)
-- [α版公開候補ブランチ](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/release/v0.5.0-alpha.76)
+- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.5.0-alpha.76)
+- [次期α版の開発ブランチ](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/feature/alpha77-ai-article-response-hardening)
 - [バージョン更新履歴（CHANGELOG）](CHANGELOG.md)
 - [α版・製品版の運用方針](docs/RELEASE_CHANNELS.md)
 
 α版の録画継続機能は開発中のため、実際の長時間LIVE配信での検証は引き続き必要です。
 
-## 0.5.0-alpha.76 の配信AI新聞強化（公開準備中）
+## 0.5.1-alpha.77 の配信AI新聞・AI応答解析改善（開発中）
+
+- AIモデルが記事のJSONテキストを複数のチャンクに分けても、本文中に不要な改行を挿入せず正しく連結します。
+- 段落を `sections: [{ heading, text }]` のような構造で返すモデルも記事として採用します。
+- 応答に含まれるreasoning／analysisを記事本文と混同しないよう除外します。
+- 元の録画、コメントJSONL/TXT、保存済みAI記事は変更しません。Windows向けの新インストーラーは未公開です。
+
+## 0.5.0-alpha.76 の配信AI新聞強化（公開済み）
 
 - 配信AI新聞のアーカイブ記事生成で、登録外の配信者もローカル録画から選択可能。録画一覧は実際の配信者slugを判定して表示します。
 - 同じ配信者の全ログを勝手に混在させず、録画と同じ放送のJSONLログだけを自動選択。必要に応じてログの追加・除外もできます。
