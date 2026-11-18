@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync,
 import { basename, extname, join, resolve } from "node:path";
 import { isPathInsideDirectory } from "./recording";
 import { getVideoDurationSeconds } from "./video-frames";
+import type { ArticleEvidenceEvent } from "./article-evidence";
 import { deleteArticlePreview, hasArticlePreview, readArticlePreviewDataUrl } from "./article-preview";
 
 export type StreamArticle = {
@@ -23,6 +24,7 @@ export type StreamArticle = {
   status?: "live" | "completed";
   aiGenerated?: boolean;
   aiSummary?: string;
+  evidenceTimeline?: ArticleEvidenceEvent[];
   highlights?: string[];
   lastAiUpdateAt?: string | null;
   viewerCount?: number;
