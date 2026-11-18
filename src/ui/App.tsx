@@ -211,7 +211,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.5.0-alpha.76";
+const APP_VERSION = "0.5.1-alpha.77";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -239,6 +239,16 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.5.1-alpha.77",
+    title: "配信AI新聞の分割応答・構造化段落の解析を改善",
+    changes: [
+      "分割されたAI応答に不要な改行を入れず、記事JSONが壊れる問題を修正",
+      "AIがセクション見出しと本文を分けて返す形式でも、段落として記事に採用",
+      "モデルのreasoning／analysisを記事本文から除外し、誤掲載を防止",
+      "既存のOllama・Responses・Chat Completionsの互換テストを強化"
+    ]
+  },
   {
     version: "0.5.0-alpha.76",
     title: "配信AI新聞のアーカイブ解析・再解析を大幅強化",
