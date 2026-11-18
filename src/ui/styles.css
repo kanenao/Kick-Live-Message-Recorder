@@ -531,3 +531,14 @@
   text-overflow:ellipsis;cursor:pointer
 }
 .recording-channel-profile-link:hover{text-decoration:underline;text-underline-offset:3px;color:#70edaf}
+
+/* 配信AI新聞：LIVEと保存済み配信の時刻別・情報源別の根拠一覧 */
+.article-evidence-details{margin:12px 0;padding:12px 14px;border:1px solid rgba(140,155,180,.25);border-radius:12px;background:rgba(140,155,180,.055)}
+.article-evidence-details summary{font-weight:700;cursor:pointer}
+.article-evidence-note{font-size:12px;opacity:.78;margin:8px 0}
+.article-evidence-list{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:6px}
+.article-evidence-list li{display:grid;grid-template-columns:66px 108px minmax(0,1fr);align-items:start;gap:8px;font-size:12px;line-height:1.6;overflow-wrap:anywhere;padding:6px 0;border-bottom:1px solid rgba(140,155,180,.13)}
+.article-evidence-list li:last-child{border-bottom:0}
+.article-evidence-list time{font-variant-numeric:tabular-nums;white-space:nowrap;opacity:.75}
+.article-evidence-source{font-weight:700}
+@media(max-width:600px){.article-evidence-list li{grid-template-columns:66px minmax(0,1fr)}.article-evidence-list li>span:last-child{grid-column:1/-1}}
