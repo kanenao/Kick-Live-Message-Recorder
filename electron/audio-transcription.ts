@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { extname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { isPathInsideDirectory } from "./recording";
+import { ARTICLE_AUDIO_CONTIGUOUS_LIMIT_SECONDS, ARTICLE_AUDIO_WINDOW_SECONDS, articleAudioSamplingMode, planArticleAudioWindows } from "./article-audio-sampling";
 
 export type AudioTranscriptSegment = {
   startSeconds: number;
@@ -11,8 +12,8 @@ export type AudioTranscriptSegment = {
 };
 
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mkv", ".ts", ".webm", ".m4v", ".mov"]);
-const AUDIO_SEGMENT_SECONDS = 45;
-const MAX_AUDIO_SECONDS = 2 * 60 * 60;
+const AUDIO_SEGMENT_SECONDS = ARTICLE_AUDIO_WINDOW_SECONDS;
+const MAX_AUDIO_SECONDS = ARTICLE_AUDIO_CONTIGUOUS_LIMIT_SECONDS;
 const MAX_AUDIO_SEGMENTS = Math.ceil(MAX_AUDIO_SECONDS / AUDIO_SEGMENT_SECONDS);
 
 function findTool(executable: "ffmpeg.exe" | "ffprobe.exe" | "ffmpeg" | "ffprobe"): string {
@@ -118,8 +119,10 @@ export async function transcribeWavBase64(
 }
 
 /**
- * Extracts audio in contiguous 45-second WAV chunks and transcribes each chunk.
- * For very long recordings, processing is capped at the first two hours.
+ * Short recordings: transcribe contiguous 45-second segments.
+ * Long recordings: transcribe bounded 45-second samples across their entire
+ * duration, including the middle and end instead of only the first two hours.
+ * The saved transcript is a SAMPLE and must be labelled as such by the UI.
  */
 export async function transcribeVideoAudio(
   videoPathInput: string,
@@ -150,39 +153,88 @@ export async function transcribeVideoAudio(
   ], 20_000);
   if (!audioStream.stdout) return [];
 
+  let recordingDuration = Number.NaN;
+  try {
+    const durationResult = await runTool(ffprobe, [
+      "-v", "error", "-show_entries", "format=duration",
+      "-of", "default=noprint_wrappers=1:nokey=1", videoPath
+    ], 20_000);
+    recordingDuration = Number(durationResult.stdout);
+  } catch {
+    // Fall back to the historical continuous two-hour cap if metadata fails.
+  }
+  const distributed = articleAudioSamplingMode(recordingDuration) === "distributed";
   const temporaryDirectory = mkdtempSync(join(tmpdir(), "kick-article-audio-"));
   try {
     const ffmpeg = findTool(process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
-    await runTool(ffmpeg, [
-      "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
-      "-i", videoPath, "-t", String(MAX_AUDIO_SECONDS),
-      "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "16000",
-      "-c:a", "pcm_s16le", "-f", "segment",
-      "-segment_time", String(AUDIO_SEGMENT_SECONDS),
-      "-segment_format", "wav", "-reset_timestamps", "1",
-      join(temporaryDirectory, "audio-%05d.wav")
-    ], 15 * 60_000);
-
-    const files = readdirSync(temporaryDirectory)
-      .filter(name => /^audio-\d{5}\.wav$/i.test(name))
-      .sort((a, b) => a.localeCompare(b))
-      .slice(0, MAX_AUDIO_SEGMENTS);
     const segments: AudioTranscriptSegment[] = [];
-    for (let index = 0; index < files.length; index += 1) {
-      const filePath = join(temporaryDirectory, files[index]);
+    const transcribeFile = async (filePath: string, startSeconds: number): Promise<void> => {
       const stats = statSync(filePath);
-      if (!stats.isFile() || stats.size < 1600 || stats.size > 8_000_000) continue;
+      if (!stats.isFile() || stats.size < 1600 || stats.size > 8_000_000) return;
       const wav = readFileSync(filePath);
       const text = await transcribeWavBase64(wav.toString("base64"), baseUrl, model);
-      onProgress?.(index + 1, files.length);
-      if (!text) continue;
-      const startSeconds = index * AUDIO_SEGMENT_SECONDS;
+      if (!text) return;
       const audioSeconds = Math.max(0, (wav.length - 44) / 32_000);
       segments.push({
         startSeconds,
         endSeconds: startSeconds + Math.min(AUDIO_SEGMENT_SECONDS, audioSeconds || AUDIO_SEGMENT_SECONDS),
         text
       });
+    };
+
+    if (distributed) {
+      // FFmpeg -ss / -t limit both decoding and memory: no giant temporary WAV.
+      const windows = planArticleAudioWindows(recordingDuration);
+      let extractionFailures = 0;
+      for (let index = 0; index < windows.length; index += 1) {
+        const window = windows[index];
+        const target = join(temporaryDirectory, `sample-${String(index).padStart(3, "0")}.wav`);
+        try {
+          await runTool(ffmpeg, [
+            "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+            "-ss", window.startSeconds.toFixed(3), "-i", videoPath,
+            "-t", window.durationSeconds.toFixed(3),
+            "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "16000",
+            "-c:a", "pcm_s16le", target
+          ], 120_000);
+          if (existsSync(target)) await transcribeFile(target, window.startSeconds);
+        } catch (error) {
+          // Bad sections can exist in otherwise valid VODs; keep other samples.
+          // ASR network/model failures must be surfaced rather than silently skipped.
+          if (!existsSync(target)) {
+            extractionFailures += 1;
+            console.warn("Audio sample extraction failed at", window.startSeconds, error);
+          } else {
+            throw error;
+          }
+        } finally {
+          try { if (existsSync(target)) rmSync(target, { force: true }); } catch { /* temporary file cleanup */ }
+          onProgress?.(index + 1, windows.length);
+        }
+      }
+      if (extractionFailures === windows.length) {
+        throw new Error("長時間動画から音声サンプルを取得できませんでした。FFmpegと元動画を確認してください。");
+      }
+    } else {
+      // Preserve the previous exact, contiguous extraction for short VODs.
+      await runTool(ffmpeg, [
+        "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+        "-i", videoPath, "-t", String(MAX_AUDIO_SECONDS),
+        "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "16000",
+        "-c:a", "pcm_s16le", "-f", "segment",
+        "-segment_time", String(AUDIO_SEGMENT_SECONDS),
+        "-segment_format", "wav", "-reset_timestamps", "1",
+        join(temporaryDirectory, "audio-%05d.wav")
+      ], 15 * 60_000);
+
+      const files = readdirSync(temporaryDirectory)
+        .filter(name => /^audio-\d{5}\.wav$/i.test(name))
+        .sort((a, b) => a.localeCompare(b))
+        .slice(0, MAX_AUDIO_SEGMENTS);
+      for (let index = 0; index < files.length; index += 1) {
+        await transcribeFile(join(temporaryDirectory, files[index]), index * AUDIO_SEGMENT_SECONDS);
+        onProgress?.(index + 1, files.length);
+      }
     }
     return segments;
   } finally {

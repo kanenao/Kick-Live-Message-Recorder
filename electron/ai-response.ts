@@ -9,9 +9,19 @@ function asRecord(value: unknown): UnknownRecord | null {
 function readText(value: unknown, depth = 0): string {
  if (typeof value === "string") return value;
  if (depth > 5) return "";
- if (Array.isArray(value)) return value.map(item => readText(item, depth + 1)).filter(Boolean).join("\n");
+ if (Array.isArray(value)) {
+  const textParts = value.map(item => readText(item, depth + 1)).filter(Boolean);
+  // Provider output_text parts may split a JSON string in the middle of a token.
+  // Inserting a newline between those parts makes a valid article fail to parse.
+  const adjacentTextParts = value.every(item => {
+   const part = asRecord(item);
+   return Boolean(part && typeof part.text === "string" &&
+    (part.type === undefined || ["text", "output_text", "input_text"].includes(String(part.type))));
+  });
+  return textParts.join(adjacentTextParts ? "" : "\n");
+ }
  const record = asRecord(value);
- if (!record || record.type === "refusal" || typeof record.refusal === "string") return "";
+ if (!record || record.type === "refusal" || typeof record.refusal === "string" || ["reasoning", "thinking", "analysis"].includes(String(record.type))) return "";
  if (typeof record.text === "string" && record.text.trim()) return record.text;
  for (const key of ["content", "parts", "response", "output_text", "output"]) {
   const found = readText(record[key], depth + 1);
@@ -25,7 +35,9 @@ function extractInner(payload: UnknownRecord, depth = 0): string {
  if (Array.isArray(payload.output)) {
   const found = payload.output.map(item => {
    const record = asRecord(item);
-   return record ? (readText(record.content) || readText(record.text)) : "";
+   // Responses may include a separate reasoning item before the final message.
+   if (!record || ["reasoning", "thinking", "analysis"].includes(String(record.type))) return "";
+   return readText(record.content) || readText(record.text);
   }).filter(Boolean);
   if (found.length) return found.join("\n").trim();
  }
@@ -169,6 +181,23 @@ function stringList(value: unknown, maxItems: number, maxLength: number): string
  if (!Array.isArray(value)) return [];
  return value.filter((item): item is string => typeof item === "string").map(item => item.trim().slice(0, maxLength)).filter(Boolean).slice(0, maxItems);
 }
+function paragraphList(value: unknown): string[] {
+ if (typeof value === "string") return splitBody(value);
+ if (!Array.isArray(value)) return [];
+ const paragraphs: string[] = [];
+ for (const item of value) {
+  if (typeof item === "string") paragraphs.push(...splitBody(item));
+  else {
+   const section = asRecord(item);
+   if (!section) continue;
+   const heading = firstString(section, ["heading", "title", "見出し"], 120);
+   const body = firstString(section, ["body", "text", "content", "paragraph", "description"], 900);
+   if (body) paragraphs.push(heading ? heading + "\n" + body : body);
+  }
+  if (paragraphs.length >= 5) break;
+ }
+ return paragraphs.map(item => item.trim().slice(0, 1000)).filter(Boolean).slice(0, 5);
+}
 function plainTextArticle(raw: string, fallback: string): AiArticleAnalysis {
  const cleaned = raw.replace(/^\s*(?:記事本文|本文|記事|article)\s*[:：]\s*/i, "").trim();
  const title = cleaned.match(/^(?:見出し|タイトル|headline)\s*[:：]\s*(.+)$/im);
@@ -194,7 +223,7 @@ export function parseAiArticleResponse(payload: UnknownRecord, fallbackHeadline 
  if (!root) throw new Error("AI応答は受信しましたが、記事データがJSONオブジェクトではありません。");
  const article = asRecord(root.article) ?? asRecord(root.result) ?? root;
  const body = firstString(article, ["body", "articleText", "article", "content", "text", "正文"], 12000);
- let paragraphs = stringList(article.paragraphs ?? article.sections, 5, 1000);
+ let paragraphs = paragraphList(article.paragraphs ?? article.sections);
  if (!paragraphs.length && body) paragraphs = splitBody(body);
  const summary = firstString(article, ["summary", "abstract", "lead", "description", "概要"], 500) || (paragraphs[0] ?? "").slice(0, 500);
  const headline = firstString(article, ["headline", "title", "heading", "見出し"], 160) || safeString(fallbackHeadline, 160) || "配信AI新聞";

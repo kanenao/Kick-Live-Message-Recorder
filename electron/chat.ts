@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
+import { appendKickChatJsonl, readRecentKickChatJsonl } from "./chat-log-safety";
 import { broadcastFileStem } from "./recording-filenames";
 import { join, resolve } from "node:path";
 import WebSocket from "ws";
@@ -540,14 +541,14 @@ export class KickChatReceiver {
         : typeof payload.thread_parent_id === "string" ? payload.thread_parent_id : null
     };
 
+    let saveError = "";
     if (this.shouldSaveMessages()) {
       const day = createdAt.slice(0, 10);
-      const channelDirectory = join(this.getOutputDirectory(), "Chat", message.channelSlug);
-      mkdirSync(channelDirectory, { recursive: true });
       // Without a verified broadcast start, preserve the legacy per-day filename;
       // never mislabel the first comment time as the actual broadcast start.
       const fileStem = this.broadcastSessions.get(message.channelSlug)?.stem ?? day;
-      appendFileSync(join(channelDirectory, fileStem + ".jsonl"), JSON.stringify(message) + "\n", "utf8");
+      const saved = appendKickChatJsonl(this.getOutputDirectory(), message.channelSlug, fileStem, message);
+      if (!saved.ok) saveError = saved.error;
     }
 
     this.rememberEventId(message.eventId);
@@ -555,8 +556,20 @@ export class KickChatReceiver {
     this.lastMessageAt = message.createdAt;
     this.recentMessages.unshift(message);
     if (this.recentMessages.length > 100) this.recentMessages.length = 100;
-    this.onMessage(message);
-    this.publishStatus();
+    try {
+      this.onMessage(message);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      this.publishStatus("コメント表示の通知に失敗しましたが受信は継続します：" + detail.slice(0, 180));
+      return;
+    }
+    if (saveError) {
+      this.publishStatus("コメントを受信しましたがログ保存に失敗しました（保存先・容量・アクセス権を確認）：" + saveError);
+    } else if (this.statusMessage.startsWith("コメントを受信しましたがログ保存に失敗しました")) {
+      this.publishStatus("コメント受信とログ保存が復旧しました。");
+    } else {
+      this.publishStatus();
+    }
   }
 
   private rememberEventId(eventId: string): void {
@@ -585,14 +598,9 @@ export class KickChatReceiver {
           .reverse()
           .slice(0, 7);
         for (const file of files) {
-          const content = readFileSync(join(channelDirectory, file), "utf8");
-          for (const line of content.split(/\r?\n/).filter(Boolean).reverse()) {
-            try {
-              messages.push(JSON.parse(line) as KickChatMessage);
-            } catch {
-              // 壊れた行は飛ばして残りのログを読み込みます。
-            }
-          }
+          messages.push(...readRecentKickChatJsonl<KickChatMessage>(
+            join(channelDirectory, file), boundedLimit
+          ));
         }
       }
     } catch {
