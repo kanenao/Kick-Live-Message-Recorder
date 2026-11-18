@@ -48,6 +48,8 @@ jobs:
         run: node --experimental-strip-types scripts/test-recording-thumbnails.mjs
       - name: VOD ASS字幕生成テスト
         run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-vod-chat-ass.mjs
+      - name: 保存済みVODのオフラインASS再生成・元データ保護テスト
+        run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-vod-ass-reexport.mjs
       - name: ニコ生風ASSの自動調整・衝突防止テスト
         run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-nico-ass-auto.mjs
       - name: ASS自動調整のUI・設定連携テスト

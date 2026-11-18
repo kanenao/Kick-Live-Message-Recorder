@@ -10,7 +10,7 @@ const match = packageJson.version.match(/^(\d+\.\d+\.\d+)-alpha\.(\d+)$/);
 assert.ok(match, "package.json must use the alpha version format while alpha development is active");
 const currentVersion = packageJson.version;
 // α60の初回公開を基準にし、β50は履歴として別途保持する。
-const latestPublicVersion = "0.4.0-alpha.73";
+const latestPublicVersion = "0.4.1-alpha.74";
 
 assert.ok(readme.includes("次期α版：" + currentVersion) || readme.includes("開発中：" + currentVersion), "README must show the current alpha release-candidate version");
 assert.ok(appSource.includes('const APP_VERSION = "' + currentVersion + '";'), "The app UI version must match package.json");

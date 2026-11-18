@@ -254,6 +254,11 @@ const api = {
   }): Promise<{ ok: true; outputDirectory: string }> =>
     ipcRenderer.invoke("vod-chat:start", url, removeEmotes, assOptions),
   stopVodChatDownload: (): Promise<{ ok: true }> => ipcRenderer.invoke("vod-chat:stop"),
+  regenerateSavedVodAss: (jsonlPath: string, removeEmotes = true, assOptions?: {
+    crossingSeconds?: number; speedPercent?: number; entryOffsetPx?: number;
+    rowLimit?: number; collisionGap?: number; delaySeconds?: number; autoFlow?: boolean;
+  }): Promise<{ ok: true; outputPath: string; sourcePath: string; validComments: number; generatedComments: number; skippedComments: number }> =>
+    ipcRenderer.invoke("vod-chat:regenerate-ass", jsonlPath, removeEmotes, assOptions),
   onVodChatStatus: (callback: (event: VodChatEvent) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, event: VodChatEvent): void => callback(event);
     ipcRenderer.on("vod-chat:status", listener);

@@ -210,7 +210,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.4.1-alpha.74";
+const APP_VERSION = "0.4.2-alpha.75";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -238,6 +238,16 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.4.2-alpha.75",
+    title: "保存済みVODコメントのオフラインASS再生成",
+    changes: [
+      "過去配信のJSONLから、ネット接続なしでASSを再生成できる操作を追加",
+      "ニコ生風自動調整・手動速度・emote設定を再利用し、生成結果のコメント件数を表示",
+      "元のJSONL・TXT・既存ASSを一切上書きせず、別名保存する",
+      "保存先の検証・不正ファイルの拒否・上限値・重複実行防止を追加"
+    ]
+  },
   {
     version: "0.4.1-alpha.74",
     title: "ニコ生風ASSのコメント速度・入り方を自動調整",
@@ -999,6 +1009,9 @@ export default function App() {
   const [vodClock, setVodClock] = useState(Date.now());
   const [vodChatStatus, setVodChatStatus] = useState("");
   const [vodChatActive, setVodChatActive] = useState(false);
+  const [savedVodAssPath, setSavedVodAssPath] = useState("");
+  const [savedVodAssBusy, setSavedVodAssBusy] = useState(false);
+  const [savedVodAssStatus, setSavedVodAssStatus] = useState("");
   useEffect(() => {
     const ticker = window.setInterval(() => setVodClock(Date.now()), 1000);
     return () => window.clearInterval(ticker);
@@ -1396,6 +1409,18 @@ export default function App() {
       unsubscribeBackgroundMonitor?.();
     };
   }, []);
+
+  // Keep the saved VOD log selector available on the recording page, not only in the video composer.
+  useEffect(() => {
+    if (tab !== "recording" || !isDesktop || !window.kickRecorder) return;
+    let active = true;
+    void window.kickRecorder.listCommentLogFiles().then(logs => {
+      if (active) setCommentLogFiles(logs);
+    }).catch(error => {
+      if (active) setSavedVodAssStatus(error instanceof Error ? error.message : "保存済みVODログを読み込めませんでした。");
+    });
+    return () => { active = false; };
+  }, [tab, isDesktop, libraryRefreshKey, settings.outputDirectory]);
 
   const monitorSlugs = useMemo(
     () => [...new Set([...channels, ...recordingOnlyChannels].map(channel => channel.name.toLowerCase()))].slice(0, 200),
@@ -1966,6 +1991,29 @@ export default function App() {
     } catch (error) {
       setVodChatActive(false);
       setVodChatStatus(error instanceof Error ? error.message : "過去コメントを取得できませんでした。");
+    }
+  }
+
+  async function regenerateSavedVodAssFromLog() {
+    if (!window.kickRecorder || !savedVodAssPath || savedVodAssBusy) return;
+    setSavedVodAssBusy(true);
+    setSavedVodAssStatus("保存済みJSONLからASS字幕を再生成しています...");
+    try {
+      const result = await window.kickRecorder.regenerateSavedVodAss(savedVodAssPath, settings.removeEmotesFromAss, {
+        autoFlow: settings.assAutoFlow,
+        crossingSeconds: settings.vodAssCrossingSeconds,
+        speedPercent: settings.vodAssSpeedPercent,
+        entryOffsetPx: settings.vodAssEntryOffsetPx,
+        rowLimit: settings.vodAssRowLimit,
+        collisionGap: settings.vodAssCollisionGap,
+        delaySeconds: settings.vodAssDelaySeconds
+      });
+      setSavedVodAssStatus("ASS再生成完了：" + result.generatedComments.toLocaleString("ja-JP") + "件（省略：" + result.skippedComments.toLocaleString("ja-JP") + "件）。保存先：" + result.outputPath);
+      setLibraryRefreshKey(value => value + 1);
+    } catch (error) {
+      setSavedVodAssStatus(error instanceof Error ? error.message : "ASS再生成に失敗しました。");
+    } finally {
+      setSavedVodAssBusy(false);
     }
   }
 
@@ -2572,6 +2620,22 @@ export default function App() {
             {vodChatActive && <button className="remove" onClick={() => void stopPastBroadcastChat()}>コメント取得を停止</button>}
           </div>
           {vodChatStatus && <div className="api-message" role="status">{vodChatStatus}</div>}
+          <div className="settings-subsection">
+            <div className="settings-subheading"><h3>保存済みVODコメントからASSを再生成</h3><span className="api-state connected">オフライン変換</span></div>
+            <p className="settings-help">ダウンロード済みのJSONLを再利用します。上で選んだニコ生風の自動／手動調整やemote設定が反映され、Kickへの再接続は不要です。元のJSONL・TXT・既存ASSは上書きしません。</p>
+            <div className="add-channel vod-chat-actions">
+              <select aria-label="保存済みVODコメントJSONLを選択" value={savedVodAssPath}
+                onChange={event => setSavedVodAssPath(event.target.value)} disabled={!isDesktop || savedVodAssBusy || vodChatActive}>
+                <option value="">保存済みVODコメントを選択</option>
+                {commentLogFiles.filter(file => file.kind === "VOD").map(file =>
+                  <option key={file.path} value={file.path}>{file.channelSlug} / {file.name}</option>)}
+              </select>
+              <button className="primary-small" onClick={() => void regenerateSavedVodAssFromLog()}
+                disabled={!isDesktop || !savedVodAssPath || savedVodAssBusy || vodChatActive}>選択したJSONLからASSを再生成</button>
+            </div>
+            {commentLogFiles.every(file => file.kind !== "VOD") && <p className="settings-help">VODの保存済みJSONLはまだありません。まず過去配信のコメントを取得してください。</p>}
+            {savedVodAssStatus && <div className="api-message" role="status">{savedVodAssStatus}</div>}
+          </div>}
           <div className="notice">公開状態で取得可能なVODが対象です。コメントは配信開始からの経過時刻・投稿者名・本文を保持し、ChatフォルダーにJSONL・TXT・ASSで保存します。ASSは画面右から左へ流れるニコ生風字幕で、上の速度・進入位置・行数・間隔・同期タイミングを変更できます。Kick側の非公開設定やアクセス制限、API仕様変更により取得できない場合があります。</div>
         </section>
         <div className="setting-row">

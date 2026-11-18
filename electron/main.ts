@@ -19,6 +19,7 @@ import { join } from "node:path";
 import { autoUpdater } from "electron-updater";
 import { KickChatReceiver } from "./chat";
 import { KickVodChatDownloader, getVodBroadcastDetails } from "./vod-chat";
+import { regenerateSavedVodAss } from "./vod-ass-reexport";
 import { KickVodDownloadManager } from "./vod-download-queue";
 import { listLibrarySessions } from "./library-sessions";
 import { KickCommentVideoGenerator, listCommentLogFiles, previewCommentVideo } from "./comment-video";
@@ -1513,6 +1514,20 @@ function registerIpcHandlers(): void {
   ipcMain.handle("vod-chat:stop", event => {
     assertTrustedSender(event);
     return vodChatDownloader.stop();
+  });
+
+  let savedVodAssBusy = false;
+  ipcMain.handle("vod-chat:regenerate-ass", async (event, jsonlPath: unknown, removeEmotes: unknown, assOptions: unknown) => {
+    assertTrustedSender(event);
+    if (savedVodAssBusy || vodChatDownloader.isRunning()) {
+      throw new Error("コメントの取得またはASSの再生成が進行中です。完了後に再度実行してください。");
+    }
+    savedVodAssBusy = true;
+    try {
+      return await regenerateSavedVodAss(jsonlPath, getRecordingOutputDirectory(), removeEmotes !== false, assOptions);
+    } finally {
+      savedVodAssBusy = false;
+    }
   });
 
   

@@ -2,26 +2,34 @@
 
 Kick配信の映像・音声・コメントを録画・保存するWindowsデスクトップアプリです。24時間の配信監視、コメント付き動画の生成、映像・音声・コメントを組み合わせたAI配信記事に対応しています。
 
-> **最新公開版：0.4.0-alpha.73（α版）**  
-> **次期α版：0.4.1-alpha.74（ASSコメント速度・入り方の自動調整・公開準備中）**  
+> **最新公開版：0.4.1-alpha.74（α版）**  
+> **次期α版：0.4.2-alpha.75（保存済みVODコメントのオフラインASS再生成・公開準備中）**  
 > 現在の開発・テスト対象はα版です。過去に公開したβ版は履歴として保持し、製品版は未完成のため公開・自動更新していません。
 
 ## バージョン・ダウンロード
 
 | 区分 | バージョン | 状態 |
 |---|---|---|
-| 最新公開α版 | `0.4.0-alpha.73` | GitHub ReleasesのPre-release |
+| 最新公開α版 | `0.4.1-alpha.74` | GitHub ReleasesのPre-release |
 | 旧β版（履歴） | `0.1.0-beta.50` | 公開済み・保持 |
-| 次期α版 | `0.4.1-alpha.74` | コメント長・密度に応じたASSの自動調整を検証中 |
+| 次期α版 | `0.4.2-alpha.75` | 保存済みVOD JSONLからのオフラインASS再生成を検証中 |
 
-- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.4.0-alpha.73)
-- [α版公開候補ブランチ](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/release/v0.4.1-alpha.74)
+- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.4.1-alpha.74)
+- [α版公開候補ブランチ](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/release/v0.4.2-alpha.75)
 - [バージョン更新履歴（CHANGELOG）](CHANGELOG.md)
 - [α版・製品版の運用方針](docs/RELEASE_CHANNELS.md)
 
 α版の録画継続機能は開発中のため、実際の長時間LIVE配信での検証は引き続き必要です。
 
-## 0.4.1-alpha.74 のニコ生風ASS自動調整（公開準備中）
+## 0.4.2-alpha.75 のオフラインASS再生成（公開準備中）
+
+- 過去配信のコメントを取得後、保存されたVOD JSONLからインターネット接続なしでニコ生風ASSを再生成できます。
+- コメントの速度・入り方・重なり回避の自動調整ON/OFF、手動設定、emote除去の状態を選択して繰り返し調整できます。
+- 元JSONL／TXT／既存ASSを上書きせず、`_nico-auto.ass`（手動設定の場合は`_nico-manual.ass`）で別名保存します。
+- 元の動画の正確な終了時刻はJSONLにないため、字幕の生成範囲は最終コメントの時刻＋30秒を仮定します。再生時の動画長で表示は打ち切られます。
+- 安全な保存先の検証、ファイルサイズ・行数の制限、シンボリックリンク除外、読み込み中の変更検知、回帰テストを追加。
+
+## 0.4.1-alpha.74 のニコ生風ASS自動調整（公開済み）
 
 - 過去配信ASS・コメント付き動画のASSで「ニコ生風に自動調整」を追加。初期値はONです。
 - コメントの文字幅と直近約数秒の投稿集中度から流れる速度・右端の進入位置を自動計算。後のコメントが先のコメントに追いつかないよう移動速度の差を考慮します。

@@ -244,6 +244,10 @@ declare global {
         rowLimit?: number; collisionGap?: number; delaySeconds?: number; autoFlow?: boolean;
       }) => Promise<{ ok: true; outputDirectory: string }>;
       stopVodChatDownload: () => Promise<{ ok: true }>;
+      regenerateSavedVodAss: (jsonlPath: string, removeEmotes?: boolean, assOptions?: {
+        crossingSeconds?: number; speedPercent?: number; entryOffsetPx?: number;
+        rowLimit?: number; collisionGap?: number; delaySeconds?: number; autoFlow?: boolean;
+      }) => Promise<{ ok: true; outputPath: string; sourcePath: string; validComments: number; generatedComments: number; skippedComments: number }>;
       onVodChatStatus: (callback: (event: KickRecorderVodChatEvent) => void) => () => void;
       copyText: (value: string) => Promise<{ ok: boolean }>;
       onChatMessage: (callback: (message: KickRecorderChatMessage) => void) => () => void;
