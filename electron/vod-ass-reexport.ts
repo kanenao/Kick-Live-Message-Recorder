@@ -1,4 +1,4 @@
-import { createReadStream, existsSync, lstatSync, mkdirSync, renameSync, rmSync, writeFileSync, appendFileSync } from "node:fs";
+import { createReadStream, existsSync, lstatSync, renameSync, rmSync, writeFileSync, appendFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
