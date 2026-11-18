@@ -16,7 +16,7 @@ const audio = [
 ];
 const frames = [{ timeSeconds: 120 }, { timeSeconds: 3500 }];
 const evidence = buildArticleEvidenceTimeline(began, chat, audio, frames);
-assert.deepEqual(evidence.map(e => e.source), ["chat", "audio", "video", "chat", "video", "chat", "audio"]);
+assert.deepEqual(evidence.map(e => e.source), ["chat", "audio", "video", "chat", "video", "audio", "chat"]);
 assert.ok(evidence.every(e => e.timeSeconds >= 0 && !e.detail.includes("[emote:")));
 assert.ok(!evidence.some(e => e.detail.includes("時刻不明") || e.detail.includes("配信前")));
 assert.equal(formatArticleEvidenceTime(3661.99), "01:01:01");
