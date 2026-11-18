@@ -2635,7 +2635,7 @@ export default function App() {
             </div>
             {commentLogFiles.every(file => file.kind !== "VOD") && <p className="settings-help">VODの保存済みJSONLはまだありません。まず過去配信のコメントを取得してください。</p>}
             {savedVodAssStatus && <div className="api-message" role="status">{savedVodAssStatus}</div>}
-          </div>}
+          </div>
           <div className="notice">公開状態で取得可能なVODが対象です。コメントは配信開始からの経過時刻・投稿者名・本文を保持し、ChatフォルダーにJSONL・TXT・ASSで保存します。ASSは画面右から左へ流れるニコ生風字幕で、上の速度・進入位置・行数・間隔・同期タイミングを変更できます。Kick側の非公開設定やアクセス制限、API仕様変更により取得できない場合があります。</div>
         </section>
         <div className="setting-row">
