@@ -2,7 +2,7 @@
 
 Kick配信の映像・音声・コメントを録画・保存するWindowsデスクトップアプリです。24時間の配信監視、コメント付き動画の生成、映像・音声・コメントを組み合わせたAI配信記事に対応しています。
 
-> **最新公開版：0.5.0-alpha.76（α版）**  
+> **最新公開版：0.5.1-alpha.77（α版）**  
 > **次期α版：0.6.0-alpha.78（配信AI新聞の時刻別根拠・解析精度を強化中）**  
 > 現在の開発・テスト対象はα版です。過去に公開したβ版は履歴として保持し、製品版は未完成のため公開・自動更新していません。
 
@@ -10,11 +10,11 @@ Kick配信の映像・音声・コメントを録画・保存するWindowsデス
 
 | 区分 | バージョン | 状態 |
 |---|---|---|
-| 最新公開α版 | `0.5.0-alpha.76` | GitHub ReleasesのPre-release |
+| 最新公開α版 | `0.5.1-alpha.77` | GitHub ReleasesのPre-release |
 | 旧β版（履歴） | `0.1.0-beta.50` | 公開済み・保持 |
 | 次期α版 | `0.6.0-alpha.78` | 映像・音声・コメントの時刻別根拠・AI応答解析を検証中（未公開） |
 
-- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.5.0-alpha.76)
+- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.5.1-alpha.77)
 - [次期α版の開発ブランチ](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/feature/alpha78-ai-evidence-timeline)
 - [バージョン更新履歴（CHANGELOG）](CHANGELOG.md)
 - [α版・製品版の運用方針](docs/RELEASE_CHANNELS.md)
@@ -29,7 +29,7 @@ Kick配信の映像・音声・コメントを録画・保存するWindowsデス
 - Ollama等のAI応答が分割されたJSONを返した場合の連結・構造化段落の読み取りも改善します。
 - 既存の録画、コメントログ、字幕ファイル、AI記事は自動変更・削除しません。新しいインストーラーはまだ公開していません。
 
-## 0.5.1-alpha.77 の配信AI新聞の復旧と記事保護（開発ブランチ）
+## 0.5.1-alpha.77 の配信AI新聞の復旧と記事保護（公開済みα版）
 
 - Ollamaが空または不完全なJSONを返した場合、録画情報・取得済みコメント・音声文字起こしを使って小さなテキスト要求で1回だけ自動再試行します。映像を再試行で解析できたと誤認しません。
 - 同じ録画から記事を複数回作成しても、以前の記事を上書きせず、別の記事IDで保存します。
