@@ -190,7 +190,7 @@ type StreamArticle = {
   lastAiUpdateAt?: string | null; viewerCount?: number; peakViewerCount?: number; aiError?: string;
   videoAnalyzed?: boolean; videoFrameCount?: number; videoSummary?: string; videoScenes?: string[]; videoAnalyzedAt?: string | null;
   videoPreviewAvailable?: boolean; videoPreviewTimeSeconds?: number; videoPreviewUpdatedAt?: string;
-  audioAnalyzed?: boolean; audioSegmentCount?: number; audioSummary?: string; audioTranscript?: string;
+  audioAnalyzed?: boolean; audioSamplingMode?: "continuous" | "distributed"; audioSegmentCount?: number; audioSummary?: string; audioTranscript?: string;
   audioTranscriptSegments?: Array<{ startSeconds: number; endSeconds: number; text: string }>;
   audioAnalyzedAt?: string | null; audioError?: string;
 };
@@ -3274,6 +3274,7 @@ export default function App() {
               {article.videoAnalyzed && <div className="article-video-analysis"><strong>映像から確認した場面（代表フレーム {article.videoFrameCount ?? article.videoScenes?.length ?? 0}枚）</strong><p>{article.videoSummary}</p>{Boolean(article.videoScenes?.length) && <ul>{article.videoScenes?.map((scene, index) => <li key={index}>{scene}</li>)}</ul>}</div>}
               {article.audioAnalyzed && <div className="article-audio-analysis">
                 <strong>音声から確認した内容</strong>
+                {article.audioSamplingMode === "distributed" && <p className="article-audio-coverage-note">長時間配信のため、全時間帯から一部の音声区間を抜き出して文字起こししています。配信全体の発言を網羅したものではありません。</p>}
                 <p>{article.audioSummary || "音声は文字起こし済みです。発言内容の要約はまだ生成されていません。"}</p>
                 {article.audioTranscript && <details className="article-transcript-details">
                   <summary>音声文字起こしを表示（{(article.audioSegmentCount ?? article.audioTranscriptSegments?.length ?? 0).toLocaleString("ja-JP")}区間）</summary>
