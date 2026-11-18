@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getRecordingChannelSlug } from "../shared/recording-library";
+import { getAvailableArticleChannels, selectAssociatedArticleLogs } from "../shared/article-sources";
 import { computeNicoAssProfile } from "../../electron/nico-ass-auto";
 import { parseReleaseNotes, splitReleaseNoteInline } from "../shared/release-notes";
 
@@ -210,7 +211,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.4.2-alpha.75";
+const APP_VERSION = "0.5.0-alpha.76";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -238,6 +239,17 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.5.0-alpha.76",
+    title: "配信AI新聞のアーカイブ解析・再解析を大幅強化",
+    changes: [
+      "未登録配信者でも録画ライブラリからAI新聞を生成できるよう対応",
+      "コメントログを放送ごとに自動対応付けし、手動でログを追加・除外可能に",
+      "過去記事の再解析ボタンを追加し、映像・音声・コメントで再解析可能に",
+      "映像要約が空でも利用可能な本文を失わず、必要なVisionモデルを案内",
+      "アーカイブ記事の配信時間が再解析で誤って延びる問題と録画中生成時の残骸を修正"
+    ]
+  },
   {
     version: "0.4.2-alpha.75",
     title: "保存済みVODコメントのオフラインASS再生成",
@@ -1107,6 +1119,8 @@ export default function App() {
   const [articleStatusFilter, setArticleStatusFilter] = useState<"all" | "live" | "archive">("all");
   const [articleSlug, setArticleSlug] = useState("");
   const [articleVideoPath, setArticleVideoPath] = useState("");
+  const [articleSelectedLogPaths, setArticleSelectedLogPaths] = useState<string[]>([]);
+  const [reanalyzingArticleId, setReanalyzingArticleId] = useState<string | null>(null);
   const [articleHeadline, setArticleHeadline] = useState("");
   const [articleBusy, setArticleBusy] = useState(false);
   const [deletingArticleId, setDeletingArticleId] = useState<string | null>(null);
@@ -2289,7 +2303,7 @@ export default function App() {
     setArticleMessage("");
     try {
       const channel = [...channels, ...recordingOnlyChannels].find(item => item.name.toLowerCase() === articleSlug.toLowerCase());
-      const logs = commentLogFiles.filter(file => file.channelSlug.toLowerCase() === articleSlug.toLowerCase()).map(file => file.path);
+      const logs = articleSelectedLogPaths.slice(0, 31);
       const article = await window.kickRecorder.generateStreamArticle({
         videoPath: articleVideoPath,
         slug: articleSlug,
@@ -2308,6 +2322,23 @@ export default function App() {
       setArticleMessage(error instanceof Error ? error.message : "記事の生成に失敗しました。");
     } finally {
       setArticleBusy(false);
+    }
+  }
+
+  async function reanalyzeStreamArticle(article: StreamArticle) {
+    if (!window.kickRecorder || reanalyzingArticleId || article.status === "live") return;
+    setReanalyzingArticleId(article.id);
+    setArticleMessage("AI記事を再解析しています：" + article.headline);
+    try {
+      const refreshed = await window.kickRecorder.reanalyzeStreamArticle(article.slug, article.id);
+      setStreamArticles(await window.kickRecorder.listStreamArticles());
+      setArticleMessage(refreshed.aiError
+        ? "再解析後も確認が必要です：" + refreshed.aiError
+        : refreshed.aiGenerated ? "映像・音声・コメントのAI再解析が完了しました。" : "AI分析できるデータを確認してください。");
+    } catch (error) {
+      setArticleMessage(error instanceof Error ? error.message : "記事の再解析に失敗しました。");
+    } finally {
+      setReanalyzingArticleId(null);
     }
   }
 
@@ -3130,17 +3161,39 @@ export default function App() {
             <div className="notice">AI記事の自動更新をONにすると、通常のコメント自動取得設定がOFFでも記事用コメントを受信します。録画済み動画の手動記事生成は、自動LIVE記事のON／OFFとは独立してAI分析します。{settings.aiArticleProvider === "ollama" ? "映像・音声・コメントのデータは設定したOllamaへ送信され、ローカルOllamaを使う場合は外部AIサービスへ送信されません。記事生成用Visionモデルと音声認識モデルは設定画面の「インストール」ボタンから取得できます。ダウンロードには初回のみ通信が必要です。PCのメモリ・CPU/GPUを使用します。" : "記事生成モデルには映像フレーム・コメント・配信情報と、利用可能な場合は音声文字起こしテキストをOpenAI APIへ送信します。API利用料が発生し、映像フレームも外部へ送信されるため、送信してよい録画だけを対象にしてください。音声の新規文字起こし処理はOllama利用時のみです。"}</div>
           </div>
           <div className="comment-video-form-grid">
-            <label className="comment-video-field"><span>登録配信者</span><select value={articleSlug} onChange={event => setArticleSlug(event.target.value)}>
+            <label className="comment-video-field"><span>配信者（未登録の録画にも対応）</span><select value={articleSlug}
+              onChange={event => { setArticleSlug(event.target.value); setArticleVideoPath(""); setArticleSelectedLogPaths([]); }}>
               <option value="">配信者を選択</option>
-              {[...channels, ...recordingOnlyChannels].filter((item, index, all) => all.findIndex(other => other.name.toLowerCase() === item.name.toLowerCase()) === index).map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
-            </select></label>
-            <label className="comment-video-field"><span>対象の録画動画</span><select value={articleVideoPath} onChange={event => setArticleVideoPath(event.target.value)}>
+              {getAvailableArticleChannels([...channels, ...recordingOnlyChannels].map(item => item.name), recordingFiles.map(file => file.name))
+                .map(slug => <option key={slug} value={slug}>{slug}</option>)}
+            </select><small>録画ライブラリにある配信者は、監視登録していなくても表示されます。</small></label>
+            <label className="comment-video-field"><span>対象の録画動画</span><select value={articleVideoPath}
+              onChange={event => {
+                const selected = recordingFiles.find(file => file.path === event.target.value);
+                setArticleVideoPath(event.target.value);
+                setArticleSelectedLogPaths(selected ? selectAssociatedArticleLogs(selected.name, articleSlug, commentLogFiles) : []);
+              }}>
               <option value="">動画を選択してください</option>
-              {recordingFiles.filter(file => file.name.toLowerCase().startsWith((articleSlug || "").toLowerCase() + "_")).map(file => <option key={file.path} value={file.path}>{file.name}</option>)}
-            </select></label>
+              {recordingFiles.filter(file => getRecordingChannelSlug(file.name) === articleSlug)
+                .map(file => <option key={file.path} value={file.path}>{file.name}</option>)}
+            </select><small>同じ放送に属するコメントログだけを自動選択します。</small></label>
             <label className="comment-video-field"><span>記事見出し（任意）</span><input value={articleHeadline} onChange={event => setArticleHeadline(event.target.value)} maxLength={160} placeholder="空欄なら配信者名から自動作成" /></label>
           </div>
-          <div className="comment-video-actions"><button className="primary-small" onClick={() => void createStreamArticle()} disabled={articleBusy || !articleSlug || !articleVideoPath}>{articleBusy ? "映像・音声・コメントをAI分析中..." : settings.aiArticleProvider === "ollama" || aiArticleStatus.configured ? "3つの情報源からAI記事を生成" : "この配信の記事を生成"}</button><span className="comment-video-log-count">同じ配信者のコメントログ {commentLogFiles.filter(file => file.channelSlug.toLowerCase() === articleSlug.toLowerCase()).length}件を自動で参照</span></div>
+          <div className="settings-subsection">
+            <div className="settings-subheading"><h3>記事に使用するコメントログ</h3><span className="api-state connected">{articleSelectedLogPaths.length}件選択</span></div>
+            <p className="settings-help">同じ配信のコメントログを自動選択します。ファイル名が異なる古いログは、下から手動で選択できます。別の放送のログを選ぶと記事が不正確になるため注意してください。</p>
+            <div className="comment-video-log-list" role="group" aria-label="記事生成に使用するコメントログ">
+              {commentLogFiles.filter(file => file.channelSlug.toLowerCase() === articleSlug.toLowerCase() && articleSlug)
+                .map(file => <label className="comment-video-log-option" key={file.path}>
+                  <input type="checkbox" checked={articleSelectedLogPaths.includes(file.path)}
+                    disabled={articleBusy || (!articleSelectedLogPaths.includes(file.path) && articleSelectedLogPaths.length >= 31)}
+                    onChange={event => setArticleSelectedLogPaths(previous =>
+                      event.target.checked ? [...previous, file.path] : previous.filter(path => path !== file.path))} />
+                  <span><strong>{file.kind}</strong><small>{file.name}</small></span>
+                </label>)}
+            </div>
+          </div>
+          <div className="comment-video-actions"><button className="primary-small" onClick={() => void createStreamArticle()} disabled={articleBusy || !articleSlug || !articleVideoPath}>{articleBusy ? "映像・音声・コメントをAI分析中..." : settings.aiArticleProvider === "ollama" || aiArticleStatus.configured ? "3つの情報源からAI記事を生成" : "この配信の記事を生成"}</button><span className="comment-video-log-count">同じ放送に対応するログ {articleSelectedLogPaths.length}件を使用</span></div>
           {articleMessage && <div className="api-message" role="status">{articleMessage}</div>}
           <div className="article-news-masthead">
             <div className="article-news-title">
@@ -3164,7 +3217,7 @@ export default function App() {
               <span className="article-list-count">{filteredStreamArticles.length.toLocaleString("ja-JP")}記事</span>
             </div>
             <div className="article-search-row"><input className="article-search" value={articleSearch} onChange={event => setArticleSearch(event.target.value)} placeholder="記事を検索（配信者・見出し・本文・音声文字起こし・キーワード）" aria-label="配信記事を検索" /></div>
-            {streamArticles.length === 0 ? <div className="empty-state"><strong>まだ記事がありません</strong><span>登録配信者の録画を選んで記事を生成してください。</span></div> : filteredStreamArticles.length === 0 ? <div className="empty-state"><strong>一致する記事がありません</strong><span>検索語を変更してください。</span></div> : articleDateGroups.map(([dateLabel, dayArticles]) => <section className="article-day-group" key={dateLabel}>
+            {streamArticles.length === 0 ? <div className="empty-state"><strong>まだ記事がありません</strong><span>録画ライブラリから動画を選んで記事を生成してください。未登録の配信者にも対応しています。</span></div> : filteredStreamArticles.length === 0 ? <div className="empty-state"><strong>一致する記事がありません</strong><span>検索語を変更してください。</span></div> : articleDateGroups.map(([dateLabel, dayArticles]) => <section className="article-day-group" key={dateLabel}>
               <div className="article-day-heading"><h4>{dateLabel}</h4><span>{dayArticles.length.toLocaleString("ja-JP")}本</span></div>
               {dayArticles.map(article => <article className="article-card" key={article.slug + ":" + article.id}>
               <div className="article-meta"><span className="article-byline">配信者・{article.displayName}</span> ・ {new Date(article.startedAt).toLocaleString("ja-JP")} <span className={article.status === "live" ? "article-status-live" : "article-status-done"}>{article.status === "live" ? "LIVE・更新中" : article.status === "completed" ? "配信終了" : "アーカイブ"}</span>{article.aiGenerated && <span className="article-ai-label">AI記事</span>}</div>
@@ -3198,6 +3251,10 @@ export default function App() {
               <div className="article-stats">配信時間 {Math.floor((article.durationSeconds ?? 0) / 60).toLocaleString("ja-JP")}分 ・ コメント {article.commentCount.toLocaleString("ja-JP")}件 ・ 投稿者 {article.uniqueCommenters.toLocaleString("ja-JP")}人 ・ 視聴者数 {article.viewerCount?.toLocaleString("ja-JP") ?? "—"}人（最大 {article.peakViewerCount?.toLocaleString("ja-JP") ?? "—"}人） ・ 分析キーワード {article.keywords.join("、") || "なし"}{article.lastAiUpdateAt ? ` ・ AI更新 ${new Date(article.lastAiUpdateAt).toLocaleTimeString("ja-JP")}` : ""}</div>
               {article.sourceVideo && <div className="comment-video-actions"><button className="small-action" onClick={() => void window.kickRecorder?.openRecording(article.sourceVideo)}>元動画を開く</button><button className="small-action" onClick={() => void window.kickRecorder?.revealRecording(article.sourceVideo)}>録画の保存先</button></div>}
               <div className="comment-video-actions article-card-actions">
+                {article.status !== "live" && <button className="small-action" onClick={() => void reanalyzeStreamArticle(article)}
+                  disabled={reanalyzingArticleId !== null || articleBusy}>
+                  {reanalyzingArticleId === article.id ? "AIで再解析中..." : "映像・音声・コメントでAI再解析"}
+                </button>}
                 <button className="remove" onClick={() => void deleteStreamArticle(article)} disabled={deletingArticleId !== null}>
                   {deletingArticleId === article.id ? "削除中..." : "この記事を削除"}
                 </button>

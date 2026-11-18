@@ -60,6 +60,10 @@ jobs:
         run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-library-sessions.mjs
       - name: LIVE録画の途中切断・自動復旧・手動停止テスト
         run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-recording-recovery.mjs
+      - name: AI新聞の放送別ログ選択と未登録配信者テスト
+        run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-article-sources.mjs
+      - name: AI新聞のアーカイブ配信時間保持テスト
+        run: node --experimental-strip-types scripts/test-article-timeline.mjs
       - name: AI記事応答形式テスト
         run: node --experimental-strip-types scripts/test-ai-response.mjs
       - name: 配信記事メニューの不要な改行文字の回帰テスト

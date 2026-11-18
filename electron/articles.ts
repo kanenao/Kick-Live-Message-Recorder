@@ -253,7 +253,8 @@ export async function generateStreamArticle(input: unknown, outputDirectory: str
     id, slug, displayName, headline, category, startedAt: startedAt.toISOString(),
     durationSeconds, commentCount, uniqueCommenters: commenters.size, keywords,
     paragraphs: makeParagraphs(displayName, category, commentCount, commenters.size, keywords, samples),
-    sourceVideo: values.videoPath, sourceLogs: matchedLogs, createdAt: new Date().toISOString()
+    sourceVideo: values.videoPath, sourceLogs: matchedLogs, createdAt: new Date().toISOString(),
+    status: "completed"
   };
   const directory = join(root, "Articles", slug);
   mkdirSync(directory, { recursive: true });

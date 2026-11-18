@@ -285,6 +285,7 @@ declare global {
       getStreamArticlePreview: (slug: string, id: string) => Promise<string | null>;
       deleteStreamArticle: (slug: string, id: string) => Promise<{ ok: true; id: string }>;
       generateStreamArticle: (input: { videoPath: string; slug: string; displayName?: string; category?: string; headline?: string; chatPaths?: string[] }) => Promise<KickRecorderStreamArticle>;
+      reanalyzeStreamArticle: (slug: string, id: string) => Promise<KickRecorderStreamArticle>;
       listCommentLogFiles: () => Promise<KickRecorderCommentLogFile[]>;
       deleteCommentLog: (filePath: string) => Promise<{ ok: true; name: string }>;
       listRecentCommentMessages: (channelSlug: string, limit?: number) => Promise<KickRecorderLibraryCommentMessage[]>;

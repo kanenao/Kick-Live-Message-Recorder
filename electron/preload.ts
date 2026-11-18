@@ -335,6 +335,8 @@ const api = {
   deleteStreamArticle: (slug: string, id: string): Promise<{ ok: true; id: string }> => ipcRenderer.invoke("articles:delete", slug, id),
   generateStreamArticle: (input: { videoPath: string; slug: string; displayName?: string; category?: string; headline?: string; chatPaths?: string[] }): Promise<StreamArticle> =>
     ipcRenderer.invoke("articles:generate", input),
+  reanalyzeStreamArticle: (slug: string, id: string): Promise<StreamArticle> =>
+    ipcRenderer.invoke("articles:reanalyze", slug, id),
   listCommentLogFiles: (): Promise<CommentLogFile[]> => ipcRenderer.invoke("comment-video:list-logs"),
   deleteCommentLog: (filePath: string): Promise<{ ok: true; name: string }> => ipcRenderer.invoke("library:delete-comment-log", filePath),
   listRecentCommentMessages: (channelSlug: string, limit = 100): Promise<LibraryCommentMessage[]> =>

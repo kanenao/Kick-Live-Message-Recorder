@@ -7,6 +7,7 @@ import type { LiveAudioChunk } from "./live-video-frames";
 import type { KickChatMessage } from "./chat";
 import { parseAiArticleResponse } from "./ai-response";
 import { saveArticlePreviewFrame } from "./article-preview";
+import { articleDurationForSave } from "./article-timeline";
 import { getAudioTranscriptionRetryDelayMs, isRetryableAudioTranscriptionError } from "./audio-retry-policy";
 
 export type LiveArticle = {
@@ -993,16 +994,23 @@ export class LiveStreamArticleManager {
         article.audioSummary = result.audioSummary;
         article.audioAnalyzedAt = new Date().toISOString();
       }
+      let visualWarning = "";
       if (videoFramesForAnalysis.length) {
-        if (!result.videoSummary) throw new Error("映像の分析結果が返されませんでした。画像対応モデル（例：qwen2.5vl:3b）を選択してください。");
         article.videoFrameCount = videoFrameTotalCountForAnalysis;
-        article.videoAnalyzed = (session.videoFrameTotalCount ?? videoFrameTotalCountForAnalysis) <= videoFrameTotalCountForAnalysis;
-        article.videoSummary = result.videoSummary;
-        article.videoScenes = result.videoScenes;
-        article.videoAnalyzedAt = new Date().toISOString();
+        if (result.videoSummary.trim()) {
+          article.videoAnalyzed = (session.videoFrameTotalCount ?? videoFrameTotalCountForAnalysis) <= videoFrameTotalCountForAnalysis;
+          article.videoSummary = result.videoSummary;
+          article.videoScenes = result.videoScenes;
+          article.videoAnalyzedAt = new Date().toISOString();
+        } else {
+          // A text-only model may return a usable article without recognizing image input.
+          // Keep its grounded text while reporting the missing visual evidence explicitly.
+          article.videoAnalyzed = false;
+          visualWarning = "本文は保存しましたが、AIモデルから映像要約が返りませんでした。Vision対応モデル（例：qwen2.5vl:3b）を確認して再解析してください。";
+        }
       }
       article.aiGenerated = true;
-      article.aiError = "";
+      article.aiError = visualWarning;
       article.lastAiUpdateAt = new Date().toISOString();
     } catch (error) {
       session.pendingComments.unshift(...batch);
@@ -1020,7 +1028,7 @@ export class LiveStreamArticleManager {
 
   private persist(session: LiveSession): void {
     const article = session.article;
-    article.durationSeconds = Math.max(0, Math.floor((Date.now() - Date.parse(article.startedAt)) / 1000));
+    article.durationSeconds = articleDurationForSave(article.startedAt, article.durationSeconds, article.status, Date.now());
     const filePath = join(session.directory, `${article.id}.json`);
     const temporaryPath = filePath + ".tmp";
     try {

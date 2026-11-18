@@ -25,7 +25,7 @@ import { listLibrarySessions } from "./library-sessions";
 import { KickCommentVideoGenerator, listCommentLogFiles, previewCommentVideo } from "./comment-video";
 import { listRecentCommentMessages } from "./recording-library";
 import { trashCommentLogFile } from "./comment-log-delete";
-import { deleteStreamArticle, generateStreamArticle, getStreamArticlePreview, listStreamArticles } from "./articles";
+import { isValidStreamArticleId, deleteStreamArticle, generateStreamArticle, getStreamArticlePreview, listStreamArticles } from "./articles";
 import { LiveStreamArticleManager } from "./live-articles";
 import { startLiveVideoFrameCapture, type LiveVideoFrameStatus } from "./live-video-frames";
 import { detachCaptureIfCurrent, nextManualCaptureRetryDelayMs } from "./live-capture-policy";
@@ -1719,16 +1719,42 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("articles:generate", async (event, input: unknown) => {
     assertTrustedSender(event);
-    const article = await generateStreamArticle(input, getRecordingOutputDirectory());
-    if ((recordingManager.isFileActive(article.sourceVideo) || vodDownloadManager.isFileActive(article.sourceVideo))) {
+    const videoPath = input && typeof input === "object" && "videoPath" in input
+      ? (input as { videoPath?: unknown }).videoPath : null;
+    if (typeof videoPath === "string" &&
+        (recordingManager.isFileActive(videoPath) || vodDownloadManager.isFileActive(videoPath))) {
       throw new Error("録画中の動画は映像解析できません。録画終了後に記事を生成してください。");
     }
+    const article = await generateStreamArticle(input, getRecordingOutputDirectory());
     const settings = readState().settings;
     // Manual archive generation can use AI even when automatic LIVE article generation is disabled.
     if (settings.aiArticleProvider === "ollama" || readOpenAiApiKey()) {
       return liveArticleManager.enhanceArchivedArticle(article);
     }
     return article;
+  });
+
+  ipcMain.handle("articles:reanalyze", async (event, slugInput: unknown, idInput: unknown) => {
+    assertTrustedSender(event);
+    if (typeof slugInput !== "string" || typeof idInput !== "string" ||
+        !isValidStreamArticleId(slugInput, idInput)) {
+      throw new Error("再解析する記事のIDが不正です。");
+    }
+    const article = listStreamArticles(getRecordingOutputDirectory(), slugInput)
+      .find(item => item.id === idInput);
+    if (!article) throw new Error("再解析する記事が見つかりません。");
+    if (liveArticleManager.isArticleActive(slugInput, idInput) || article.status === "live") {
+      throw new Error("LIVE更新中の記事は再解析できません。放送終了後に実行してください。");
+    }
+    if (article.sourceVideo && (recordingManager.isFileActive(article.sourceVideo) ||
+        vodDownloadManager.isFileActive(article.sourceVideo))) {
+      throw new Error("録画中の動画は解析できません。録画完了後に実行してください。");
+    }
+    const settings = readState().settings;
+    if (settings.aiArticleProvider === "openai" && !readOpenAiApiKey()) {
+      throw new Error("OpenAI APIキーが未設定です。Ollamaへ切り替えるかAPIキーを登録してください。");
+    }
+    return liveArticleManager.enhanceArchivedArticle(article);
   });
 
   ipcMain.handle("comment-video:list-logs", event => {
