@@ -17,7 +17,7 @@ export function articleAudioSamplingMode(durationSeconds: number): ArticleAudioS
 /** For short recordings use contiguous 45-second windows; for long ones sample all hours. */
 export function planArticleAudioWindows(durationSeconds: number): ArticleAudioWindow[] {
   if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return [];
-  const duration = Math.min(durationSeconds, 7 * 24 * 3600);
+  const duration = durationSeconds;
   if (articleAudioSamplingMode(duration) === "continuous") {
     const count = Math.ceil(duration / ARTICLE_AUDIO_WINDOW_SECONDS);
     return Array.from({ length: count }, (_, index) => {
