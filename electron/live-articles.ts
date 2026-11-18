@@ -3,6 +3,7 @@ import { extname, join, resolve } from "node:path";
 import { isPathInsideDirectory } from "./recording";
 import { extractVideoFrames, getVideoDurationSeconds, type VideoFrameSample } from "./video-frames";
 import { formatAudioTranscript, transcribeVideoAudio, transcribeWavBase64, type AudioTranscriptSegment } from "./audio-transcription";
+import { articleAudioSamplingMode, type ArticleAudioSamplingMode } from "./article-audio-sampling";
 import type { LiveAudioChunk } from "./live-video-frames";
 import type { KickChatMessage } from "./chat";
 import { parseAiArticleResponse } from "./ai-response";
@@ -47,6 +48,7 @@ export type LiveArticle = {
   videoPreviewTimeSeconds?: number;
   videoPreviewUpdatedAt?: string;
   audioAnalyzed?: boolean;
+  audioSamplingMode?: ArticleAudioSamplingMode;
   audioSegmentCount?: number;
   audioSummary?: string;
   audioTranscript?: string;
@@ -526,6 +528,7 @@ export class LiveStreamArticleManager {
       article.audioSegmentCount = audioSegments.length;
       article.audioTranscriptSegments = audioSegments;
       article.audioTranscript = formatAudioTranscript(audioSegments);
+      article.audioSamplingMode = articleAudioSamplingMode(article.durationSeconds);
       article.audioAnalyzedAt = new Date().toISOString();
       article.audioError = "";
     }
