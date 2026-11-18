@@ -4,7 +4,7 @@ Kick配信の映像・音声・コメントを録画・保存するWindowsデス
 
 > **最新公開版：0.5.0-alpha.76（α版）**  
 > **最新公開版のソース：`release/v0.5.0-alpha.76`（タグ付き）**  
-> 最新α版のインストーラーは公開済みです。**mainブランチのアプリコードは旧β版の履歴的スナップショット**で、最新α版のソースはタグ `v0.4.2-alpha.75` を参照してください。製品版はまだ公開していません。
+> 最新α版のインストーラーは公開済みです。**mainブランチのアプリコードは旧β版の履歴的スナップショット**で、最新α版のソースはタグ `v0.5.0-alpha.76` を参照してください。製品版はまだ公開していません。
 
 ## バージョン・ダウンロード
 
@@ -15,6 +15,7 @@ Kick配信の映像・音声・コメントを録画・保存するWindowsデス
 | 最新ソース | `v0.5.0-alpha.76` | α版の公開タグ（mainとは別ライン） |
 
 - [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.5.0-alpha.76)
+- [次期α版の開発PR #15（0.5.1-alpha.77・未公開）](https://github.com/kanenao/Kick-Live-Message-Recorder/pull/15)
 - [公開α版のソースコード](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/v0.5.0-alpha.76)
 - [バージョン更新履歴（CHANGELOG）](CHANGELOG.md)
 - [α版・製品版の運用方針](docs/RELEASE_CHANNELS.md)
