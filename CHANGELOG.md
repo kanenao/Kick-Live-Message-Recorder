@@ -1,6 +1,13 @@
 # 更新履歴
 
-> mainブランチは旧開発コードを保持しています。公開済みα版のソースとリリースノートは [v0.4.1-alpha.74](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.4.1-alpha.74) を参照してください。
+> mainブランチは旧開発コードを保持しています。公開済みα版のソースとリリースノートは [v0.4.2-alpha.75](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.4.2-alpha.75) を参照してください。
+
+## 0.4.2-alpha.75（公開済みα版）
+
+- 保存済みのVODコメントJSONLからネット接続なしでASSを再生成する機能を追加。ニコ生風自動調整、手動速度、emote除去を反映。
+- 元JSONL・TXT・既存ASSは上書きせずに新規ASSを作成。生成した字幕の件数と省略数、保存先を表示。
+- 保存フォルダーの検証、シンボリックリンク拒否、不正レコード・巨大ファイルの検知と二重実行防止を追加。
+- ASS出力・ファイル安全性・元ファイル保持の回帰テスト、型チェック、Windowsインストーラー作成、更新ファイル検証に成功。
 
 ## 0.4.1-alpha.74（公開済みα版）
 
