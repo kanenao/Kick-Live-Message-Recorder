@@ -249,15 +249,20 @@ export async function generateStreamArticle(input: unknown, outputDirectory: str
   const keywords = [...counts.entries()].filter(([, count]) => count >= 2)
     .sort((a, b) => b[1] - a[1]).slice(0, 8).map(([word]) => word);
   const id = `${slug}_${startedAt.getFullYear()}${String(startedAt.getMonth()+1).padStart(2,"0")}${String(startedAt.getDate()).padStart(2,"0")}_${String(startedAt.getHours()).padStart(2,"0")}${String(startedAt.getMinutes()).padStart(2,"0")}${String(startedAt.getSeconds()).padStart(2,"0")}`;
+  const directory = join(root, "Articles", slug);
+  mkdirSync(directory, { recursive: true });
+  let uniqueId = id;
+  for (let revision = 2; existsSync(join(directory, uniqueId + ".json")); revision += 1) {
+    if (revision > 10000) throw new Error("記事の保存先を確保できませんでした。");
+    uniqueId = id + "_rev" + revision;
+  }
   const article: StreamArticle = {
-    id, slug, displayName, headline, category, startedAt: startedAt.toISOString(),
+    id: uniqueId, slug, displayName, headline, category, startedAt: startedAt.toISOString(),
     durationSeconds, commentCount, uniqueCommenters: commenters.size, keywords,
     paragraphs: makeParagraphs(displayName, category, commentCount, commenters.size, keywords, samples),
     sourceVideo: values.videoPath, sourceLogs: matchedLogs, createdAt: new Date().toISOString(),
     status: "completed"
   };
-  const directory = join(root, "Articles", slug);
-  mkdirSync(directory, { recursive: true });
-  writeFileSync(join(directory, `${id}.json`), JSON.stringify(article, null, 2), "utf8");
+  writeFileSync(join(directory, `${uniqueId}.json`), JSON.stringify(article, null, 2), { encoding: "utf8", flag: "wx" });
   return article;
 }
