@@ -35,7 +35,9 @@ function extractInner(payload: UnknownRecord, depth = 0): string {
  if (Array.isArray(payload.output)) {
   const found = payload.output.map(item => {
    const record = asRecord(item);
-   return record ? (readText(record.content) || readText(record.text)) : "";
+   // Responses may include a separate reasoning item before the final message.
+   if (!record || ["reasoning", "thinking", "analysis"].includes(String(record.type))) return "";
+   return readText(record.content) || readText(record.text);
   }).filter(Boolean);
   if (found.length) return found.join("\n").trim();
  }

@@ -183,3 +183,12 @@ const withReasoning = {
 assert.equal(extractAiResponseText(withReasoning), splitJson);
 assert.equal(parseAiArticleResponse(withReasoning).paragraphs.length, 2);
 console.log("AI記事分割応答・構造化段落・reasoning分離テスト成功");
+
+const topLevelReasoning = {
+  output: [
+    { type: "reasoning", content: [{ type: "summary_text", text: "private scratchpad" }] },
+    { type: "message", content: [{ type: "output_text", text: splitJson }] }
+  ]
+};
+assert.equal(extractAiResponseText(topLevelReasoning), splitJson);
+assert.equal(parseAiArticleResponse(topLevelReasoning).headline, "配信記事");
