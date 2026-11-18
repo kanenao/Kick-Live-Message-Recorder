@@ -3,6 +3,7 @@ import { basename, extname, join, resolve } from "node:path";
 import { isPathInsideDirectory } from "./recording";
 import { getVideoDurationSeconds } from "./video-frames";
 import type { ArticleEvidenceEvent } from "./article-evidence";
+import type { ArticleAudioSamplingMode } from "./article-audio-sampling";
 import { deleteArticlePreview, hasArticlePreview, readArticlePreviewDataUrl } from "./article-preview";
 
 export type StreamArticle = {
@@ -25,6 +26,7 @@ export type StreamArticle = {
   aiGenerated?: boolean;
   aiSummary?: string;
   evidenceTimeline?: ArticleEvidenceEvent[];
+  audioSamplingMode?: ArticleAudioSamplingMode;
   highlights?: string[];
   lastAiUpdateAt?: string | null;
   viewerCount?: number;
