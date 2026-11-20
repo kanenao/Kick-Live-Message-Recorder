@@ -4,6 +4,7 @@ import { getAvailableArticleChannels, selectAssociatedArticleLogs } from "../sha
 import { computeNicoAssProfile } from "../../electron/nico-ass-auto";
 import { parseReleaseNotes, splitReleaseNoteInline } from "../shared/release-notes";
 import { formatArticleEvidenceTime, type ArticleEvidenceEvent } from "../../electron/article-evidence";
+import { deduplicateArticleSentences, deduplicateArticleList } from "../../electron/article-text-dedupe";
 
 function ReleaseNoteInlineText({ value }: { value: string }) {
   return <>{splitReleaseNoteInline(value).map((part, index) =>
@@ -3251,7 +3252,7 @@ export default function App() {
                   <h3>{article.headline}</h3>
                   {article.streamTitle && article.streamTitle !== article.headline && <p className="article-original-stream-title"><strong>元配信タイトル</strong> {article.streamTitle}</p>}
                   {article.category && <span className="live-stream-category">{article.category}</span>}
-                  {article.aiSummary && <p className="article-summary">{article.aiSummary}</p>}
+                  {article.aiSummary && <p className="article-summary">{deduplicateArticleSentences(article.aiSummary, 500)}</p>}
                 </div>
               </div>
               <div className="article-source-badges">
@@ -3271,19 +3272,19 @@ export default function App() {
                   </li>)}
                 </ol>
               </details>}
-              {article.videoAnalyzed && <div className="article-video-analysis"><strong>映像から確認した場面（代表フレーム {article.videoFrameCount ?? article.videoScenes?.length ?? 0}枚）</strong><p>{article.videoSummary}</p>{Boolean(article.videoScenes?.length) && <ul>{article.videoScenes?.map((scene, index) => <li key={index}>{scene}</li>)}</ul>}</div>}
+              {article.videoAnalyzed && <div className="article-video-analysis"><strong>映像から確認した場面（代表フレーム {article.videoFrameCount ?? article.videoScenes?.length ?? 0}枚）</strong>{deduplicateArticleSentences(article.videoSummary, 1000) && <p>{deduplicateArticleSentences(article.videoSummary, 1000)}</p>}{deduplicateArticleList(article.videoScenes ?? [], 8, 300, article.videoSummary ?? "").length > 0 && <ul>{deduplicateArticleList(article.videoScenes ?? [], 8, 300, article.videoSummary ?? "").map((scene, index) => <li key={index}>{scene}</li>)}</ul>}</div>}
               {article.audioAnalyzed && <div className="article-audio-analysis">
                 <strong>音声から確認した内容</strong>
                 {article.audioSamplingMode === "distributed" && <p className="article-audio-coverage-note">長時間配信のため、全時間帯から一部の音声区間を抜き出して文字起こししています。配信全体の発言を網羅したものではありません。</p>}
-                <p>{article.audioSummary || "音声は文字起こし済みです。発言内容の要約はまだ生成されていません。"}</p>
+                <p>{deduplicateArticleSentences(article.audioSummary, 1200) || "音声は文字起こし済みです。発言内容の要約はまだ生成されていません。"}</p>
                 {article.audioTranscript && <details className="article-transcript-details">
                   <summary>音声文字起こしを表示（{(article.audioSegmentCount ?? article.audioTranscriptSegments?.length ?? 0).toLocaleString("ja-JP")}区間）</summary>
                   <pre>{article.audioTranscript}</pre>
                 </details>}
               </div>}
               {article.audioError && <div className="storage-error article-error">音声認識エラー：{article.audioError}</div>}
-              {article.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
-              {Boolean(article.highlights?.length) && <div className="article-highlights"><strong>注目ポイント</strong><ul>{article.highlights?.map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
+              {deduplicateArticleList(article.paragraphs, 5, 1000).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+              {Boolean(article.highlights?.length) && <div className="article-highlights"><strong>注目ポイント</strong><ul>{deduplicateArticleList(article.highlights ?? [], 5, 240).map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
               {article.aiError && <div className="storage-error article-error">{article.aiGenerated ? "一部情報源の解析状況：" : "AI更新エラー："}{article.aiError}</div>}
               <div className="article-stats">配信時間 {Math.floor((article.durationSeconds ?? 0) / 60).toLocaleString("ja-JP")}分 ・ コメント {article.commentCount.toLocaleString("ja-JP")}件 ・ 投稿者 {article.uniqueCommenters.toLocaleString("ja-JP")}人 ・ 視聴者数 {article.viewerCount?.toLocaleString("ja-JP") ?? "—"}人（最大 {article.peakViewerCount?.toLocaleString("ja-JP") ?? "—"}人） ・ 分析キーワード {article.keywords.join("、") || "なし"}{article.lastAiUpdateAt ? ` ・ AI更新 ${new Date(article.lastAiUpdateAt).toLocaleTimeString("ja-JP")}` : ""}</div>
               {article.sourceVideo && <div className="comment-video-actions"><button className="small-action" onClick={() => void window.kickRecorder?.openRecording(article.sourceVideo)}>元動画を開く</button><button className="small-action" onClick={() => void window.kickRecorder?.revealRecording(article.sourceVideo)}>録画の保存先</button></div>}
