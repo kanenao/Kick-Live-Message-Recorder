@@ -542,3 +542,57 @@
 .article-evidence-list time{font-variant-numeric:tabular-nums;white-space:nowrap;opacity:.75}
 .article-evidence-source{font-weight:700}
 @media(max-width:600px){.article-evidence-list li{grid-template-columns:66px minmax(0,1fr)}.article-evidence-list li>span:last-child{grid-column:1/-1}}
+
+/* Nico Live Journal-inspired storyboard: one large cover + timestamped scene filmstrip. */
+.article-broadcast-frame{position:relative}
+.article-broadcast-gallery-button{position:absolute;bottom:31px;right:9px;z-index:2;padding:6px 9px;
+ border:1px solid rgba(255,255,255,.5);border-radius:6px;background:rgba(10,17,27,.9);
+ color:#edfff4;font-size:10px;font-weight:700;cursor:pointer}
+.article-broadcast-gallery-button:hover,.article-broadcast-gallery-button:focus-visible{background:#26694d;outline:2px solid #69d99d}
+.storyboard-overlay{position:fixed;inset:0;z-index:1200;background:rgba(0,0,0,.83);
+ display:grid;place-items:center;padding:14px;overflow:auto}
+.storyboard-dialog{width:min(1120px,100%);max-height:min(90vh,950px);min-width:0;overflow:hidden;
+ display:flex;flex-direction:column;border:1px solid #39443f;border-radius:13px;
+ background:#11171b;box-shadow:0 20px 70px rgba(0,0,0,.7);color:#f1f6f4}
+.storyboard-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+ padding:17px 19px 14px;border-bottom:1px solid #293731}
+.storyboard-header>div{min-width:0}.storyboard-header h3{margin:3px 0 5px;font-size:17px;color:#f0f6f1;
+ white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.5}
+.storyboard-header small{display:block;color:#8da59c;font-size:11px;line-height:1.6}
+.storyboard-kicker{font-weight:800;color:#80dfad;font-size:10px;letter-spacing:.12em}
+.storyboard-header>button{flex:0 0 auto;white-space:nowrap}
+.storyboard-layout{display:grid;grid-template-columns:minmax(250px,39%) minmax(0,1fr);
+ gap:14px;padding:15px 18px 18px;min-height:0;overflow:auto}
+.storyboard-featured{position:relative;min-width:0;align-self:start}
+.storyboard-featured>img{display:block;width:100%;aspect-ratio:16/9;object-fit:contain;
+ background:#050909;border-radius:8px;border:1px solid #2e3835}
+.storyboard-featured-time{position:absolute;top:10px;right:10px;padding:5px 9px;
+ border-radius:5px;background:rgba(0,0,0,.82);color:#fff;font:800 13px/1.2 monospace}
+.storyboard-meta{display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap;margin:10px 0;
+ color:#a1bdad;font-size:11px}
+.storyboard-meta strong{color:#c3f2d3}.storyboard-actions{display:flex;gap:8px;flex-wrap:wrap}
+.storyboard-note{display:block;margin-top:10px;color:#92a49c;line-height:1.6;font-size:10px}
+.storyboard-gallery{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;
+ min-width:0;align-content:start;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.storyboard-tile{min-width:0;display:flex;flex-direction:column;gap:4px;border:2px solid transparent;
+ padding:2px;border-radius:6px;background:transparent;color:#a8bbb1;cursor:pointer}
+.storyboard-tile img{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;background:#090e12;border-radius:3px}
+.storyboard-tile time{font:10px/1.2 monospace;text-align:center;color:inherit}
+.storyboard-tile:hover,.storyboard-tile:focus-visible{border-color:#66a88b;outline:none}
+.storyboard-tile.is-selected{border-color:#6ce4a4;color:#e5ffee;background:rgba(104,227,165,.12)}
+.storyboard-status{margin:18px;padding:22px;border:1px solid #2c4039;border-radius:8px;
+ color:#a5ccbb;font-size:12px;text-align:center}
+.storyboard-error{color:#ffc0bc;border-color:#8b3e45}
+@media(max-width:920px){
+ .storyboard-layout{grid-template-columns:1fr}
+ .storyboard-featured{width:min(100%,530px);margin:auto}
+ .storyboard-gallery{grid-template-columns:repeat(4,minmax(0,1fr));max-height:42vh}
+}
+@media(max-width:540px){
+ .storyboard-overlay{padding:6px}
+ .storyboard-header{padding:12px;gap:7px}
+ .storyboard-header h3{font-size:13px}
+ .storyboard-layout{padding:10px;gap:10px}
+ .storyboard-gallery{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+ .storyboard-tile time{font-size:9px}
+}
