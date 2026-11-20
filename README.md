@@ -2,26 +2,50 @@
 
 Kick配信の映像・音声・コメントを録画・保存するWindowsデスクトップアプリです。24時間の配信監視、コメント付き動画の生成、映像・音声・コメントを組み合わせたAI配信記事に対応しています。
 
-> **最新公開版：0.7.0-alpha.80（α版）**  
-> **次期α版：0.7.1-alpha.81（コメント付き動画の実映像リアルタイムプレビュー開発中）**  
+> **最新公開版：0.7.1-alpha.81（α版）**  
+> **次期α版：0.7.2-alpha.82（録画ライブラリの配信者別フォルダー保存・旧ファイル互換を開発中）**  
 > 現在の開発・テスト対象はα版です。過去に公開したβ版は履歴として保持し、製品版は未完成のため公開・自動更新していません。
 
 ## バージョン・ダウンロード
 
 | 区分 | バージョン | 状態 |
 |---|---|---|
-| 最新公開α版 | `0.7.0-alpha.80` | GitHub ReleasesのPre-release |
+| 最新公開α版 | `0.7.1-alpha.81` | GitHub ReleasesのPre-release |
 | 旧β版（履歴） | `0.1.0-beta.50` | 公開済み・保持 |
-| 次期α版 | `0.7.1-alpha.81` | Nico風の動画＋コメント同時再生プレビュー（未公開・テスト中） |
+| 次期α版 | `0.7.2-alpha.82` | 配信者別の動画フォルダー保存と旧録画の読み込み（未公開・テスト中） |
 
-- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.7.0-alpha.80)
-- [次期α版の開発ブランチ](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/release/v0.7.1-alpha.81)
+- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.7.1-alpha.81)
+- [次期α版の開発ブランチ](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/release/v0.7.2-alpha.82)
 - [バージョン更新履歴（CHANGELOG）](CHANGELOG.md)
 - [α版・製品版の運用方針](docs/RELEASE_CHANNELS.md)
 
 α版の録画継続機能は開発中のため、実際の長時間LIVE配信での検証は引き続き必要です。
 
-## 0.7.1-alpha.81 コメント付き動画の実映像リアルタイムプレビュー（開発中）
+## 0.7.2-alpha.82 録画ライブラリの配信者別フォルダー化（開発中）
+
+**今後新しく録画するLIVE・過去配信は、自動的に配信者IDごとへ保存します。** 同じ配信者が表示名を変えても、フォルダーを別人として分断しないようKickのチャンネルID（slug）を使用します。
+
+```text
+Kick Live Message Recorder/
+├── Recordings/
+│   ├── daibututv2/    ← LIVE・過去配信の録画動画
+│   └── otherchannel/
+├── Chat/
+│   ├── daibututv2/    ← コメントJSONL（従来どおり）
+│   └── otherchannel/
+├── CommentVideos/
+│   ├── daibututv2/    ← コメント付き生成動画・ASS字幕
+│   └── otherchannel/
+├── RecordingMetadata/ ← LIVE録画時刻の対応情報
+└── RecordingSessions/ ← 番組ごとの録画記録
+```
+
+- 録画ライブラリは**新しい配信者別フォルダーと、以前の直下保存・旧CommentVideos保存の両方**を表示し、配信者別にまとめます。
+- 配信者カードには保存先の場所と「保存先を開く」ボタンを追加。クリックするとその配信者の動画／コメントの保存先をエクスプローラーで開きます。
+- **過去の録画・ASS・コメント・AI記事を自動移動・改名・削除しません。** AI記事の元動画パスが変わってリンク切れになるのを防ぐためです。
+- フォルダー名の入力検証、リンク型フォルダーの拒否、旧録画互換、安全な削除の回帰テストを追加します。
+
+## 0.7.1-alpha.81 コメント付き動画の実映像リアルタイムプレビュー（公開済み）
 
 - [Nico Live Message Recorder](https://github.com/kanenao/-Nico-Live-Message-Recorder)の「動画再生＋Canvas重ね描き」を実コードで参照し、Kick版にも実際の録画動画とコメントを同時に確認できるプレビューを追加。
 - 元動画（録画ライブラリ内）とコメントJSONLを選んだあと、プレビュー用のファイル選択で**同じ動画ファイル**を選ぶと、動画を再生・一時停止・シークしながらコメントの表示を確認できます。安全なローカルFile URLを使用します（保存先を勝手に開く仕組みではありません）。
