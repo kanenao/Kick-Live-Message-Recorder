@@ -1,5 +1,18 @@
 import { lstatSync, mkdirSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { parseBroadcastFileStem } from "./recording-filenames";
+
+/** Resolve a stable channel slug from either new or legacy recording names. */
+export function recordingChannelFromFileName(fileName: string): string | null {
+  if (typeof fileName !== "string" || fileName.length > 260 || /[\\/]/.test(fileName)) return null;
+  const modern = parseBroadcastFileStem(fileName);
+  if (modern) return modern.slug;
+  const base = fileName.replace(/\.[^.]+$/, "");
+  const normal = base.match(/^([a-zA-Z0-9_-]{1,40})(?:_VOD)?_\d{8}_\d{6}(?:_retry\d+)?(?:_comments(?:_\d+)?)?$/i);
+  const batch = base.match(/^([a-zA-Z0-9_-]{1,40})_VOD_[a-f0-9-]{20,40}_.+$/i);
+  const fallback = !/_\d{8}(?:_|$)/.test(base) ? base.match(/^([a-zA-Z0-9_-]{1,40})$/) : null;
+  return (normal?.[1] ?? batch?.[1] ?? fallback?.[1])?.toLowerCase() ?? null;
+}
 
 export const RECORDINGS_FOLDER = "Recordings";
 export const COMPOSED_FOLDER = "CommentVideos";
