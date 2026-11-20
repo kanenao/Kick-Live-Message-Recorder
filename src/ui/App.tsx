@@ -215,7 +215,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.6.1-alpha.79";
+const APP_VERSION = "0.7.0-alpha.80";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -243,6 +243,16 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.7.0-alpha.80",
+    title: "録画ライブラリ・AI新聞：時刻別の動画サムネイルギャラリー",
+    changes: [
+      "録画サムネイルから大きな代表画像と時刻付き場面一覧を表示",
+      "配信AI新聞からも元動画の同じ場面プレビューを開けるように改善",
+      "長時間配信の開始・中盤・終盤から最大30場面を安全に抽出",
+      "FFmpeg画像をキャッシュし、元動画・既存記事・コメントを変更しない"
+    ]
+  },
   {
     version: "0.6.1-alpha.79",
     title: "配信AI新聞の映像要約・場面一覧・本文の繰り返し表示を修正",
