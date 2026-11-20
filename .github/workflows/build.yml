@@ -70,6 +70,8 @@ jobs:
         run: node --experimental-strip-types scripts/test-article-timeline.mjs
       - name: AI記事応答形式テスト
         run: node --experimental-strip-types scripts/test-ai-response.mjs
+      - name: AI新聞の文章・映像要約・場面一覧の重複防止テスト
+        run: node --experimental-strip-types scripts/test-article-text-dedupe.mjs
       - name: 配信AI新聞の時刻別根拠・長時間抽出テスト
         run: node --experimental-strip-types scripts/test-article-evidence.mjs
       - name: 配信AI新聞の長時間VOD音声サンプリングテスト
