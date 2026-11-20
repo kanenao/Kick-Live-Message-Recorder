@@ -2910,6 +2910,7 @@ export default function App() {
                             {group.displayName}
                           </button>
                           <small>@{group.slug}</small>
+                          <small title="新規保存は配信者別フォルダー。以前の場所にある録画も引き続き表示します。">動画：Recordings/{group.slug} ・ コメント：Chat/{group.slug}</small>
                           <small>配信 {group.sessions.length}件 ・ 録画動画 {group.videos.length}件 ・ コメントログ {group.logs.length}件{group.latestAt ? " ・ 最終保存 " + new Date(group.latestAt).toLocaleString("ja-JP") : ""}</small>
                         </div>
                         <div className="recording-channel-actions">
@@ -2918,6 +2919,13 @@ export default function App() {
                           </button>
                           <button className="small-action" onClick={() => void toggleLibraryComments(group.slug)} disabled={group.logs.length === 0 || isLoadingLibraryComments}>
                             {libraryCommentsChannel === group.slug ? "コメントを閉じる" : "コメントを見る"}
+                          </button>
+                          <button className="small-action" onClick={() => {
+                            const path = group.videos[0]?.path ?? group.logs[0]?.path;
+                            if (path) void revealRecordingFile(path);
+                          }} disabled={!group.videos.length && !group.logs.length}
+                            title="エクスプローラーでこの配信者の動画またはコメントの保存先を開く">
+                            保存先を開く
                           </button>
                         </div>
                       </div>
