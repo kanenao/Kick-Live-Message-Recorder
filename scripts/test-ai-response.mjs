@@ -125,12 +125,18 @@ assert.equal(plainArticle.headline, "配信の振り返り");
 assert.equal(plainArticle.paragraphs.length, 2);
 assert.ok(plainArticle.summary.includes("冒頭"));
 
-// Long unformatted prose is split into paragraphs instead of being silently cut at 1,000 chars.
+// A model repeating the same sentence many times must not be treated as 140 distinct facts.
 const longPlainArticle = parseAiArticleResponse({
   response: "長文の段落です。" .repeat(140)
 }, "元配信タイトル");
-assert.ok(longPlainArticle.paragraphs.length > 1);
-assert.ok(longPlainArticle.paragraphs.join("").length > 1000);
+assert.equal(longPlainArticle.paragraphs.length, 1);
+assert.equal(longPlainArticle.paragraphs[0], "長文の段落です。");
+// Genuine different content still survives, even if an unformatted response is long.
+const genuinelyLong = Array.from({ length: 140 }, (_, i) =>
+  `配信の話題${i}について別の具体的な場面を詳しく紹介します。`).join("");
+const longUniqueArticle = parseAiArticleResponse({ response: genuinelyLong }, "元配信タイトル");
+assert.ok(longUniqueArticle.paragraphs.length > 1);
+assert.ok(longUniqueArticle.paragraphs.join("").length > 1000);
 
 // Fenced JSON may include a short preamble or reasoning text.
 const fence = String.fromCharCode(96).repeat(3);
