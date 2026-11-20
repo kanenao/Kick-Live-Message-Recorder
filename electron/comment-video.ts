@@ -502,7 +502,9 @@ export async function previewCommentVideo(
   }
 
   previewCandidates.sort((a, b) => a.seconds - b.seconds);
-  const sampleSize = Math.min(24, previewCandidates.length);
+  // The live video preview needs comments distributed across the WHOLE VOD,
+  // not just the former 24 static demonstration samples.
+  const sampleSize = Math.min(1200, previewCandidates.length);
   const comments = Array.from({ length: sampleSize }, (_, index) => {
     const sourceIndex = sampleSize <= 1
       ? 0
