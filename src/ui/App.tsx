@@ -215,7 +215,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.6.0-alpha.78";
+const APP_VERSION = "0.6.1-alpha.79";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -243,6 +243,16 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.6.1-alpha.79",
+    title: "配信AI新聞の映像要約・場面一覧・本文の繰り返し表示を修正",
+    changes: [
+      "同じ映画説明を複数回並べるAI記事の重複表示を改善",
+      "映像要約と場面一覧の重複を除き、異なる場面・時刻は残す",
+      "過去に保存した記事も元データを変更せず表示時に重複を抑制",
+      "文章の重複を再現する自動回帰テストを追加"
+    ]
+  },
   {
     version: "0.6.0-alpha.78",
     title: "配信AI新聞：映像・音声・コメントの時刻別根拠を表示",
