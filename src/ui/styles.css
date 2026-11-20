@@ -596,3 +596,23 @@
  .storyboard-gallery{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
  .storyboard-tile time{font-size:9px}
 }
+
+/* Nico版に合わせた実動画＋Canvasコメントのリアルタイムプレビュー */
+.comment-video-live-panel{margin:18px 0;padding:15px;border:1px solid #315a48;border-radius:10px;background:linear-gradient(155deg,#141f1b,#111820)}
+.comment-video-live-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px}
+.comment-video-live-heading>div{display:flex;flex-direction:column;gap:5px;min-width:0}
+.comment-video-live-heading strong{font-size:13px;color:#d2f8e0}
+.comment-video-live-heading small{font-size:10px;line-height:1.6;color:#9cb4a6}
+.comment-video-live-heading>span{font-size:10px;color:#79d5a3;white-space:nowrap}
+.comment-video-live-file-row{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px}
+.comment-video-live-file-row label{display:flex;align-items:center;flex-wrap:wrap;gap:9px;font-size:11px;color:#bbddcc}
+.comment-video-live-file-row input{max-width:min(100%,420px);color:#c9d5e2;font-size:11px}
+.comment-video-live-file-row input::file-selector-button{margin-right:10px;border:1px solid #32654e;border-radius:6px;padding:7px 10px;color:#e7ffec;background:#1b4734;cursor:pointer}
+.comment-video-live-file-row small{color:#8ca5a1;font-size:10px;overflow-wrap:anywhere}
+.comment-video-live-stage{position:relative;width:100%;max-height:520px;min-height:150px;overflow:hidden;display:grid;place-items:center;border:1px solid #2c3d38;border-radius:8px;background:#030608}
+.comment-video-live-stage video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block;background:#030608}
+.comment-video-live-stage canvas{position:absolute;inset:0;display:block;width:100%;height:100%;pointer-events:none}
+.comment-video-live-empty{padding:25px;color:#9cb2ac;line-height:1.7;font-size:11px;text-align:center}
+.comment-video-live-error{margin:8px 0 10px;padding:9px 11px;border:1px solid #a45057;background:#3f1d23;border-radius:6px;color:#ffe3df;font-size:11px}
+.comment-video-live-note{display:block;margin-top:9px;font-size:10px;line-height:1.7;color:#9cb5a5}
+@media(max-width:700px){.comment-video-live-heading{flex-direction:column}.comment-video-live-panel{padding:11px}.comment-video-live-file-row input{max-width:100%}.comment-video-live-stage{min-height:130px}}
