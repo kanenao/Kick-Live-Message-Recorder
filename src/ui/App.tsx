@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getRecordingChannelSlug } from "../shared/recording-library";
 import { getAvailableArticleChannels, selectAssociatedArticleLogs } from "../shared/article-sources";
 import { computeNicoAssProfile } from "../../electron/nico-ass-auto";
+import { CommentVideoLivePreview } from "./CommentVideoLivePreview";
 import { parseReleaseNotes, splitReleaseNoteInline } from "../shared/release-notes";
 import { formatArticleEvidenceTime, type ArticleEvidenceEvent } from "../../electron/article-evidence";
 import { deduplicateArticleSentences, deduplicateArticleList } from "../../electron/article-text-dedupe";
@@ -1719,7 +1720,8 @@ export default function App() {
       videoPath: selectedCommentVideoPath,
       chatPaths: selectedCommentLogPaths,
       delaySeconds: commentVideoDelay,
-      removeEmotes: settings.removeEmotesFromAss
+      removeEmotes: settings.removeEmotesFromAss,
+      position: commentVideoPosition
     }).then(result => {
       if (!active) return;
       setCommentVideoPreviewResult(result);
@@ -1731,7 +1733,7 @@ export default function App() {
       if (active) setCommentVideoPreviewLoading(false);
     });
     return () => { active = false; };
-  }, [tab, isDesktop, selectedCommentVideoPath, selectedCommentLogPaths, commentVideoDelay, libraryRefreshKey, settings.outputDirectory, settings.removeEmotesFromAss]);
+  }, [tab, isDesktop, selectedCommentVideoPath, selectedCommentLogPaths, commentVideoDelay, commentVideoPosition, libraryRefreshKey, settings.outputDirectory, settings.removeEmotesFromAss]);
 
   useEffect(() => {
     if (!selectedCommentVideoPath && recordingFiles.length > 0) setSelectedCommentVideoPath(recordingFiles[0].path);
@@ -3092,6 +3094,22 @@ export default function App() {
               <label className="comment-video-checkbox"><input type="checkbox" checked={commentVideoShowUsername} onChange={event => setCommentVideoShowUsername(event.target.checked)} disabled={commentVideoBusy} /><span>コメントに投稿者名も表示する</span></label>
               <label className="comment-video-checkbox"><input type="checkbox" checked={settings.removeEmotesFromAss} onChange={event => setSettings(previous => ({ ...previous, removeEmotesFromAss: event.target.checked }))} disabled={commentVideoBusy} /><span>ASS出力時にemoteを削除する（emoteだけのコメントは出力しない）</span></label>
             </div>
+            <CommentVideoLivePreview selectedVideoPath={selectedCommentVideoPath}
+              previewResult={commentVideoPreviewResult}
+              settings={{
+                fontFamily: commentVideoFontFamily === "ms-pgothic" ? '"ＭＳ Ｐゴシック"' :
+                  commentVideoFontFamily === "yu-gothic" ? '"游ゴシック"' :
+                  commentVideoFontFamily === "arial" ? "Arial" : '"メイリオ"',
+                fontSize: commentVideoFontSize,
+                durationSeconds: commentVideoDuration,
+                speedPercent: commentVideoSpeed,
+                rowLimit: commentVideoRows,
+                collisionGap: commentVideoGap,
+                opacity: commentVideoOpacity,
+                position: commentVideoPosition,
+                autoFlow: settings.assAutoFlow,
+                showUsername: commentVideoShowUsername
+              }} />
             <div
               className="comment-video-preview"
               key={[
@@ -3134,7 +3152,7 @@ export default function App() {
               </div>
               <div className="comment-video-preview-screen" aria-label="設定をリアルタイム反映するコメント表示プレビュー">
                 {(commentVideoPreviewResult?.comments.length
-                  ? commentVideoPreviewResult.comments.map((comment, index) => {
+                  ? commentVideoPreviewResult.comments.slice(0, 24).map((comment, index) => {
                       const fontSize = Math.max(16, Math.min(80, commentVideoFontSize));
                       const lineHeight = Math.max(fontSize + 12, fontSize * 1.55);
                       const visibleRows = Math.max(1, Math.floor((1080 - 26 - fontSize) / lineHeight) + 1);
@@ -3222,7 +3240,7 @@ export default function App() {
                   >{commentVideoPreviewResult?.comments.length ? item.text : commentVideoShowUsername ? "@viewer : " + item.text : item.text}</span>;
                 })}
               </div>
-              <small>ニコ生風の白文字・黒フチを再現します。自動ONでは文字幅・投稿密度から移動時間を簡易プレビューに反映します。実際の行・入場時刻はASS生成時に衝突を避けて計算します。</small>
+              <small>こちらは従来の簡易アニメーション見本です。上の「リアルタイムプレビュー」では実動画を再生し、動画の時刻にコメントを重ねて確認できます。</small>
             </div>
             {commentVideoEvent && <div className={commentVideoEvent.status === "error" ? "comment-video-status error" : "comment-video-status"} role="status">
               <div className="comment-video-status-line"><strong>{commentVideoEvent.message}</strong>{commentVideoBusy && <span>{Math.round(commentVideoEvent.percent)}%</span>}</div>
