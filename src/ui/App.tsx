@@ -3117,7 +3117,7 @@ export default function App() {
                 commentVideoSpeed, commentVideoRows, commentVideoGap, commentVideoOpacity,
                 commentVideoShowUsername, commentVideoDelay, commentVideoPosition, settings.removeEmotesFromAss, settings.assAutoFlow, selectedCommentVideoPath,
                 selectedCommentLogPaths.join(","),
-                commentVideoPreviewResult?.comments.map(comment => comment.content + comment.color).join("|")
+                commentVideoPreviewResult?.comments.slice(0, 24).map(comment => comment.content + comment.color).join("|")
               ].join(":")}
             >
               <div className="comment-video-preview-heading">
