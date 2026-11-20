@@ -1,3 +1,5 @@
+import { deduplicateArticleList, deduplicateArticleSentences } from "./article-text-dedupe";
+
 type UnknownRecord = Record<string, unknown>;
 export type AiArticleAnalysis = {
  headline: string; summary: string; paragraphs: string[]; highlights: string[];
@@ -201,7 +203,7 @@ function paragraphList(value: unknown): string[] {
 function plainTextArticle(raw: string, fallback: string): AiArticleAnalysis {
  const cleaned = raw.replace(/^\s*(?:記事本文|本文|記事|article)\s*[:：]\s*/i, "").trim();
  const title = cleaned.match(/^(?:見出し|タイトル|headline)\s*[:：]\s*(.+)$/im);
- const paragraphs = splitBody(cleaned.replace(/^(?:見出し|タイトル|headline)\s*[:：].+\r?\n?/im, ""));
+ const paragraphs = deduplicateArticleList(splitBody(cleaned.replace(/^(?:見出し|タイトル|headline)\s*[:：].+\r?\n?/im, "")), 5, 1000);
  if (!paragraphs.length) throw new Error("AI応答に記事本文として利用できる文章がありません。");
  return {
   headline: title?.[1]?.trim().slice(0, 160) || fallback || "配信AI新聞",
@@ -229,12 +231,14 @@ export function parseAiArticleResponse(payload: UnknownRecord, fallbackHeadline 
  const headline = firstString(article, ["headline", "title", "heading", "見出し"], 160) || safeString(fallbackHeadline, 160) || "配信AI新聞";
  if (!paragraphs.length && summary) paragraphs = [summary];
  if (!paragraphs.length) throw new Error("AI応答は受信しましたが、headline／summary／paragraphs／bodyのいずれにも記事本文がありません。モデルの出力内容を確認してください。");
+ const cleanParagraphs = deduplicateArticleList(paragraphs, 5, 1000);
+ const videoSummary = deduplicateArticleSentences(firstString(article, ["videoSummary", "visualSummary"], 1000), 1000);
+ const videoScenes = deduplicateArticleList(stringList(article.videoScenes ?? article.scenes, 8, 300), 8, 300, videoSummary);
  return {
-  headline, summary: summary || paragraphs[0].slice(0, 500), paragraphs,
-  highlights: stringList(article.highlights ?? article.key_points, 5, 240),
+  headline, summary: deduplicateArticleSentences(summary || cleanParagraphs[0], 500), paragraphs: cleanParagraphs,
+  highlights: deduplicateArticleList(stringList(article.highlights ?? article.key_points, 5, 240), 5, 240),
   keywords: stringList(article.keywords ?? article.tags, 8, 40),
-  videoSummary: firstString(article, ["videoSummary", "visualSummary"], 1000),
-  videoScenes: stringList(article.videoScenes ?? article.scenes, 8, 300),
-  audioSummary: firstString(article, ["audioSummary", "speechSummary"], 1200)
+  videoSummary, videoScenes,
+  audioSummary: deduplicateArticleSentences(firstString(article, ["audioSummary", "speechSummary"], 1200), 1200)
  };
 }
