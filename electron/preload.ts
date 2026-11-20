@@ -298,6 +298,9 @@ const api = {
   listLibrarySessions: (): Promise<LibrarySession[]> => ipcRenderer.invoke("library:sessions"),
   listRecordings: (): Promise<RecordingFile[]> => ipcRenderer.invoke("recording:list"),
   getRecordingThumbnail: (filePath: string): Promise<string | null> => ipcRenderer.invoke("recording:thumbnail", filePath),
+  getRecordingStoryboard: (filePath: string): Promise<{
+    durationSeconds: number; frames: Array<{ timeSeconds: number; imageDataUrl: string }>
+  }> => ipcRenderer.invoke("recording:storyboard", filePath),
   openKickProfile: (channelSlug: string): Promise<{ ok: true }> => ipcRenderer.invoke("kick:open-profile", channelSlug),
   deleteRecording: (filePath: string): Promise<{ ok: true; name: string }> =>
     ipcRenderer.invoke("recording:delete", filePath),
