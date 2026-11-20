@@ -2,20 +2,20 @@
 
 Kick配信の映像・音声・コメントを録画・保存するWindowsデスクトップアプリです。24時間の配信監視、コメント付き動画の生成、映像・音声・コメントを組み合わせたAI配信記事に対応しています。
 
-> **最新公開版：0.7.0-alpha.80（α版）**  
-> **最新公開版のソース：`release/v0.7.0-alpha.80`（タグ付き）**  
-> 最新α版のインストーラーは公開済みです。**mainブランチのアプリコードは旧β版の履歴的スナップショット**で、最新α版のソースはタグ `v0.7.0-alpha.80` を参照してください。製品版はまだ公開していません。
+> **最新公開版：0.7.1-alpha.81（α版）**  
+> **最新公開版のソース：`release/v0.7.1-alpha.81`（タグ付き）**  
+> 最新α版のインストーラーは公開済みです。**mainブランチのアプリコードは旧β版の履歴的スナップショット**で、最新α版のソースはタグ `v0.7.1-alpha.81` を参照してください。製品版はまだ公開していません。
 
 ## バージョン・ダウンロード
 
 | 区分 | バージョン | 状態 |
 |---|---|---|
-| 最新公開α版 | `0.7.0-alpha.80` | GitHub ReleasesのPre-release・Windowsインストーラー公開済み |
+| 最新公開α版 | `0.7.1-alpha.81` | GitHub ReleasesのPre-release・Windowsインストーラー公開済み |
 | 旧β版（履歴） | `0.1.0-beta.50` | 公開済み・保持 |
-| 最新ソース | `v0.7.0-alpha.80` | α版の公開タグ（mainとは別ライン） |
+| 最新ソース | `v0.7.1-alpha.81` | α版の公開タグ（mainとは別ライン） |
 
-- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.7.0-alpha.80)
-- [公開α版のソースコード](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/v0.7.0-alpha.80)
+- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.7.1-alpha.81)
+- [公開α版のソースコード](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/v0.7.1-alpha.81)
 - [バージョン更新履歴（CHANGELOG）](CHANGELOG.md)
 - [α版・製品版の運用方針](docs/RELEASE_CHANNELS.md)
 
@@ -30,6 +30,14 @@ Kick配信の映像・音声・コメントを録画・保存するWindowsデス
 - [公開済み `0.6.0-alpha.78` の開発履歴（PR #16）](https://github.com/kanenao/Kick-Live-Message-Recorder/pull/16)では、コメント保存先のエラーがWebSocket受信処理を止める問題と、巨大JSONL全文読込による過剰なメモリ使用を修正しました。巨大ログ・破損行・ディスクへの書込失敗を回帰テストで再現しています。
 - これらの修正を含むα版をGitHub Releasesで公開しました。次の開発版では引き続き不具合検出とα版リリースを継続します。
 
+
+## 0.7.1-alpha.81（公開済みα版）のNico風リアルタイムプレビュー
+
+- [Nico Live Message Recorder](https://github.com/kanenao/-Nico-Live-Message-Recorder)の動画再生とCanvasのコメント重ね描きを参考に「コメント付き動画を生成」へ**実映像リアルタイムプレビュー**を追加。
+- まず「元動画」とコメントファイルを選択し、プレビュー欄から**同じ元動画ファイルを再度指定**してください。動画を再生すると、その時刻のコメントが上に重なって流れます。シーク・一時停止に同期します。
+- フォント・文字サイズ・速度・固定位置・行数・重なり間隔・透明度・投稿者名を変更するとプレビューにも反映。コメントの実ログは従来の最大24件から最大1200件の抜粋を表示可能にしました。
+- 簡易アニメーション見本は残し、元動画・JSONL・AI記事・ASSはプレビュー操作で変更しません。ブラウザー内で再生できない形式では従来の見本プレビューを使用できます。
+- 自動回帰テストと型チェック、Electronビルド、Windowsインストーラー、自動更新マニフェストを検証してGitHub Releasesへ公開しました。Windows実機での再生・長時間配信は追加確認が必要です。
 
 ## 0.7.0-alpha.80（公開済みα版）の動画場面ギャラリー
 
