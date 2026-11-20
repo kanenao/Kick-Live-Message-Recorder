@@ -216,7 +216,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.7.0-alpha.80";
+const APP_VERSION = "0.7.1-alpha.81";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -244,6 +244,16 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.7.1-alpha.81",
+    title: "ニコ生風・コメント付き動画の実映像リアルタイムプレビュー",
+    changes: [
+      "元動画を再生しながらCanvasでコメントを時刻同期して重ねるプレビューを追加",
+      "停止・シーク・フォント・文字サイズ・速度・透明度・行数・位置の変更をすぐ反映",
+      "コメントログの確認用サンプルを全時間帯で最大1200件に拡張し、従来の見本も維持",
+      "動画・元コメントを変更せず、動画ファイルのプレビュー用URLを適切に解放"
+    ]
+  },
   {
     version: "0.7.0-alpha.80",
     title: "録画ライブラリ・AI新聞：時刻別の動画サムネイルギャラリー",
