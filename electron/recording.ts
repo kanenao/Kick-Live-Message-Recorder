@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve, sep } from "node:path";
 import { broadcastFileStem } from "./recording-filenames";
+import { recordingChannelFolder, recordingLibraryDirectories, isRecordingLibraryFileParent } from "./recording-folders";
 import { decideLiveRecordingRecovery, hasLiveRecordingStalled, LIVE_RECORDING_WATCHDOG_INTERVAL_MS, LIVE_RECORDING_FORCE_KILL_TIMEOUT_MS, type LiveProbeResult } from "./recording-recovery";
 
 export type RecordingEvent = {
@@ -35,6 +36,7 @@ type ActiveRecording = {
   attemptPrefix: string;
   basePrefix: string;
   outputDirectory: string;
+  videoDirectory: string;
   stderrTail: string;
   retriesUsed: number;
   maxRetries: number;
@@ -133,10 +135,10 @@ function savedVideoFiles(session: ActiveRecording): string[] {
   try {
     const prefix = basename(session.basePrefix);
     const allowed = new Set([".mp4", ".mkv", ".ts", ".webm", ".m4v", ".mov"]);
-    return readdirSync(session.outputDirectory)
+    return readdirSync(session.videoDirectory)
       .filter(name => (name.startsWith(prefix + ".") || name.startsWith(prefix + "_retry")) &&
         allowed.has(extname(name).toLowerCase()))
-      .map(name => join(session.outputDirectory, name))
+      .map(name => join(session.videoDirectory, name))
       .filter(path => {
         try { return statSync(path).isFile() && statSync(path).size > 0; }
         catch { return false; }
@@ -179,11 +181,11 @@ function persistRecordingSession(
 function recordingBytes(session: ActiveRecording): number {
   try {
     const prefix = basename(session.basePrefix);
-    return readdirSync(session.outputDirectory)
+    return readdirSync(session.videoDirectory)
       .filter(name => name.startsWith(prefix + ".") || name.startsWith(prefix + "_retry"))
       .filter(name => !name.endsWith(".json") && !name.endsWith(".tmp"))
       .reduce((total, name) => {
-        try { return total + statSync(join(session.outputDirectory, name)).size; }
+        try { return total + statSync(join(session.videoDirectory, name)).size; }
         catch { return total; }
       }, 0);
   } catch { return 0; }
@@ -246,6 +248,7 @@ export class KickRecordingManager {
     if (!outputDirectory) throw new Error("録画の保存先が設定されていません。");
 
     mkdirSync(outputDirectory, { recursive: true });
+    const videoDirectory = recordingChannelFolder(outputDirectory, slug);
     const videoId = isVod ? sourceUrl.split("/").pop() : undefined;
     const stem = broadcastFileStem({
       slug, displayName: options.displayName ?? slug,
@@ -257,13 +260,13 @@ export class KickRecordingManager {
     let prefix = stem;
     let take = 2;
     // Never overwrite an existing broadcast when manually recording it again.
-    while (readdirSync(outputDirectory).some(name => name === prefix + ".mp4" ||
+    while (readdirSync(videoDirectory).some(name => name === prefix + ".mp4" ||
       name === prefix + ".mkv" || name === prefix + ".ts" ||
       name.startsWith(prefix + "_retry")) ||
       existsSync(join(outputDirectory, "RecordingSessions", prefix + ".json"))) {
       prefix = stem + "_take" + take++;
     }
-    const basePrefix = join(outputDirectory, prefix);
+    const basePrefix = join(videoDirectory, prefix);
     const session: ActiveRecording = {
       child: null,
       stopRequested: false,
@@ -271,6 +274,7 @@ export class KickRecordingManager {
       attemptPrefix: basePrefix,
       basePrefix,
       outputDirectory,
+      videoDirectory,
       stderrTail: "",
       retriesUsed: 0,
       maxRetries: isVod ? 0 : boundedInteger(options.retryCount, 5, 0, 10),
@@ -592,10 +596,13 @@ export function listRecordingFiles(outputDirectory: string): RecordingFile[] {
 
   const supportedExtensions = new Set([".mp4", ".mkv", ".ts", ".webm", ".m4v", ".mov"]);
   const files: RecordingFile[] = [];
-  const scanDirectories = [directory, join(directory, "CommentVideos")].filter(existsSync);
+  const scanDirectories = recordingLibraryDirectories(directory);
 
   for (const scanDirectory of scanDirectories) {
-    for (const entry of readdirSync(scanDirectory, { withFileTypes: true })) {
+    let entries;
+    try { entries = readdirSync(scanDirectory, { withFileTypes: true }); }
+    catch { continue; }
+    for (const entry of entries) {
       if (!entry.isFile()) continue;
       const fullPath = join(scanDirectory, entry.name);
       const extension = extname(entry.name).toLowerCase();
@@ -628,7 +635,7 @@ export function deleteRecordingFile(
   const target = resolve(inputPath);
   const supportedExtensions = new Set([".mp4", ".mkv", ".ts", ".webm", ".m4v", ".mov"]);
 
-  if (!isPathInsideDirectory(target, directory) || target === directory) {
+  if (!isRecordingLibraryFileParent(directory, target)) {
     throw new Error("録画ファイルの場所が不正です。");
   }
   if (!supportedExtensions.has(extname(target).toLowerCase())) {
