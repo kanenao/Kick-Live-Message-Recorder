@@ -2,20 +2,20 @@
 
 Kick配信の映像・音声・コメントを録画・保存するWindowsデスクトップアプリです。24時間の配信監視、コメント付き動画の生成、映像・音声・コメントを組み合わせたAI配信記事に対応しています。
 
-> **最新公開版：0.6.0-alpha.78（α版）**  
-> **最新公開版のソース：`release/v0.6.0-alpha.78`（タグ付き）**  
+> **最新公開版：0.6.1-alpha.79（α版）**  
+> **最新公開版のソース：`release/v0.6.1-alpha.79`（タグ付き）**  
 > 最新α版のインストーラーは公開済みです。**mainブランチのアプリコードは旧β版の履歴的スナップショット**で、最新α版のソースはタグ `v0.6.0-alpha.78` を参照してください。製品版はまだ公開していません。
 
 ## バージョン・ダウンロード
 
 | 区分 | バージョン | 状態 |
 |---|---|---|
-| 最新公開α版 | `0.6.0-alpha.78` | GitHub ReleasesのPre-release・Windowsインストーラー公開済み |
+| 最新公開α版 | `0.6.1-alpha.79` | GitHub ReleasesのPre-release・Windowsインストーラー公開済み |
 | 旧β版（履歴） | `0.1.0-beta.50` | 公開済み・保持 |
-| 最新ソース | `v0.6.0-alpha.78` | α版の公開タグ（mainとは別ライン） |
+| 最新ソース | `v0.6.1-alpha.79` | α版の公開タグ（mainとは別ライン） |
 
-- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.6.0-alpha.78)
-- [公開α版のソースコード](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/v0.6.0-alpha.78)
+- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.6.1-alpha.79)
+- [公開α版のソースコード](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/v0.6.1-alpha.79)
 - [バージョン更新履歴（CHANGELOG）](CHANGELOG.md)
 - [α版・製品版の運用方針](docs/RELEASE_CHANNELS.md)
 
@@ -30,6 +30,13 @@ Kick配信の映像・音声・コメントを録画・保存するWindowsデス
 - [公開済み `0.6.0-alpha.78` の開発履歴（PR #16）](https://github.com/kanenao/Kick-Live-Message-Recorder/pull/16)では、コメント保存先のエラーがWebSocket受信処理を止める問題と、巨大JSONL全文読込による過剰なメモリ使用を修正しました。巨大ログ・破損行・ディスクへの書込失敗を回帰テストで再現しています。
 - これらの修正を含むα版をGitHub Releasesで公開しました。次の開発版では引き続き不具合検出とα版リリースを継続します。
 
+
+## 0.6.1-alpha.79（公開済みα版）の配信AI新聞・文章重複修正
+
+- AI記事の「映像から確認した場面」に映画の説明が何度も表示される不具合を修正しました。文章中・場面一覧・要約と場面一覧の重複を抑制します。
+- 異なる場面や配信時刻は残し、すでに保存済みの記事も表示時に整理。録画・コメント・記事JSON・ASSファイルは自動変更しません。
+- 生成AIへ同じ表現の水増しを避ける指示を追加し、配信タイトルから映画の筋書きを推測しないように改善。
+- 日本語文章の重複を再現する回帰テスト、型チェック、アプリビルド、Windowsインストーラー、α版更新ファイルの検証に成功しました。
 
 ## 0.6.0-alpha.78（公開済みα版）のAI新聞・コメント安定化
 
