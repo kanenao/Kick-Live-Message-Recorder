@@ -36,8 +36,8 @@ function sameMeaningRepeated(a: string, b: string): boolean {
   if (Math.min(a.length, b.length) < 24) return false;
   // Episode numbers, viewers and timecodes often distinguish REAL events.
   // Do not confuse two time-stamped scenes merely because their wording matches.
-  const numbersA = a.match(/\\d+/g)?.join("|") ?? "";
-  const numbersB = b.match(/\\d+/g)?.join("|") ?? "";
+  const numbersA = a.match(/\d+/g)?.join("|") ?? "";
+  const numbersB = b.match(/\d+/g)?.join("|") ?? "";
   if (numbersA !== numbersB) return false;
   if ((a.includes(b) || b.includes(a)) &&
       Math.min(a.length, b.length) >= 32) return true;
