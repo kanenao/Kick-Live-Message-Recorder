@@ -12,9 +12,9 @@ const ending = "最後には、ジェイソンが四年後に復活する様子�
 const scene = repetitive + action + ending;
 const unique = "映像ではベッドの上にいる猫が画面に映っています。";
 const nearRepeat = "映画『フレディ・バザズ・フレディ』の配信に関するコメントと音声文字起こしを紹介します！";
-assert.equal(deduplicateArticleSentences(repetitive + action + repetitive + ending), scene,
+assert.equal(deduplicateArticleSentences(repetitive + action + repetitive + ending), [repetitive, action, ending].join(" "),
   "同一文章内で繰り返される長い文を除去する");
-assert.deepEqual(deduplicateArticleList([scene, scene, nearRepeat, unique]), [scene, unique],
+assert.deepEqual(deduplicateArticleList([scene, scene, nearRepeat, unique]), [[repetitive, action, ending].join(" "), unique],
   "AIが同じ映像説明を何度列挙しても1件にする");
 assert.deepEqual(deduplicateArticleList([scene, scene, unique], 8, 1000, scene), [unique],
   "映像要約に書いた文章を場面一覧で繰り返さない");
