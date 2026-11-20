@@ -32,6 +32,7 @@ import { detachCaptureIfCurrent, nextManualCaptureRetryDelayMs } from "./live-ca
 import type { VideoFrameSample } from "./video-frames";
 import { deleteRecordingFile, isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
 import { recordingVideoThumbnail } from "./recording-thumbnails";
+import { recordingVideoStoryboard } from "./recording-storyboard";
 import { kickProfileUrl } from "./kick-profile-link";
 
 // Chromiumが提供する標準メニューやコンテキストメニューも日本語で表示する。
@@ -1822,6 +1823,14 @@ function registerIpcHandlers(): void {
   ipcMain.handle("recording:thumbnail", (event, filePath: unknown) => {
     assertTrustedSender(event);
     return recordingVideoThumbnail(
+      getRecordingOutputDirectory(), app.getPath("userData"), filePath,
+      path => recordingManager.isFileActive(path) || vodDownloadManager.isFileActive(path)
+    );
+  });
+
+  ipcMain.handle("recording:storyboard", (event, filePath: unknown) => {
+    assertTrustedSender(event);
+    return recordingVideoStoryboard(
       getRecordingOutputDirectory(), app.getPath("userData"), filePath,
       path => recordingManager.isFileActive(path) || vodDownloadManager.isFileActive(path)
     );
