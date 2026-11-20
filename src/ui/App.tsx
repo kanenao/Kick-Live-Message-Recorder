@@ -925,7 +925,7 @@ function formatArticlePreviewTime(seconds: number): string {
     : String(minutes).padStart(2, "0") + ":" + String(remainingSeconds).padStart(2, "0");
 }
 
-function ArticleBroadcastFrame({ article }: { article: StreamArticle }) {
+function ArticleBroadcastFrame({ article, onOpenStoryboard }: { article: StreamArticle; onOpenStoryboard: (filePath: string, title: string) => void }) {
   const frameRef = useRef<HTMLElementTagNameMap["figure"] | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
@@ -980,6 +980,9 @@ function ArticleBroadcastFrame({ article }: { article: StreamArticle }) {
         : article.status === "live" ? "LIVEフレーム" : "代表フレーム"}</span>
     </figcaption>
     {article.status === "live" && <span className="article-broadcast-live-pill"><i /> LIVE</span>}
+    {article.sourceVideo && <button className="article-broadcast-gallery-button" type="button"
+      onClick={() => onOpenStoryboard(article.sourceVideo, article.headline)}
+      title="録画から時刻別の場面一覧を表示">場面プレビュー</button>}
   </figure>;
 }
 
@@ -998,7 +1001,7 @@ function LibraryChannelAvatar({ displayName, picture, onOpenProfile }: {
   </button>;
 }
 
-function LibraryRecordingThumbnail({ filePath, onPlay }: { filePath: string | null; onPlay: () => void }) {
+function LibraryRecordingThumbnail({ filePath, onPreview }: { filePath: string | null; onPreview: () => void }) {
   const elementRef = useRef<HTMLButtonElement>(null);
   const [visible, setVisible] = useState(false);
   const [thumbnail, setThumbnail] = useState<string | null>(null);
@@ -1036,12 +1039,97 @@ function LibraryRecordingThumbnail({ filePath, onPlay }: { filePath: string | nu
   }, [visible, filePath]);
 
   return <button ref={elementRef} type="button" className="recording-session-thumbnail"
-    onClick={onPlay} disabled={!filePath}
-    title={filePath ? "動画を再生" : "録画動画がありません"}
-    aria-label={filePath ? "動画を再生" : "録画動画なし"}>
+    onClick={onPreview} disabled={!filePath}
+    title={filePath ? "録画の時刻別場面プレビューを開く" : "録画動画がありません"}
+    aria-label={filePath ? "録画の時刻別場面プレビューを開く" : "録画動画なし"}>
     {thumbnail ? <img src={thumbnail} alt="録画動画から抽出したサムネイル" loading="lazy"
       onError={() => setThumbnail(null)} /> : <span aria-hidden="true">{filePath ? "▶" : "☷"}</span>}
   </button>;
+}
+
+function RecordingStoryboardDialog({ filePath, title, onClose }: {
+  filePath: string | null; title: string; onClose: () => void
+}) {
+  const [data, setData] = useState<{
+    durationSeconds: number; frames: Array<{ timeSeconds: number; imageDataUrl: string }>
+  } | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!filePath) return;
+    let active = true;
+    setData(null);
+    setError("");
+    setSelectedIndex(0);
+    setLoading(true);
+    closeButtonRef.current?.focus();
+    if (!window.kickRecorder?.getRecordingStoryboard) {
+      setLoading(false);
+      setError("この機能には最新のWindows版が必要です。");
+      return;
+    }
+    void window.kickRecorder.getRecordingStoryboard(filePath)
+      .then(result => { if (active) { setData(result); setLoading(false); } })
+      .catch(problem => {
+        if (active) {
+          setError(problem instanceof Error ? problem.message : String(problem));
+          setLoading(false);
+        }
+      });
+    return () => { active = false; };
+  }, [filePath]);
+
+  useEffect(() => {
+    if (!filePath) return;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [filePath, onClose]);
+
+  if (!filePath) return null;
+  const selected = data?.frames[selectedIndex] ?? data?.frames[0];
+  return <div className="storyboard-overlay" onMouseDown={event => {
+    if (event.target === event.currentTarget) onClose();
+  }}>
+    <section className="storyboard-dialog" role="dialog" aria-modal="true" aria-label="録画の時刻別場面プレビュー">
+      <header className="storyboard-header">
+        <div><span className="storyboard-kicker">録画の場面一覧</span><h3 title={title}>{title}</h3>
+          <small>元動画から抽出した静止画です。画像を選ぶと左側の代表画面が切り替わります。</small>
+        </div>
+        <button ref={closeButtonRef} type="button" className="small-action" onClick={onClose}>閉じる ✕</button>
+      </header>
+      {loading && <div className="storyboard-status" role="status">動画を確認して時刻別のサムネイルを作成しています。長い配信では少し時間がかかります…</div>}
+      {error && <div className="storyboard-status storyboard-error" role="alert">{error}</div>}
+      {data && data.frames.length > 0 && <div className="storyboard-layout">
+        <div className="storyboard-featured">
+          {selected && <><img src={selected.imageDataUrl} alt={"録画の開始から" + formatArticlePreviewTime(selected.timeSeconds) + "の場面"} />
+            <span className="storyboard-featured-time">{formatArticlePreviewTime(selected.timeSeconds)}</span></>}
+          <div className="storyboard-meta"><strong>{data.frames.length}場面を抽出</strong>
+            <span>動画の長さ {formatArticlePreviewTime(data.durationSeconds)}</span></div>
+          <div className="storyboard-actions">
+            <button type="button" className="primary-small" onClick={() => void window.kickRecorder?.openRecording(filePath)}>元動画を再生</button>
+            <button type="button" className="small-action" onClick={() => void window.kickRecorder?.revealRecording(filePath)}>保存先を開く</button>
+          </div>
+          <small className="storyboard-note">プレビューは動画の一部です。選択した時刻からの再生ではなく、元動画を既定のプレーヤーで開きます。</small>
+        </div>
+        <div className="storyboard-gallery" role="group" aria-label="時刻別の放送場面一覧">
+          {data.frames.map((frame, index) => <button type="button"
+            key={frame.timeSeconds + ":" + index}
+            className={"storyboard-tile" + (selectedIndex === index ? " is-selected" : "")}
+            aria-label={"開始から " + formatArticlePreviewTime(frame.timeSeconds) + " の場面"}
+            aria-pressed={selectedIndex === index} onClick={() => setSelectedIndex(index)}>
+            <img src={frame.imageDataUrl} loading="lazy" alt="" />
+            <time>{formatArticlePreviewTime(frame.timeSeconds)}</time>
+          </button>)}
+        </div>
+      </div>}
+    </section>
+  </div>;
 }
 
 export default function App() {
@@ -1106,6 +1194,7 @@ export default function App() {
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
   const [recordingRequests, setRecordingRequests] = useState<Record<string, boolean>>({});
   const [recordingFiles, setRecordingFiles] = useState<RecordingFile[]>([]);
+  const [storyboardTarget, setStoryboardTarget] = useState<{ path: string; title: string } | null>(null);
   const [recordingSessions, setRecordingSessions] = useState<LibrarySession[]>([]);
   const [isLoadingRecordings, setIsLoadingRecordings] = useState(false);
   const [deletingRecordingPath, setDeletingRecordingPath] = useState<string | null>(null);
@@ -2820,7 +2909,7 @@ export default function App() {
                           {group.sessions.map(session => <article className="recording-session-card" key={session.id}>
                             <div className="recording-session-head">
                               <LibraryRecordingThumbnail filePath={session.videos[0]?.path ?? null}
-                                onPlay={() => { if (session.videos[0]) void openRecordingFile(session.videos[0].path); }} />
+                                onPreview={() => { if (session.videos[0]) setStoryboardTarget({ path: session.videos[0].path, title: session.title || group.displayName }); }} />
                               <div className="recording-session-heading">
                                 <div className="recording-session-tags">
                                   <span className={session.kind === "LIVE" ? "session-kind-live" : "session-kind-vod"}>{session.kind}</span>
@@ -2860,6 +2949,7 @@ export default function App() {
                               </div>
                               <div className="recording-library-video-actions">
                                 <button className="primary-small" onClick={() => void openRecordingFile(file.path)}>再生</button>
+                                <button className="small-action" onClick={() => setStoryboardTarget({ path: file.path, title: session.title || file.name })}>場面一覧</button>
                                 <button className="small-action" onClick={() => void revealRecordingFile(file.path)}>場所</button>
                                 <button className="danger-small" onClick={() => void deleteRecordingFromLibrary(file.path, file.name)} disabled={deletingRecordingPath !== null}>
                                   {deletingRecordingPath === file.path ? "削除中..." : "削除"}
@@ -3257,7 +3347,7 @@ export default function App() {
               {dayArticles.map(article => <article className="article-card" key={article.slug + ":" + article.id}>
               <div className="article-meta"><span className="article-byline">配信者・{article.displayName}</span> ・ {new Date(article.startedAt).toLocaleString("ja-JP")} <span className={article.status === "live" ? "article-status-live" : "article-status-done"}>{article.status === "live" ? "LIVE・更新中" : article.status === "completed" ? "配信終了" : "アーカイブ"}</span>{article.aiGenerated && <span className="article-ai-label">AI記事</span>}</div>
               <div className="article-broadcast-layout">
-<ArticleBroadcastFrame article={article} />
+<ArticleBroadcastFrame article={article} onOpenStoryboard={(path, title) => setStoryboardTarget({ path, title })} />
                 <div className="article-broadcast-copy">
                   <h3>{article.headline}</h3>
                   {article.streamTitle && article.streamTitle !== article.headline && <p className="article-original-stream-title"><strong>元配信タイトル</strong> {article.streamTitle}</p>}
@@ -3297,7 +3387,7 @@ export default function App() {
               {Boolean(article.highlights?.length) && <div className="article-highlights"><strong>注目ポイント</strong><ul>{deduplicateArticleList(article.highlights ?? [], 5, 240).map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
               {article.aiError && <div className="storage-error article-error">{article.aiGenerated ? "一部情報源の解析状況：" : "AI更新エラー："}{article.aiError}</div>}
               <div className="article-stats">配信時間 {Math.floor((article.durationSeconds ?? 0) / 60).toLocaleString("ja-JP")}分 ・ コメント {article.commentCount.toLocaleString("ja-JP")}件 ・ 投稿者 {article.uniqueCommenters.toLocaleString("ja-JP")}人 ・ 視聴者数 {article.viewerCount?.toLocaleString("ja-JP") ?? "—"}人（最大 {article.peakViewerCount?.toLocaleString("ja-JP") ?? "—"}人） ・ 分析キーワード {article.keywords.join("、") || "なし"}{article.lastAiUpdateAt ? ` ・ AI更新 ${new Date(article.lastAiUpdateAt).toLocaleTimeString("ja-JP")}` : ""}</div>
-              {article.sourceVideo && <div className="comment-video-actions"><button className="small-action" onClick={() => void window.kickRecorder?.openRecording(article.sourceVideo)}>元動画を開く</button><button className="small-action" onClick={() => void window.kickRecorder?.revealRecording(article.sourceVideo)}>録画の保存先</button></div>}
+              {article.sourceVideo && <div className="comment-video-actions"><button className="small-action" onClick={() => void window.kickRecorder?.openRecording(article.sourceVideo)}>元動画を開く</button><button className="small-action" onClick={() => setStoryboardTarget({ path: article.sourceVideo, title: article.headline })}>時刻別の場面一覧</button><button className="small-action" onClick={() => void window.kickRecorder?.revealRecording(article.sourceVideo)}>録画の保存先</button></div>}
               <div className="comment-video-actions article-card-actions">
                 <button className="small-action" onClick={() => void reanalyzeStreamArticle(article)}
                   disabled={reanalyzingArticleId !== null || articleBusy}>
@@ -3539,5 +3629,7 @@ export default function App() {
 
       <footer>Kick Live Message Recorder <span>•</span> α版 {appVersion} <span>•</span> 日本語版</footer>
     </main>
+    <RecordingStoryboardDialog filePath={storyboardTarget?.path ?? null}
+      title={storyboardTarget?.title ?? ""} onClose={() => setStoryboardTarget(null)} />
   </div>;
 }
