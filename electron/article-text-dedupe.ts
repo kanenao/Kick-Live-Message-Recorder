@@ -34,9 +34,15 @@ function sameMeaningRepeated(a: string, b: string): boolean {
   // Short material can be meaningfully repeated (quotes, reactions, names).
   // Use approximate matching only for whole, substantial descriptions.
   if (Math.min(a.length, b.length) < 24) return false;
+  // Episode numbers, viewers and timecodes often distinguish REAL events.
+  // Do not confuse two time-stamped scenes merely because their wording matches.
+  const numbersA = a.match(/\\d+/g)?.join("|") ?? "";
+  const numbersB = b.match(/\\d+/g)?.join("|") ?? "";
+  if (numbersA !== numbersB) return false;
   if ((a.includes(b) || b.includes(a)) &&
       Math.min(a.length, b.length) >= 32) return true;
-  return bigramSimilarity(a, b) >= 0.87;
+  // Keep borderline look-alikes; a changed word can change the reported event.
+  return bigramSimilarity(a, b) >= 0.96;
 }
 
 function sentencePieces(text: string): string[] {
