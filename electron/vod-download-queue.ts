@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { basename, extname, join, resolve, sep } from "node:path";
 import { broadcastFileStem } from "./recording-filenames";
+import { recordingChannelFolder } from "./recording-folders";
 
 export type VodDownloadStatus = "queued" | "downloading" | "completed" | "cancelled" | "error";
 
@@ -137,15 +138,16 @@ export class KickVodDownloadManager {
       throw new Error("ダウンロード履歴が上限です。処理完了後、アプリを再起動してください。");
     }
 
-    const created = unique.map(item => {
+    const videoDirectories = unique.map(item => recordingChannelFolder(directory, item.slug));
+    const created = unique.map((item, index) => {
       const id = `vod-${Date.now()}-${++this.counter}`;
       const data: VodDownloadJob = {
         id, url: item.url, slug: item.slug, videoId: item.videoId,
         status: "queued", progress: 0, createdAt: new Date().toISOString(), message: "順番待ち"
       };
       this.jobs.set(id, {
-        data, outputDirectory: directory,
-        outputPrefix: join(directory, broadcastFileStem({
+        data, outputDirectory: videoDirectories[index],
+        outputPrefix: join(videoDirectories[index], broadcastFileStem({
           slug: item.slug, displayName: item.slug, startedAt: null, kind: "VOD", videoId: item.videoId
         })),
         child: null, stderrTail: "", stdoutBuffer: "", stopRequested: false,
