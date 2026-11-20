@@ -1,6 +1,14 @@
 # 更新履歴
 
-> mainブランチは旧開発コードを保持しています。公開済みα版のソースとリリースノートは [v0.7.0-alpha.80](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.7.0-alpha.80) を参照してください。
+> mainブランチは旧開発コードを保持しています。公開済みα版のソースとリリースノートは [v0.7.1-alpha.81](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.7.1-alpha.81) を参照してください。
+
+## 0.7.1-alpha.81（公開済みα版）
+
+- ニコ生版を参考に、コメント付き動画生成の画面で元動画を再生しながらCanvasにコメントを重ねるリアルタイムプレビューを実装。停止・シーク・再生で投稿時刻を同期。
+- フォント、文字サイズ、速度、表示位置、行数、重なり間隔、透明度、投稿者名の変更を即時反映。
+- コメントログのプレビュー候補を最大1200件へ拡張。従来のアニメーション見本は24件に制限して負荷を抑制。
+- ローカル動画File URLはプレビュー切替時に解放し、選択した録画とのファイル名の不一致を警告。元動画、JSONL、ASSを変更せず安全な表示を維持。
+- 回帰テスト・型チェック・Electronビルド・Windows x64インストーラー・alpha.yml／beta.yml／latest.yml検証に成功してGitHub Releasesへ公開。
 
 ## 0.7.0-alpha.80（公開済みα版）
 
