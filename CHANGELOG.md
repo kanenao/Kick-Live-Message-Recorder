@@ -1,6 +1,13 @@
 # 更新履歴
 
-> mainブランチは旧開発コードを保持しています。公開済みα版のソースとリリースノートは [v0.7.1-alpha.81](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.7.1-alpha.81) を参照してください。
+> mainブランチは旧開発コードを保持しています。公開済みα版のソースとリリースノートは [v0.7.2-alpha.82](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.7.2-alpha.82) を参照してください。
+
+## 0.7.2-alpha.82（公開済みα版）
+
+- LIVE録画・Kick過去配信のダウンロードを `Recordings/<チャンネルID>/`、コメント付き動画のMP4・ASSを `CommentVideos/<チャンネルID>/` に分割して保存。
+- Chatコメントログは従来の `Chat/<チャンネルID>/` に保持。録画ライブラリでは新旧の保存先を同時に検索し、配信者別に表示。
+- 配信者カードに保存先フォルダーと「保存先を開く」操作を追加。旧録画・記事・コメント・メタデータは自動で移動・削除・改名せず保護。
+- 保存先の安全性、シンボリックリンク、旧ファイル互換、録画削除保護の自動回帰テスト・型チェック・Windowsビルド・更新ファイル検証に成功してα版を公開。
 
 ## 0.7.1-alpha.81（公開済みα版）
 
