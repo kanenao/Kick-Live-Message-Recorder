@@ -216,7 +216,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.7.1-alpha.81";
+const APP_VERSION = "0.7.2-alpha.82";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -244,6 +244,16 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.7.2-alpha.82",
+    title: "録画ライブラリの配信者別フォルダー保存",
+    changes: [
+      "LIVE録画と過去配信動画を Recordings/配信者ID ごとに自動整理",
+      "コメント付き動画は CommentVideos/配信者ID へ保存。コメントJSONLは従来の Chat/配信者ID に保持",
+      "旧保存先の動画・セッション・記事も移動せず引き続き録画ライブラリで表示",
+      "配信者ごとに保存先の案内とエクスプローラーで開くボタンを追加"
+    ]
+  },
   {
     version: "0.7.1-alpha.81",
     title: "ニコ生風・コメント付き動画の実映像リアルタイムプレビュー",
