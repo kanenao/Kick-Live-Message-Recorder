@@ -56,6 +56,8 @@ jobs:
         run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-vod-ass-reexport.mjs
       - name: ニコ生風ASSの自動調整・衝突防止テスト
         run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-nico-ass-auto.mjs
+      - name: コメント付き動画のリアルタイム再生・同期プレビュー検証
+        run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-comment-video-live-preview.mjs
       - name: ASS自動調整のUI・設定連携テスト
         run: node scripts/test-nico-ass-auto-ui.mjs
       - name: 複数VODのダウンロード・経過時間・停止テスト
