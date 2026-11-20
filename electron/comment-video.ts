@@ -6,7 +6,6 @@ import {
   createReadStream,
   existsSync,
   lstatSync,
-  mkdirSync,
   mkdtempSync,
   readdirSync,
   rmSync,
@@ -25,8 +24,7 @@ import { resolveVideoTimelineAnchor, type VideoTimelineSyncSource } from "./reco
 const execFileAsync = promisify(execFile);
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mkv", ".ts", ".webm", ".m4v", ".mov"]);
 import { parseBroadcastFileStem } from "./recording-filenames";
-import { getRecordingChannelSlug } from "../src/shared/recording-library";
-import { recordingChannelFolder } from "./recording-folders";
+import { recordingChannelFolder, recordingChannelFromFileName } from "./recording-folders";
 
 const MAX_CHAT_RECORDS = 250_000;
 
@@ -187,7 +185,7 @@ function validateRegularFile(path: string, label: string): void {
 }
 
 function allocateOutputPaths(directory: string, videoPath: string): { video: string; ass: string } {
-  const slug = getRecordingChannelSlug(basename(videoPath));
+  const slug = recordingChannelFromFileName(basename(videoPath));
   if (!slug) throw new Error("動画の配信者名を特定できませんでした。録画ライブラリの動画を選択してください。");
   const outputDirectory = recordingChannelFolder(directory, slug, "composed");
   const baseName = basename(videoPath, extname(videoPath)).replace(/[<>:"\/\\|?*\x00-\x1f]/g, "_");
