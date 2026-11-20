@@ -2,20 +2,20 @@
 
 Kick配信の映像・音声・コメントを録画・保存するWindowsデスクトップアプリです。24時間の配信監視、コメント付き動画の生成、映像・音声・コメントを組み合わせたAI配信記事に対応しています。
 
-> **最新公開版：0.5.1-alpha.77（α版）**  
-> **最新公開版のソース：`release/v0.5.1-alpha.77`（タグ付き）**  
-> 最新α版のインストーラーは公開済みです。**mainブランチのアプリコードは旧β版の履歴的スナップショット**で、最新α版のソースはタグ `v0.5.1-alpha.77` を参照してください。製品版はまだ公開していません。
+> **最新公開版：0.6.0-alpha.78（α版）**  
+> **最新公開版のソース：`release/v0.6.0-alpha.78`（タグ付き）**  
+> 最新α版のインストーラーは公開済みです。**mainブランチのアプリコードは旧β版の履歴的スナップショット**で、最新α版のソースはタグ `v0.6.0-alpha.78` を参照してください。製品版はまだ公開していません。
 
 ## バージョン・ダウンロード
 
 | 区分 | バージョン | 状態 |
 |---|---|---|
-| 最新公開α版 | `0.5.1-alpha.77` | GitHub ReleasesのPre-release・Windowsインストーラー公開済み |
+| 最新公開α版 | `0.6.0-alpha.78` | GitHub ReleasesのPre-release・Windowsインストーラー公開済み |
 | 旧β版（履歴） | `0.1.0-beta.50` | 公開済み・保持 |
-| 最新ソース | `v0.5.1-alpha.77` | α版の公開タグ（mainとは別ライン） |
+| 最新ソース | `v0.6.0-alpha.78` | α版の公開タグ（mainとは別ライン） |
 
-- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.5.1-alpha.77)
-- [公開α版のソースコード](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/v0.5.1-alpha.77)
+- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.6.0-alpha.78)
+- [公開α版のソースコード](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/v0.6.0-alpha.78)
 - [バージョン更新履歴（CHANGELOG）](CHANGELOG.md)
 - [α版・製品版の運用方針](docs/RELEASE_CHANNELS.md)
 
@@ -27,8 +27,18 @@ Kick配信の映像・音声・コメントを録画・保存するWindowsデス
 
 - [日次のα版回帰テスト](.github/workflows/alpha-daily-regression.yml)を設定。**毎日03:40（日本時間）**に、GitHub Releasesの最新α版と、最新の開発α版PRを調べてテスト・型チェック・Electronビルドを実行します。
 - 自動テストで不具合を検出した場合は、GitHub Actionsに失敗履歴を残し、重複しないGitHub Issueを起票します。**不具合のない製品版と誤認しないよう、コードの自動マージ・無検証のリリース公開は行いません。**
-- [次期 `0.6.0-alpha.78` の開発PR #16](https://github.com/kanenao/Kick-Live-Message-Recorder/pull/16)では、コメント保存先のエラーがWebSocket受信処理を止める問題と、巨大JSONL全文読込による過剰なメモリ使用を修正中です。巨大ログ・破損行・ディスクへの書込失敗を回帰テストで再現しています。
-- これらの修正は**まだ次期開発版のみ**で、インストーラー配布済みの最新α版は下記 `0.5.1-alpha.77` です。
+- [公開済み `0.6.0-alpha.78` の開発履歴（PR #16）](https://github.com/kanenao/Kick-Live-Message-Recorder/pull/16)では、コメント保存先のエラーがWebSocket受信処理を止める問題と、巨大JSONL全文読込による過剰なメモリ使用を修正しました。巨大ログ・破損行・ディスクへの書込失敗を回帰テストで再現しています。
+- これらの修正を含むα版をGitHub Releasesで公開しました。次の開発版では引き続き不具合検出とα版リリースを継続します。
+
+
+## 0.6.0-alpha.78（公開済みα版）のAI新聞・コメント安定化
+
+- LIVE・VOD記事のコメント・音声・代表フレームを時刻別に一覧表示し、取得情報源とAIによる解釈を区別します。
+- 2時間を超えるアーカイブ動画の音声を全時間帯から最大48区間抜粋して認識。音声が部分解析であることを明示します。
+- 分割JSONや構造化AI出力の読み取りを改善し、内部的なreasoningを記事本文と誤認しないようにします。
+- コメントログの書き込みエラーでWebSocket受信が停止する問題を防止し、エラーと復旧を表示します。
+- 最近のコメント表示で巨大JSONL全文を読まず末尾512KiBを参照し、メモリ使用量を抑えます。
+- GitHub Actionsで回帰テスト・型チェック・Windowsインストーラー生成・更新マニフェスト検証に成功し、α版を公開しました。
 
 ## 0.5.1-alpha.77（公開済み）での配信AI新聞のOllama復旧・記事保護
 
