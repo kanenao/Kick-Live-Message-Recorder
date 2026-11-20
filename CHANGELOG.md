@@ -1,6 +1,13 @@
 # 更新履歴
 
-> mainブランチは旧開発コードを保持しています。公開済みα版のソースとリリースノートは [v0.6.0-alpha.78](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.6.0-alpha.78) を参照してください。
+> mainブランチは旧開発コードを保持しています。公開済みα版のソースとリリースノートは [v0.6.1-alpha.79](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.6.1-alpha.79) を参照してください。
+
+## 0.6.1-alpha.79（公開済みα版）
+
+- AI新聞の映像要約と場面一覧に同じ映画説明が繰り返される問題を修正。長い文章の重複・要約と場面の重複を抑制し、違う時刻や場面は残す。
+- 既存記事も画面表示時に重複を抑制し、元記事JSON・録画・コメント・ASSは変更しない。
+- ローカルOllama等へ重複水増しを避ける指示と、配信タイトルだけから映画あらすじを推測しない指示を追加。
+- 回帰テスト・TypeScript型チェック・Electronビルド・Windowsインストーラー・更新マニフェストが通過し、GitHub Releasesで配布。
 
 ## 0.6.0-alpha.78（公開済みα版）
 
