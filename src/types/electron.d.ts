@@ -293,7 +293,7 @@ declare global {
       deleteCommentLog: (filePath: string) => Promise<{ ok: true; name: string }>;
       listRecentCommentMessages: (channelSlug: string, limit?: number) => Promise<KickRecorderLibraryCommentMessage[]>;
       listCommentFileMessages: (channelSlug: string, fileName: string, limit?: number) => Promise<KickRecorderLibraryCommentMessage[]>;
-      previewCommentVideo: (input: { videoPath: string; chatPaths: string[]; delaySeconds?: number; removeEmotes?: boolean }) => Promise<KickRecorderCommentVideoPreview>;
+      previewCommentVideo: (input: { videoPath: string; chatPaths: string[]; delaySeconds?: number; removeEmotes?: boolean; position?: "scroll" | "top" | "bottom" | "command" }) => Promise<KickRecorderCommentVideoPreview>;
       startCommentVideo: (options: { videoPath: string; chatPath?: string; chatPaths?: string[]; delaySeconds?: number; fontFamily?: "ms-pgothic" | "meiryo" | "yu-gothic" | "arial"; fontSize?: number; displaySeconds?: number; speedPercent?: number; rowLimit?: number; collisionGap?: number; opacity?: number; quality?: "high" | "standard" | "compact"; position?: "scroll" | "top" | "bottom" | "command"; showUsername?: boolean; removeEmotes?: boolean; autoFlow?: boolean }) => Promise<{ ok: true; outputPath: string }>;
       stopCommentVideo: () => Promise<{ ok: true }>;
       onCommentVideoStatus: (callback: (event: KickRecorderCommentVideoEvent) => void) => () => void;
