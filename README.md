@@ -2,20 +2,20 @@
 
 Kick配信の映像・音声・コメントを録画・保存するWindowsデスクトップアプリです。24時間の配信監視、コメント付き動画の生成、映像・音声・コメントを組み合わせたAI配信記事に対応しています。
 
-> **最新公開版：0.6.1-alpha.79（α版）**  
-> **最新公開版のソース：`release/v0.6.1-alpha.79`（タグ付き）**  
-> 最新α版のインストーラーは公開済みです。**mainブランチのアプリコードは旧β版の履歴的スナップショット**で、最新α版のソースはタグ `v0.6.1-alpha.79` を参照してください。製品版はまだ公開していません。
+> **最新公開版：0.7.0-alpha.80（α版）**  
+> **最新公開版のソース：`release/v0.7.0-alpha.80`（タグ付き）**  
+> 最新α版のインストーラーは公開済みです。**mainブランチのアプリコードは旧β版の履歴的スナップショット**で、最新α版のソースはタグ `v0.7.0-alpha.80` を参照してください。製品版はまだ公開していません。
 
 ## バージョン・ダウンロード
 
 | 区分 | バージョン | 状態 |
 |---|---|---|
-| 最新公開α版 | `0.6.1-alpha.79` | GitHub ReleasesのPre-release・Windowsインストーラー公開済み |
+| 最新公開α版 | `0.7.0-alpha.80` | GitHub ReleasesのPre-release・Windowsインストーラー公開済み |
 | 旧β版（履歴） | `0.1.0-beta.50` | 公開済み・保持 |
-| 最新ソース | `v0.6.1-alpha.79` | α版の公開タグ（mainとは別ライン） |
+| 最新ソース | `v0.7.0-alpha.80` | α版の公開タグ（mainとは別ライン） |
 
-- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.6.1-alpha.79)
-- [公開α版のソースコード](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/v0.6.1-alpha.79)
+- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.7.0-alpha.80)
+- [公開α版のソースコード](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/v0.7.0-alpha.80)
 - [バージョン更新履歴（CHANGELOG）](CHANGELOG.md)
 - [α版・製品版の運用方針](docs/RELEASE_CHANNELS.md)
 
@@ -30,6 +30,13 @@ Kick配信の映像・音声・コメントを録画・保存するWindowsデス
 - [公開済み `0.6.0-alpha.78` の開発履歴（PR #16）](https://github.com/kanenao/Kick-Live-Message-Recorder/pull/16)では、コメント保存先のエラーがWebSocket受信処理を止める問題と、巨大JSONL全文読込による過剰なメモリ使用を修正しました。巨大ログ・破損行・ディスクへの書込失敗を回帰テストで再現しています。
 - これらの修正を含むα版をGitHub Releasesで公開しました。次の開発版では引き続き不具合検出とα版リリースを継続します。
 
+
+## 0.7.0-alpha.80（公開済みα版）の動画場面ギャラリー
+
+- [ニコ生 AI 新聞](https://nico-live-journal.vercel.app/)の紙面・放送画像の見せ方を参考に、録画ライブラリと配信AI新聞に時刻付きの動画サムネイルギャラリーを追加。
+- 動画サムネイルまたは記事の放送画面からプレビューを開き、大きな代表画像と最大30枚の時刻別画像を選択できます。元動画を既定のプレーヤーで開くボタンもあります。
+- Windows同梱のFFmpeg/FFprobeから必要なフレームだけを抽出してアプリ内にキャッシュします。破損・録画中・保存先外の動画を安全に拒否し、元の録画・コメント・記事・ASSは変更しません。
+- 動画時刻の分布、ファイルの安全性、共通UIの自動テスト、型チェック、Windowsインストーラーと更新用ファイルの検証を通過し、Pre-releaseとして公開。
 
 ## 0.6.1-alpha.79（公開済みα版）の配信AI新聞・文章重複修正
 
