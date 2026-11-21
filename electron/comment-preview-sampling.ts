@@ -10,7 +10,6 @@ export function samplePreviewCommentsByTime<T extends { seconds: number }>(
 ): T[] {
   const cap = Number.isFinite(maximum) ? Math.max(0, Math.min(2000, Math.floor(maximum))) : 1200;
   if (cap === 0 || comments.length === 0) return [];
-  if (comments.length <= cap) return [...comments].sort((a, b) => a.seconds - b.seconds);
 
   const sorted = comments
     .filter(item => Number.isFinite(item.seconds) && item.seconds >= 0)
