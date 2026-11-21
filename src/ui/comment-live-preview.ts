@@ -94,6 +94,10 @@ export function buildTimedCommentSchedule(
     for (let index = 1; index < occupied.length; index++) {
       if (occupied[index] < occupied[lane]) lane = index;
     }
+    // The ASS writer may manage collisions during final encoding; this preview
+    // must never move a burst of old chat minutes into a later video scene.
+    // Skip only the overflowing preview sample when every row is still busy.
+    if (occupied[lane] - comment.seconds > 0.8) continue;
     const startSeconds = Math.max(comment.seconds, occupied[lane]);
     const endSeconds = startSeconds + (position === "scroll" ? travelTime : duration);
     if (position === "scroll") {
