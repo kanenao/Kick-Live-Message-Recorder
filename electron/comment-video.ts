@@ -25,6 +25,7 @@ const execFileAsync = promisify(execFile);
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mkv", ".ts", ".webm", ".m4v", ".mov"]);
 import { parseBroadcastFileStem } from "./recording-filenames";
 import { recordingChannelFolder, recordingChannelFromFileName } from "./recording-folders";
+import { samplePreviewCommentsByTime } from "./comment-preview-sampling";
 
 const MAX_CHAT_RECORDS = 250_000;
 
@@ -502,16 +503,9 @@ export async function previewCommentVideo(
     });
   }
 
-  previewCandidates.sort((a, b) => a.seconds - b.seconds);
-  // The live video preview needs comments distributed across the WHOLE VOD,
-  // not just the former 24 static demonstration samples.
-  const sampleSize = Math.min(1200, previewCandidates.length);
-  const comments = Array.from({ length: sampleSize }, (_, index) => {
-    const sourceIndex = sampleSize <= 1
-      ? 0
-      : Math.round(index * (previewCandidates.length - 1) / (sampleSize - 1));
-    return previewCandidates[sourceIndex];
-  });
+  // Preserve quiet sections of the recording. Sampling by comment index
+  // overrepresents high-traffic bursts and can leave the later VOD blank.
+  const comments = samplePreviewCommentsByTime(previewCandidates, info.duration, 1200);
 
   return {
     width: info.width,
