@@ -2549,7 +2549,7 @@ export default function App() {
 
   return <div className="app-shell">
     <aside className="sidebar">
-      <div className="brand"><img className="brand-mark brand-icon" src="/app-icon.png" alt="" aria-hidden="true" /><div><strong>Kick Live Message Recorder</strong><small>配信映像・チャット記録</small></div></div>
+      <div className="brand"><img className="brand-mark brand-icon" src="./app-icon.png" alt="" aria-hidden="true" /><div><strong>Kick Live Message Recorder</strong><small>配信映像・チャット記録</small></div></div>
       <div className="nav-label">メインメニュー</div>
       <button className={tab === "dashboard" ? "nav-item selected" : "nav-item"} onClick={() => setTab("dashboard")}>▦ <span>ダッシュボード</span></button>
       <button className={tab === "recording" ? "nav-item selected" : "nav-item"} onClick={() => setTab("recording")}>● <span>録画専用</span></button>
@@ -2565,7 +2565,7 @@ export default function App() {
     <main className={tab === "library" ? "main main-library" : "main"}>
       <header className="topbar">
         <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "recording" ? "録画専用" : tab === "library" ? "録画ライブラリ" : tab === "comment-video" ? "コメント付き動画を生成" : tab === "articles" ? "配信記事" : tab === "updates" ? "バージョン更新" : "設定"}</h1></div>
-        <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="alpha-tag">α版</span><img className="avatar avatar-brand" src="/app-icon.png" alt="Kick Live Message Recorder アイコン" /></div>
+        <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="alpha-tag">α版</span><img className="avatar avatar-brand" src="./app-icon.png" alt="Kick Live Message Recorder アイコン" /></div>
       </header>
 
       {storageError && <div className="storage-error" role="alert">{storageError}</div>}
