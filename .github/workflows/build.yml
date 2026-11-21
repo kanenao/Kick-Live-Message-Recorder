@@ -26,6 +26,8 @@ jobs:
         run: node scripts/test-release-tag-policy.mjs
       - name: READMEバージョン表記テスト
         run: node scripts/test-readme-version.mjs
+      - name: 正式アプリアイコン・Windows ICO・通知領域の整合性テスト
+        run: node scripts/test-app-icon.mjs
       - name: α版自動更新チャンネルの整合性テスト
         run: node scripts/test-auto-updater-channel.mjs
       - name: アップデート用インストーラー名・マニフェスト一致テスト
