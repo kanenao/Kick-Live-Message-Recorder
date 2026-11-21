@@ -42,9 +42,9 @@ assert.ok(packageJson.build.extraResources.some(
 const app = read("src/ui/App.tsx").toString("utf8");
 const main = read("electron/main.ts").toString("utf8");
 const index = read("index.html").toString("utf8");
-assert.match(app, /brand-mark brand-icon" src="\/app-icon\.png"/,
+assert.match(app, /brand-mark brand-icon" src="\.\/app-icon\.png"/,
   "アプリ左上に正式アイコンを表示する");
-assert.match(app, /avatar avatar-brand" src="\/app-icon\.png"/,
+assert.match(app, /avatar avatar-brand" src="\.\/app-icon\.png"/,
   "ヘッダーにも正式アイコンを表示する");
 assert.match(main, /function loadAppBrandIcon\(/,
   "Electronで正式画像を読み込む");
@@ -52,6 +52,6 @@ assert.match(main, /icon: loadAppBrandIcon\(\)/,
   "ウィンドウに正式アイコンを設定する");
 assert.match(main, /tray = new Tray\(trayIcon\)/,
   "通知領域にも新アイコンを設定する");
-assert.match(index, /rel="icon" type="image\/png" href="\/app-icon\.png"/);
+assert.match(index, /rel="icon" type="image\/png" href="\.\/app-icon\.png"/);
 
 console.log("Kick正式アプリアイコン：PNG/ICO/ハッシュ・ショートカット・トレイ・画面統合テスト成功");
