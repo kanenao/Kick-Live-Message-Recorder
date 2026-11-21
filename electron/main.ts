@@ -611,9 +611,21 @@ function initializeAutoUpdater(): void {
 
 let mainWindow: BrowserWindow | null = null;
 
+function loadAppBrandIcon(): Electron.NativeImage {
+  const filePath = app.isPackaged
+    ? join(process.resourcesPath, "branding", "icon.png")
+    : join(process.cwd(), "build", "icon.png");
+  return nativeImage.createFromPath(filePath);
+}
+
 function createTray(): void {
   if (tray) return;
-  tray = new Tray(nativeImage.createFromBuffer(Buffer.from(TRAY_ICON_BASE64, "base64")));
+  const brandIcon = loadAppBrandIcon();
+  // Use the original tiny fallback only if the generated PNG is absent.
+  const trayIcon = brandIcon.isEmpty()
+    ? nativeImage.createFromBuffer(Buffer.from(TRAY_ICON_BASE64, "base64"))
+    : brandIcon.resize({ width: 32, height: 32 });
+  tray = new Tray(trayIcon);
   tray.setToolTip("Kick Live Message Recorder");
   tray.on("click", () => showMainWindow());
   tray.on("double-click", () => showMainWindow());
@@ -1959,6 +1971,7 @@ function createWindow(showImmediately = true): void {
     minWidth: 900,
     minHeight: 640,
     backgroundColor: "#111318",
+    icon: loadAppBrandIcon(),
     title: "Kick Live Message Recorder - 配信録画・チャット保存",
     webPreferences: {
       preload: join(__dirname, "preload.js"),
