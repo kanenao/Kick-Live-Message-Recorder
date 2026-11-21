@@ -34,7 +34,7 @@ export function samplePreviewCommentsByTime<T extends { seconds: number }>(
   // Grant each occupied window an equal initial share, then redistribute
   // leftover slots to busier windows instead of discarding valid comments.
   while (remaining > 0) {
-    const available = buckets.map((bucket, index) => index)
+    const available = buckets.map((_, index) => index)
       .filter(index => allocated[index] < buckets[index].length);
     if (available.length === 0) break;
     const share = Math.max(1, Math.floor(remaining / available.length));
