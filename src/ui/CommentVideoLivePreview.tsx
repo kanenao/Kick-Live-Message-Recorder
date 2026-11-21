@@ -151,7 +151,7 @@ export function CommentVideoLivePreview({
       {previewResult
         ? `実コメント ${schedule.length.toLocaleString("ja-JP")}件を時刻に沿って描画します（全${previewResult.comments.length.toLocaleString("ja-JP")}件のプレビュー候補）。コメントがない時間帯には表示されません。`
         : "動画とコメントログを選ぶと、実際のコメントを読み込んで動画時刻に重ねます。"}
-      動画プレビューはASS出力の近似表示です。元動画やログは変更しません。
+      コメントは動画の全時間帯から抽出します。混雑時は表示しきれないサンプルを省略し、別の場面へ遅れて流れないようにします。動画プレビューはASS出力の近似表示です。元動画やログは変更しません。
     </small>
   </section>;
 }
