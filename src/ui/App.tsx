@@ -216,7 +216,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.7.3-alpha.83";
+const APP_VERSION = "0.7.4-alpha.84";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -244,6 +244,16 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.7.4-alpha.84",
+    title: "Kick版の正式アプリアイコンを追加",
+    changes: [
+      "新しい緑・黒のK／LIVE／RECアイコンをWindowsアプリとショートカットに採用",
+      "通知領域・ウィンドウ・アプリ左上のアイコンを統一",
+      "元のアイコン画像からWindows用ICOと画面用PNGを自動生成",
+      "生成画像の破損をSHA-256で検出するビルドテストを追加"
+    ]
+  },
   {
     version: "0.7.3-alpha.83",
     title: "リアルタイムコメントプレビューの長時間配信・時刻同期を改善",
@@ -2539,7 +2549,7 @@ export default function App() {
 
   return <div className="app-shell">
     <aside className="sidebar">
-      <div className="brand"><div className="brand-mark">K</div><div><strong>Kick Live Message Recorder</strong><small>配信映像・チャット記録</small></div></div>
+      <div className="brand"><img className="brand-mark brand-icon" src="/app-icon.png" alt="" aria-hidden="true" /><div><strong>Kick Live Message Recorder</strong><small>配信映像・チャット記録</small></div></div>
       <div className="nav-label">メインメニュー</div>
       <button className={tab === "dashboard" ? "nav-item selected" : "nav-item"} onClick={() => setTab("dashboard")}>▦ <span>ダッシュボード</span></button>
       <button className={tab === "recording" ? "nav-item selected" : "nav-item"} onClick={() => setTab("recording")}>● <span>録画専用</span></button>
@@ -2555,7 +2565,7 @@ export default function App() {
     <main className={tab === "library" ? "main main-library" : "main"}>
       <header className="topbar">
         <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "recording" ? "録画専用" : tab === "library" ? "録画ライブラリ" : tab === "comment-video" ? "コメント付き動画を生成" : tab === "articles" ? "配信記事" : tab === "updates" ? "バージョン更新" : "設定"}</h1></div>
-        <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="alpha-tag">α版</span><div className="avatar">KR</div></div>
+        <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="alpha-tag">α版</span><img className="avatar avatar-brand" src="/app-icon.png" alt="Kick Live Message Recorder アイコン" /></div>
       </header>
 
       {storageError && <div className="storage-error" role="alert">{storageError}</div>}
