@@ -216,7 +216,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.7.4-alpha.84";
+const APP_VERSION = "0.7.5-alpha.85";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -244,6 +244,16 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.7.5-alpha.85",
+    title: "正式アイコンのアプリ内表示をWindowsインストール版で修正",
+    changes: [
+      "新しいK／LIVE／RECアイコンのElectron file://環境での相対パスを修正",
+      "サイドバー・ヘッダー・faviconの画像がインストール版でも表示されるよう改善",
+      "Windows EXE・スタートメニュー・通知領域は正式アイコンを維持",
+      "アセットパス・Windows ICO形式・画像データの検証を追加"
+    ]
+  },
   {
     version: "0.7.4-alpha.84",
     title: "Kick版の正式アプリアイコンを追加",
