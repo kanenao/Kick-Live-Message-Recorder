@@ -1,6 +1,18 @@
 # 更新履歴
 
-> mainブランチは旧開発コードを保持しています。公開済みα版のソースとリリースノートは [v0.7.3-alpha.83](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.7.3-alpha.83) を参照してください。
+> mainブランチは旧開発コードを保持しています。公開済みα版のソースとリリースノートは [v0.7.5-alpha.85](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.7.5-alpha.85) を参照してください。
+
+## 0.7.5-alpha.85（公開済みα版）
+
+- 正式K／LIVE／REC・コメントアイコンがWindowsインストール版のアプリ画面でも表示されるよう、画像パスをElectronのfile://に適した相対URLへ修正。
+- EXE・デスクトップショートカット・タスクバー・通知領域・サイドバー・ヘッダー・faviconを統一。Windowsアイコン・元PNG・画像参照の自動テスト、型チェック、Windowsビルド・GitHub Releases公開に成功。
+- 録画・コメント・記事・ASS字幕の既存ファイルは変更しません。
+
+## 0.7.4-alpha.84（公開済みα版）
+
+- 新しい緑・黒のK／LIVE／RECデザインをWindowsアプリとショートカット用アイコンに採用。
+- アイコン画像からPNG・ICOをビルド時に自動生成し、画像整合性を自動検証する機構を追加。
+- アプリ内アイコンの表示問題は最新の0.7.5-alpha.85で修正。
 
 ## 0.7.3-alpha.83（公開済みα版）
 
