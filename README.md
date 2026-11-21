@@ -2,26 +2,33 @@
 
 Kick配信の映像・音声・コメントを録画・保存するWindowsデスクトップアプリです。24時間の配信監視、コメント付き動画の生成、映像・音声・コメントを組み合わせたAI配信記事に対応しています。
 
-> **最新公開版：0.7.3-alpha.83（α版）**  
-> **次期α版：0.7.4-alpha.84（正式アプリアイコン・Windows EXE・通知領域への採用準備中）**  
+> **最新公開版：0.7.4-alpha.84（α版）**  
+> **次期α版：0.7.5-alpha.85（正式アイコンのWindowsインストール版表示修正・検証中）**  
 > 現在の開発・テスト対象はα版です。過去に公開したβ版は履歴として保持し、製品版は未完成のため公開・自動更新していません。
 
 ## バージョン・ダウンロード
 
 | 区分 | バージョン | 状態 |
 |---|---|---|
-| 最新公開α版 | `0.7.3-alpha.83` | GitHub ReleasesのPre-release |
+| 最新公開α版 | `0.7.4-alpha.84` | GitHub ReleasesのPre-release |
 | 旧β版（履歴） | `0.1.0-beta.50` | 公開済み・保持 |
-| 次期α版 | `0.7.4-alpha.84` | 新しい正式アプリアイコン（未公開・テスト中） |
+| 次期α版 | `0.7.5-alpha.85` | 新アイコンのアプリ内表示互換性を修正（未公開・テスト中） |
 
-- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.7.3-alpha.83)
-- [次期α版の開発ブランチ](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/release/v0.7.4-alpha.84)
+- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.7.4-alpha.84)
+- [次期α版の開発ブランチ](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/release/v0.7.5-alpha.85)
 - [バージョン更新履歴（CHANGELOG）](CHANGELOG.md)
 - [α版・製品版の運用方針](docs/RELEASE_CHANNELS.md)
 
 α版の録画継続機能は開発中のため、実際の長時間LIVE配信での検証は引き続き必要です。
 
-## 0.7.4-alpha.84 Kick Live Message Recorder 正式アプリアイコン（開発中）
+## 0.7.5-alpha.85 正式アプリアイコンの表示互換性修正（開発中）
+
+- 新しいK／LIVE／RECアイコンをWindows EXE・デスクトップショートカット・通知領域・アプリサイドバーに採用したα84に対する小修正です。
+- `file://` で画面を開くWindowsインストール版でもアイコンが読み込めるよう、React画面とfaviconのURLを`./app-icon.png` に統一しました。
+- 正式画像のSHA-256・Windows ICOフォーマットに加え、アプリ内アイコン画像の相対URLを自動テストで検証します。
+- 元動画、コメントログ、ASS、配信AI新聞などのデータは変更しません。
+
+## 0.7.4-alpha.84 Kick Live Message Recorder 正式アプリアイコン（公開済み）
 
 先ほど生成した**緑のK・LIVE・REC・コメントマーク**入りアイコンをアプリの正式デザインに採用します。
 
