@@ -46,8 +46,16 @@ assert.ok(command[0].y < command[1].y, "Top comments sit above bottom comments")
 const overlap = buildTimedCommentSchedule(Array.from({ length: 5 },
   (_, i) => ({ seconds: 1, content: "A long comment number " + i })),
 1280, 720, { ...settings, rowLimit: 1 });
-assert.ok(overlap[1].startSeconds > overlap[0].startSeconds,
-  "Comments entering the same lane do not overwrite each other");
+assert.equal(overlap.length, 1,
+  "Busy preview lanes should drop excess samples instead of shifting them minutes into later scenes");
+const burst = buildTimedCommentSchedule([
+  ...Array.from({ length: 80 }, (_, i) => ({ seconds: 1, content: "盛り上がり " + i })),
+  { seconds: 40, content: "40秒地点の実際のコメント" }
+], 1280, 720, { ...settings, rowLimit: 1 });
+assert.ok(burst.every(item => item.text.includes("40秒") || item.startSeconds < 1.81),
+  "A burst of old comments cannot drift into a different scene");
+assert.ok(burst.some(item => item.text.includes("40秒") && Math.abs(item.startSeconds - 40) < 0.01),
+  "A later genuine comment remains at its video timestamp");
 assert.equal(buildTimedCommentSchedule([
   { seconds: -3, content: "invalid" }, { seconds: 1, content: "" }
 ], 1280, 720, settings).length, 0);
@@ -71,7 +79,7 @@ assert.match(app, /<CommentVideoLivePreview selectedVideoPath=\{selectedCommentV
   "Kick composer integrates the live preview");
 assert.match(app, /position: commentVideoPosition/, "Command position choices propagate to backend");
 assert.match(preload, /previewCommentVideo:[^\n]+position\?:/, "Typed desktop IPC supports command positions");
-assert.match(backend, /const sampleSize = Math\.min\(1200, previewCandidates\.length\)/,
-  "Entire broadcast supplies enough timeline samples for playback");
+assert.match(backend, /samplePreviewCommentsByTime\(previewCandidates, info\.duration, 1200\)/,
+  "Entire broadcast is sampled by time windows instead of raw comment counts");
 assert.match(style, /\.comment-video-live-stage video/, "Video preview stage has responsive styles");
 console.log("Kick/Nicoコメント合成：動画時刻との同期・シーク・速度・サイズ・位置・重なり・回帰検証成功");
