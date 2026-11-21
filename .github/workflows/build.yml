@@ -60,6 +60,8 @@ jobs:
         run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-nico-ass-auto.mjs
       - name: コメント付き動画のリアルタイム再生・同期プレビュー検証
         run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-comment-video-live-preview.mjs
+      - name: 長時間配信コメントの時刻別抽出・プレビューの遅延抑制テスト
+        run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-comment-preview-sampling.mjs
       - name: ASS自動調整のUI・設定連携テスト
         run: node scripts/test-nico-ass-auto-ui.mjs
       - name: 複数VODのダウンロード・経過時間・停止テスト
