@@ -764,6 +764,10 @@ export class LiveStreamArticleManager {
       ];
     }
     this.persist(session);
+    if (session.audioRetryTimer) {
+      clearTimeout(session.audioRetryTimer);
+      session.audioRetryTimer = null;
+    }
     this.sessions.delete(slug);
   }
 
