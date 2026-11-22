@@ -533,10 +533,10 @@ function initializeAutoUpdater(): void {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
-  // GitHubのα版Releaseはalpha.ymlで配布する。暗黙のチャンネル判定に任せず固定する。
+  // 製品版はlatest.ymlのみを確認し、β版への自動移行を禁止する。暗黙のチャンネル判定に任せず固定する。
   // channel setterはダウングレードを許可するため、明示的に再度禁止する。
-  autoUpdater.channel = "alpha";
-  autoUpdater.allowPrerelease = true;
+  autoUpdater.channel = "latest";
+  autoUpdater.allowPrerelease = false;
   autoUpdater.allowDowngrade = false;
 
   autoUpdater.on("checking-for-update", () => {
@@ -643,12 +643,14 @@ function showMainWindow(): void {
   mainWindow.focus();
 }
 
+const ARTICLE_FEATURE_ENABLED = app.getVersion().includes("-beta.");
+
 const liveArticleManager = new LiveStreamArticleManager(
   getRecordingOutputDirectory,
   () => {
     const settings = readState().settings;
     return {
-      enabled: settings.aiArticleEnabled,
+      enabled: ARTICLE_FEATURE_ENABLED && settings.aiArticleEnabled,
       provider: settings.aiArticleProvider,
       baseUrl: settings.aiArticleOllamaUrl,
       model: settings.aiArticleModel,
@@ -686,7 +688,7 @@ const recordingManager = new KickRecordingManager(event => {
     autoRecordingRetryNotBefore.delete(event.slug);
   }
   if (!event.isVod && event.filePath && event.status === "stopped" && existsSync(event.filePath)) {
-    liveArticleManager.attachRecording(event.slug, event.filePath);
+    if (ARTICLE_FEATURE_ENABLED) liveArticleManager.attachRecording(event.slug, event.filePath);
   }
 }, resolveCurrentKickLive);
 
@@ -698,7 +700,7 @@ const chatReceiver = new KickChatReceiver(
   getRecordingOutputDirectory,
   () => readState().settings.saveChat,
   message => {
-    liveArticleManager.onChatMessage(message);
+    if (ARTICLE_FEATURE_ENABLED) liveArticleManager.onChatMessage(message);
     mainWindow?.webContents.send("chat:message", message);
   },
   status => mainWindow?.webContents.send("chat:status", status)
@@ -933,7 +935,7 @@ function normalizeState(input: unknown): AppState {
         ? Math.round(Math.max(0, Math.min(200, settings.vodAssCollisionGap))) : 40,
       vodAssDelaySeconds: typeof settings.vodAssDelaySeconds === "number" && Number.isFinite(settings.vodAssDelaySeconds)
         ? Math.max(-10, Math.min(10, settings.vodAssDelaySeconds)) : 0,
-      aiArticleEnabled: settings.aiArticleEnabled === true,
+      aiArticleEnabled: ARTICLE_FEATURE_ENABLED && settings.aiArticleEnabled === true,
       aiArticleProvider: settings.aiArticleProvider === "openai" ? "openai" : "ollama",
       aiArticleOllamaUrl: typeof settings.aiArticleOllamaUrl === "string" && /^https?:\/\//i.test(settings.aiArticleOllamaUrl) ? settings.aiArticleOllamaUrl.slice(0, 300) : "http://127.0.0.1:11434",
       aiArticleModel: typeof settings.aiArticleModel === "string" && /^[a-zA-Z0-9._:-]{1,100}$/.test(settings.aiArticleModel)
@@ -1035,7 +1037,7 @@ function updateSleepBlocker(enabled: boolean): void {
 }
 
 function getBackgroundChatSlugs(state: AppState): string[] {
-  const aiArticleChatEnabled = state.settings.aiArticleEnabled && Boolean(readOpenAiApiKey());
+  const aiArticleChatEnabled = ARTICLE_FEATURE_ENABLED && state.settings.aiArticleEnabled && Boolean(readOpenAiApiKey());
   const selected = [
     ...(state.settings.autoReceiveChat || aiArticleChatEnabled ? state.channels : []),
     ...(state.settings.autoReceiveChatForRecordingOnly || aiArticleChatEnabled ? state.recordingOnlyChannels : [])
@@ -1175,6 +1177,7 @@ async function runBackgroundMonitor(): Promise<void> {
       const confirmedOffline = !live && offlinePolls >= 3;
       // Retain LIVE state through isolated false readings to prevent spurious end/start.
       if (live || confirmedOffline) backgroundPreviousLiveState.set(result.slug, live);
+      if (ARTICLE_FEATURE_ENABLED) {
       const articleMetadata = {
         slug: result.slug, displayName: result.displayName || result.slug,
         streamTitle: result.streamTitle, categoryName: result.categoryName,
@@ -1185,6 +1188,7 @@ async function runBackgroundMonitor(): Promise<void> {
         if (liveArticleManager.hasSession(result.slug)) startArticleFrameCapture(result.slug);
       } else if (wasLive && confirmedOffline) {
         void stopArticleFrameCapture(result.slug).finally(() => liveArticleManager.finishStream(articleMetadata));
+      }
       }
       if (confirmedOffline) {
         chatReceiver.clearBroadcastSession(result.slug);
@@ -1411,6 +1415,7 @@ function registerIpcHandlers(): void {
     return { ok: true };
   });
 
+  if (ARTICLE_FEATURE_ENABLED) {
   ipcMain.handle("ai-article:get-status", event => {
     assertTrustedSender(event);
     return { ...getOpenAiCredentialStatus(), ...readState().settings };
@@ -1448,6 +1453,8 @@ function registerIpcHandlers(): void {
     assertTrustedSender(event);
     return liveArticleManager.cancelOllamaModelPull();
   });
+
+  }
 
   ipcMain.handle("kick:get-credentials-status", event => {
     assertTrustedSender(event);
@@ -1651,6 +1658,7 @@ function registerIpcHandlers(): void {
     return { ok: true as const };
   });
 
+  if (ARTICLE_FEATURE_ENABLED) {
   ipcMain.handle("articles:live:start", async (event, channelInput: unknown) => {
     assertTrustedSender(event);
     if (manualArticleSession) {
@@ -1778,6 +1786,8 @@ function registerIpcHandlers(): void {
     }
     return liveArticleManager.enhanceArchivedArticle(article);
   });
+
+  }
 
   ipcMain.handle("comment-video:list-logs", event => {
     assertTrustedSender(event);
