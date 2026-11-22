@@ -28,6 +28,7 @@ import { trashCommentLogFile } from "./comment-log-delete";
 import { isValidStreamArticleId, deleteStreamArticle, generateStreamArticle, getStreamArticlePreview, listStreamArticles } from "./articles";
 import { LiveStreamArticleManager } from "./live-articles";
 import { startLiveVideoFrameCapture, type LiveVideoFrameStatus } from "./live-video-frames";
+import { addLiveArticleFrameSample } from "./live-article-frame-sampling";
 import { detachCaptureIfCurrent, nextManualCaptureRetryDelayMs } from "./live-capture-policy";
 import type { VideoFrameSample } from "./video-frames";
 import { deleteRecordingFile, isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
@@ -726,6 +727,7 @@ type ManualArticleSession = {
 };
 type LiveArticleFrameCapture = { stop: () => Promise<void>; frames: VideoFrameSample[] };
 const liveArticleFrameCaptures = new Map<string, LiveArticleFrameCapture>();
+const liveArticleFrameSampleStates = new Map<string, { historyFrames: VideoFrameSample[]; seenCount: number }>();
 const liveArticleCaptureRetryTimers = new Map<string, NodeJS.Timeout>();
 const liveArticleCaptureRetryAttempts = new Map<string, number>();
 let manualArticleSession: ManualArticleSession | null = null;
@@ -774,7 +776,9 @@ function startArticleFrameCapture(slugInput: string): void {
   const slug = slugInput.toLowerCase();
   if (liveArticleFrameCaptures.has(slug)) return;
   clearArticleFrameCaptureRetry(slug);
-  const frames: VideoFrameSample[] = [];
+  const sampleState = liveArticleFrameSampleStates.get(slug) ?? { historyFrames: [], seenCount: 0 };
+  liveArticleFrameSampleStates.set(slug, sampleState);
+  const frames = sampleState.historyFrames;
   let capture: LiveArticleFrameCapture | null = null;
   try {
     const stop = startLiveVideoFrameCapture(slug, frame => {
@@ -784,9 +788,10 @@ function startArticleFrameCapture(slugInput: string): void {
         liveArticleCaptureRetryTimers.delete(slug);
         liveArticleCaptureRetryAttempts.delete(slug);
       }
-      frames.push(frame);
-      if (frames.length > 8) frames.shift();
-      liveArticleManager.updateVideoFrames(slug, [...frames]);
+      const sampled = addLiveArticleFrameSample(frames, frame, sampleState.seenCount);
+      sampleState.seenCount = sampled.seenCount;
+      frames.splice(0, frames.length, ...sampled.historyFrames);
+      liveArticleManager.updateVideoFrames(slug, sampled.frames);
     }, status => {
       mainWindow?.webContents.send("articles:live-capture-status", { slug, ...status });
       if (status.status !== "completed" && status.status !== "error") return;
@@ -817,6 +822,7 @@ function stopArticleFrameCapture(slugInput: string): Promise<void> {
   const slug = slugInput.toLowerCase();
   clearArticleFrameCaptureRetry(slug);
   const capture = liveArticleFrameCaptures.get(slug);
+  liveArticleFrameSampleStates.delete(slug);
   if (!capture) return Promise.resolve();
   liveArticleFrameCaptures.delete(slug);
   return capture.stop();
@@ -2080,6 +2086,7 @@ app.on("before-quit", () => {
   recordingManager.stopAll();
   for (const capture of liveArticleFrameCaptures.values()) capture.stop();
   liveArticleFrameCaptures.clear();
+  liveArticleFrameSampleStates.clear();
   for (const timer of liveArticleCaptureRetryTimers.values()) clearTimeout(timer);
   liveArticleCaptureRetryTimers.clear();
   liveArticleCaptureRetryAttempts.clear();
