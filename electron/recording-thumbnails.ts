@@ -5,6 +5,7 @@ import {
 } from "node:fs";
 import { extname, join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
+import { isRecordingLibraryFileParent } from "./recording-folders";
 
 const execFileAsync = promisify(execFile);
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mkv", ".ts", ".webm", ".m4v", ".mov"]);
@@ -23,7 +24,8 @@ export function recordingThumbnailSource(outputDirectory: string, input: unknown
   if (typeof input !== "string" || input.length > 4096) return null;
   const root = resolve(outputDirectory);
   const path = resolve(input);
-  if (!isUnder(path, root) || !VIDEO_EXTENSIONS.has(extname(path).toLowerCase())) return null;
+  if (!isUnder(path, root) || !VIDEO_EXTENSIONS.has(extname(path).toLowerCase()) ||
+      !isRecordingLibraryFileParent(root, path)) return null;
   try {
     const stats = lstatSync(path);
     if (!stats.isFile() || stats.isSymbolicLink() || stats.size < 1024) return null;
