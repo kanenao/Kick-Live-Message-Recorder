@@ -96,6 +96,8 @@ jobs:
         run: node --experimental-strip-types scripts/test-article-preview.mjs
       - name: 配信AI新聞の記事削除テスト
         run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-article-delete.mjs
+      - name: LIVE映像の全時間帯サンプリング・代表フレーム上限テスト
+        run: node --experimental-strip-types scripts/test-live-article-frame-sampling.mjs
       - name: LIVE映像キャプチャの復旧ポリシーテスト
         run: node --experimental-strip-types scripts/test-live-capture-policy.mjs
       - name: LIVE音声認識の自動再試行テスト
