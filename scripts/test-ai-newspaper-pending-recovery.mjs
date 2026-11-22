@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-assert.ok(live.includes("if (videoFrames.length > 0) article.videoAnalyzed = false"),
-  "保存済み記事の再解析で新しい映像フレームを再送信する");
 import { readFileSync } from "node:fs";
 
 const live = readFileSync(new URL("../electron/live-articles.ts", import.meta.url), "utf8");
 const ui = readFileSync(new URL("../src/ui/App.tsx", import.meta.url), "utf8");
+assert.ok(live.includes("if (videoFrames.length > 0) article.videoAnalyzed = false"),
+  "保存済み記事の再解析で新しい映像フレームを再送信する");
 
 assert.ok(live.includes("pendingAnalysisComments?: CommentSample[]"),
   "LIVE記事に未解析コメントの保存欄を持つ");
