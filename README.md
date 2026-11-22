@@ -2,19 +2,19 @@
 
 Kick配信の監視・録画・コメント保存・コメント付き動画生成と、**配信AI新聞**を開発するWindowsアプリです。
 
-> **最新公開β版：`0.9.0-beta.90`**（Windowsインストーラー公開済み）
-> **次期β版：`0.9.0-beta.91`**（β版内からβ版・製品版の2種類を選択、製品版の切り替え機能は廃止）
+> **最新公開β版：`0.9.0-beta.91`**（Windowsインストーラー公開済み）
+> **最新版：β版からβ版・製品版を選択可能。製品版側からの変更は不可**
 > **製品版：`1.0.0`**（記事なし・Windows実機検証待ちで未公開）
 > 製品版 `1.0.0` は別の `stable` ブランチで準備し、配信記事を含めません。
 
 - [β版開発ソース](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/beta)
 - [製品版開発ソース](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/stable)
-- [β版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.9.0-beta.90)
+- [β版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.9.0-beta.91)
 - [最後に公開したα版](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.8.1-alpha.87)
 - [版の違い・リリース条件](docs/RELEASE_CHANNELS.md)
 - [更新履歴](CHANGELOG.md)
 
-## 0.9.0-beta.91（開発・検証中）―版選択はβ版に集約
+## 0.9.0-beta.91（公開済みβ版）―版選択はβ版に集約
 
 - β版の「バージョン更新」に**β版を選択**・**製品版を選択**の2ボタンを表示し、それぞれ公開済みの正規Windowsインストーラーを確認付きで取得します。
 - 製品版にはβ版への切り替えメニューもIPCも用意しません。β版はアンインストールせず、両版を併存させます。
