@@ -1,6 +1,6 @@
 {
   "name": "kick-live-message-recorder",
-  "version": "0.8.1-alpha.87",
+  "version": "0.8.1-beta.88",
   "private": true,
   "description": "Kick配信の映像・音声・チャットを保存するWindowsアプリ",
   "main": "dist-electron/main.js",
@@ -81,7 +81,7 @@
         "owner": "kanenao",
         "repo": "Kick-Live-Message-Recorder",
         "releaseType": "prerelease",
-        "channel": "alpha"
+        "channel": "beta"
       }
     ],
     "extraResources": [
