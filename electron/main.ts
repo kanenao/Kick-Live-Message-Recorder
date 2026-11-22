@@ -591,7 +591,7 @@ function initializeAutoUpdater(): void {
   autoUpdater.on("error", error => {
     publishUpdateStatus({
       status: "error",
-      message: `更新に失敗しました：${error.message}。旧β版からの移行時はGitHub Releasesにある最新α版のインストーラーを利用できます。`
+      message: `更新に失敗しました：${error.message}。旧α版からβ版へ移行する場合は、GitHub Releasesにある最新β版のインストーラーをご利用ください。`
     });
   });
 
