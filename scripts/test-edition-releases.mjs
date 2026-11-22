@@ -49,7 +49,7 @@ assert.match(main, /dialog\.showMessageBox/);
 assert.match(main, /await shell\.openExternal\(release\.installerUrl\)/);
 assert.match(preload, /ipcRenderer\.invoke\("editions:list"\)/);
 assert.match(preload, /ipcRenderer\.invoke\("editions:switch", target\)/);
-assert.match(ui, /className="edition-switch-panel"/);
+assert.match(ui, /className="version-history-section edition-switch-panel"/);
 assert.match(ui, /editionReleases\.stable\.map/);
 assert.match(ui, /CURRENT_EDITION === "beta"/);
 console.log("公開済み製品版履歴・悪意あるURL拒否・双方向切替UIの回帰テスト成功");
