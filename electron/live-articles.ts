@@ -477,6 +477,19 @@ export class LiveStreamArticleManager {
       return ((value ^ (value >>> 14)) >>> 0) / 4_294_967_296;
     };
     const commentReservoirSize = 600;
+    const seenCommentKeys = new Set<string>();
+    const rememberComment = (sample: CommentSample): void => {
+      const key = sample.at + "|" + (sample.timeInSeconds ?? "") + "|" + sample.text;
+      if (seenCommentKeys.has(key)) return;
+      seenCommentKeys.add(key);
+      totalCommentsSeen += 1;
+      if (comments.length < commentReservoirSize) {
+        comments.push(sample);
+      } else {
+        const slot = Math.floor(nextReservoirRandom() * totalCommentsSeen);
+        if (slot < commentReservoirSize) comments[slot] = sample;
+      }
+    };
     for (const path of sourceLogs) {
       if (typeof path !== "string" || !isPathInsideDirectory(path, chatRoot) ||
           extname(path).toLowerCase() !== ".jsonl" || !existsSync(path)) continue;
@@ -495,15 +508,21 @@ export class LiveStreamArticleManager {
             ? item.created_at : "";
         const timeInSeconds = typeof item.timeInSeconds === "number" && Number.isFinite(item.timeInSeconds)
           ? item.timeInSeconds : undefined;
-        const sample: CommentSample = { at, text, timeInSeconds };
-        totalCommentsSeen += 1;
-        if (comments.length < commentReservoirSize) {
-          comments.push(sample);
-        } else {
-          const slot = Math.floor(nextReservoirRandom() * totalCommentsSeen);
-          if (slot < commentReservoirSize) comments[slot] = sample;
-        }
+        rememberComment({ at, text, timeInSeconds });
       }
+    }
+    // Reuse comments retained from a failed LIVE analysis, even when no chat
+    // log was attached to the article. De-duplicate against any selected JSONL.
+    for (const pending of Array.isArray(article.pendingAnalysisComments)
+      ? article.pendingAnalysisComments.slice(-2000) : []) {
+      if (!pending || typeof pending.text !== "string") continue;
+      const text = pending.text.normalize("NFKC").replace(/\\s+/g, " ").trim().slice(0, 500);
+      if (!text) continue;
+      const at = typeof pending.at === "string" && Number.isFinite(Date.parse(pending.at)) ? pending.at : "";
+      const timeInSeconds = typeof pending.timeInSeconds === "number" &&
+        Number.isFinite(pending.timeInSeconds) && pending.timeInSeconds >= 0
+        ? pending.timeInSeconds : undefined;
+      rememberComment({ at, text, timeInSeconds });
     }
     comments.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
     article.commentEvidenceCount = totalCommentsSeen;
@@ -528,14 +547,31 @@ export class LiveStreamArticleManager {
         }
       }
     }
+    const savedAudioSegments = [
+      ...(Array.isArray(article.audioTranscriptSegments) ? article.audioTranscriptSegments : []),
+      ...(Array.isArray(article.pendingAnalysisAudioSegments) ? article.pendingAnalysisAudioSegments : [])
+    ];
+    const audioByKey = new Map<string, AudioTranscriptSegment>();
+    for (const segment of [...audioSegments, ...savedAudioSegments]) {
+      if (!segment || !Number.isFinite(segment.startSeconds) || segment.startSeconds < 0 ||
+          typeof segment.text !== "string" || !segment.text.trim()) continue;
+      const normalized = {
+        startSeconds: segment.startSeconds,
+        endSeconds: Number.isFinite(segment.endSeconds) && segment.endSeconds >= segment.startSeconds
+          ? segment.endSeconds : segment.startSeconds + 45,
+        text: segment.text.trim().slice(0, 2400)
+      };
+      audioByKey.set(normalized.startSeconds + "|" + normalized.text, normalized);
+    }
+    audioSegments = [...audioByKey.values()].sort((a, b) => a.startSeconds - b.startSeconds);
     if (audioSegments.length > 0) {
       article.audioAnalyzed = true;
       article.audioSegmentCount = audioSegments.length;
-      article.audioTranscriptSegments = audioSegments;
-      article.audioTranscript = formatAudioTranscript(audioSegments);
+      article.audioTranscriptSegments = audioSegments.slice(-160);
+      article.audioTranscript = formatAudioTranscript(article.audioTranscriptSegments);
       article.audioSamplingMode = articleAudioSamplingMode(article.durationSeconds);
       article.audioAnalyzedAt = new Date().toISOString();
-      article.audioError = "";
+      if (!audioError) article.audioError = "";
     }
     if (audioError) article.audioError = audioError.slice(0, 500);
     // Archived re-analysis replaces the index to avoid stale evidence from
