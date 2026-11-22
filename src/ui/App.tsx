@@ -1353,6 +1353,8 @@ export default function App() {
   const [aiModelPullBusy, setAiModelPullBusy] = useState(false);
   const [aiModelPullStatus, setAiModelPullStatus] = useState<AiModelPullStatus | null>(null);
 
+  const VISIBLE_VERSION_HISTORY = ARTICLES_ENABLED ? VERSION_HISTORY : VERSION_HISTORY.filter(item => /^\d+\.\d+\.\d+$/.test(item.version));
+
   const filteredStreamArticles = useMemo(() => {
     const query = articleSearch.trim().toLocaleLowerCase("ja-JP");
     return streamArticles.filter(article => {
@@ -3554,9 +3556,9 @@ export default function App() {
           <ReleaseNotesContent value={updateStatus.releaseNotes} />
         </div>}
         <div className="version-history-section">
-          <div className="settings-subheading"><h3>バージョン更新履歴</h3><span className="api-state connected">{VERSION_HISTORY.length}件</span></div>
+          <div className="settings-subheading"><h3>バージョン更新履歴</h3><span className="api-state connected">{VISIBLE_VERSION_HISTORY.length}件</span></div>
           <div className="version-history-list">
-            {VERSION_HISTORY.map((release, index) => <article className="version-history-item" key={release.version}>
+            {VISIBLE_VERSION_HISTORY.map((release, index) => <article className="version-history-item" key={release.version}>
               <div className="version-history-marker">{index === 0 ? "NEW" : release.version.includes("-alpha.") ? "α" : "β"}</div>
               <div className="version-history-content">
                 <div className="version-history-heading"><strong>v{release.version}</strong><span>{release.title}</span></div>
