@@ -218,9 +218,8 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.9.0-beta.90";
+const APP_VERSION = "0.9.0-beta.91";
 const CURRENT_EDITION: "beta" | "stable" = APP_VERSION.includes("-beta.") ? "beta" : "stable";
-const SWITCH_TO_EDITION: "beta" | "stable" = CURRENT_EDITION === "beta" ? "stable" : "beta";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -248,6 +247,7 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  { version: "0.9.0-beta.91", title: "β版だけで製品版・β版の両方を選択できる版管理に変更", changes: ["製品版の画面からβ版への変更操作を廃止", "β版のバージョン更新にβ版・製品版の両方のインストーラー取得を追加", "既存の版・録画データを保持し、製品版の更新チャンネルは固定"] },
   { version: "0.9.0-beta.90", title: "製品版履歴の表示とβ版・製品版の安全な手動切り替え", changes: ["公開済みの製品版履歴・リリースノートをβ版のバージョン更新に表示", "β版から製品版、製品版からβ版のインストーラー取得を確認付きで案内", "録画・VODダウンロード・コメント付き動画生成中の版切り替えを禁止"] },
   { version: "0.8.1-beta.89", title: "β版表示・更新画面の切り替え漏れを修正", changes: ["更新画面に残っていたα版の表示をβ版に修正", "β版専用更新チャンネルの表示を統一"] },
   { version: "0.8.1-beta.88", title: "β版へ移行・製品版と更新経路を分離", changes: ["配信AI新聞はβ版に残し、映像・音声・コメントの解析を強化します", "β版専用の更新チャンネルで製品版とは別に配布します"] },
@@ -1878,20 +1878,20 @@ export default function App() {
     return () => { active = false; };
   }, [tab, isDesktop]);
 
-  async function openEditionSwitcher() {
+  async function openEditionSwitcher(target: "beta" | "stable") {
     if (!window.kickRecorder || editionSwitching) return;
     setEditionSwitching(true);
     setEditionSwitchMessage("");
     try {
-      const result = await window.kickRecorder.openEditionInstaller(SWITCH_TO_EDITION);
+      const result = await window.kickRecorder.openEditionInstaller(target);
       if (result.opened) {
         setEditionSwitchMessage(
-          (SWITCH_TO_EDITION === "stable" ? "製品版" : "β版") + " v" + result.version +
-          " のインストーラーをブラウザーで開きました。ダウンロード後に実行すると、その版を利用できます。現在の版は自動削除されません。"
+          (target === "stable" ? "製品版" : "β版") + " v" + result.version +
+          " の公式インストーラーをブラウザーで開きました。ダウンロード後に実行してください。現在のアプリ・録画データは削除されません。"
         );
       }
     } catch (error) {
-      setEditionSwitchMessage(error instanceof Error ? error.message : "版を切り替えられませんでした。");
+      setEditionSwitchMessage(error instanceof Error ? error.message : "版のインストーラーを取得できませんでした。");
     } finally {
       setEditionSwitching(false);
     }
@@ -3594,27 +3594,27 @@ export default function App() {
         </div>
         <div className="version-history-section edition-switch-panel">
           <div className="settings-subheading">
-            <h3>版の切り替え（確認用）</h3>
-            <span className="comment-video-log-count">現在：{CURRENT_EDITION === "beta" ? "β版" : "製品版"}</span>
+            <h3>版を選択（β版専用）</h3>
+            <span className="comment-video-log-count">現在：β版</span>
           </div>
-          <p>β版は配信AI新聞を搭載、製品版は配信記事なしです。両版は別アプリとしてインストールされるため、いつでも公開済みの版に戻せます。</p>
-          <div className="edition-switch-actions">
+          <p>このβ版から「β版」と「製品版」の両方を選べます。製品版のアプリ内には版の切り替え機能を置きません。β版は削除せず残しておくと、β版画面で再びどちらのインストーラーも選べます。</p>
+          {(["beta", "stable"] as const).map(target => <div className="edition-switch-actions" key={target}>
             <div className="edition-switch-details">
-              <strong>{SWITCH_TO_EDITION === "stable" ? "製品版へ切り替える" : "β版へ戻す"}</strong>
+              <strong>{target === "beta" ? "β版を選択" : "製品版を選択"}</strong>
               <small>{editionReleasesLoading ? "GitHub Releasesを確認しています..." :
-                editionReleases[SWITCH_TO_EDITION][0]
-                ? "公開中：v" + editionReleases[SWITCH_TO_EDITION][0].version
-                : SWITCH_TO_EDITION === "stable" ? "製品版は未公開（1.0.0は開発候補）" : "公開済みβ版を確認できません"}</small>
+                editionReleases[target][0]
+                  ? "公開済み：v" + editionReleases[target][0].version
+                  : target === "stable" ? "製品版は未公開（1.0.0は検証候補）" : "公開済みβ版を確認できません"}</small>
             </div>
             <button type="button" className="primary-small"
-              onClick={() => void openEditionSwitcher()}
-              disabled={!isDesktop || editionReleasesLoading || editionSwitching || !editionReleases[SWITCH_TO_EDITION].length}>
-              {editionSwitching ? "確認中..." : SWITCH_TO_EDITION === "stable" ? "製品版のインストーラーを取得" : "β版のインストーラーを取得"}
+              onClick={() => void openEditionSwitcher(target)}
+              disabled={!isDesktop || editionReleasesLoading || editionSwitching || !editionReleases[target].length}>
+              {editionSwitching ? "確認中..." : target === "beta" ? "β版のインストーラーを取得" : "製品版のインストーラーを取得"}
             </button>
-          </div>
+          </div>)}
           {editionReleasesError && <p className="version-update-message" role="alert">{editionReleasesError}</p>}
           {editionSwitchMessage && <p className="version-update-message" role="status">{editionSwitchMessage}</p>}
-          <small className="version-update-hint">操作前に録画・VOD取得・コメント付き動画生成を終了してください。確認後にGitHub公式のインストーラーを開きます。元の版と録画・コメントデータは削除せず、自動更新先も分離します。二重録画を避けるため、両版で監視を同時にONにしないでください。</small>
+          <small className="version-update-hint">公式リリースのインストーラーを確認付きで開きます。録画・VOD取得・動画生成中は実行できません。製品版は配信AI新聞なし、β版は配信AI新聞あり。録画・コメント等のデータは削除しません。同時監視による二重録画に注意してください。</small>
         </div>
         {CURRENT_EDITION === "beta" && <div className="version-history-section product-history-panel">
           <div className="settings-subheading">
