@@ -28,6 +28,13 @@ assert.ok(live.includes("Array.isArray(article.pendingAnalysisComments)"),
   "過去記事の再解析時に保存済みコメントを再利用する");
 assert.ok(live.includes("Array.isArray(article.pendingAnalysisAudioSegments)"),
   "過去記事の再解析時に保存済み音声区間を再利用する");
+assert.ok(live.includes("if (isRetryableAudioTranscriptionError(error))"),
+  "配信終了後も一時的な音声認識エラーを再試行する");
+assert.ok(live.includes("this.sessions.get(session.article.slug) === session"),
+  "終了済み記事セッションに対して音声再試行タイマーが動作しない");
+assert.ok(live.includes("音声認識の最終再試行期限に達し"),
+  "音声認識が期限内に完了しない場合は未処理区間を明示する");
+
 assert.ok(ui.includes("AI未解析"),
   "記事カードに未解析データ件数を表示する");
 assert.ok(ui.includes("保存済み未解析データを含めてAI再解析"),
