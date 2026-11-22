@@ -413,10 +413,11 @@ export class LiveStreamArticleManager {
           }
         } catch (error) {
           const detail = error instanceof Error ? error.message.slice(0, 420) : String(error).slice(0, 420);
-          if (isRetryableAudioTranscriptionError(error) && !session.finishing) {
+          if (isRetryableAudioTranscriptionError(error)) {
             const retryCount = Math.min(16, chunk.retryCount + 1);
             const delayMs = getAudioTranscriptionRetryDelayMs(retryCount);
-            // Retain the failed WAV at the head of the queue so the timeline stays ordered.
+            // Retain the failed WAV at the head of the queue so the timeline stays ordered,
+            // including during finalization. The finalizer waits for this bounded retry.
             if (session.audioQueue.length >= 16) session.audioQueue.pop();
             session.audioQueue.unshift({ ...chunk, retryCount });
             session.article.audioError =
@@ -425,7 +426,7 @@ export class LiveStreamArticleManager {
             if (!session.audioRetryTimer) {
               session.audioRetryTimer = setTimeout(() => {
                 session.audioRetryTimer = null;
-                if (!session.finishing) void this.processAudioQueue(session);
+                if (this.sessions.get(session.article.slug) === session) void this.processAudioQueue(session);
               }, delayMs);
             }
             break;
@@ -692,10 +693,6 @@ export class LiveStreamArticleManager {
     const session = this.sessions.get(slug);
     if (!session) return;
     session.finishing = true;
-    if (session.audioRetryTimer) {
-      clearTimeout(session.audioRetryTimer);
-      session.audioRetryTimer = null;
-    }
     if (session.analysisTimer) {
       clearTimeout(session.analysisTimer);
       session.analysisTimer = null;
@@ -704,8 +701,16 @@ export class LiveStreamArticleManager {
     session.article.viewerCount = 0;
     const audioDrainDeadline = Date.now() + 240_000;
     while ((session.audioTranscriptionInFlight || session.audioQueue.length > 0) && Date.now() < audioDrainDeadline) {
-      if (!session.audioTranscriptionInFlight && session.audioQueue.length > 0) void this.processAudioQueue(session);
+      if (!session.audioTranscriptionInFlight && session.audioQueue.length > 0 && !session.audioRetryTimer) {
+        void this.processAudioQueue(session);
+      }
       await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    if (session.audioQueue.length > 0) {
+      session.article.audioError = [
+        session.article.audioError,
+        `音声認識の最終再試行期限に達し、未処理の音声区間が ${session.audioQueue.length.toLocaleString("ja-JP")}件残りました。録画動画が保存されている場合は、記事の再解析で元動画から音声を再取得できます。`
+      ].filter(Boolean).join(" ");
     }
     const hasFinalAnalysisInput = (): boolean =>
       session.pendingComments.length > 0 ||
