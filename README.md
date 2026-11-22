@@ -1,27 +1,26 @@
 # Kick Live Message Recorder
 
-Kick配信の映像・音声・コメントを録画・保存するWindowsデスクトップアプリです。24時間の配信監視、コメント付き動画の生成、映像・音声・コメントを組み合わせたAI配信記事に対応しています。
+KickのLIVE監視・録画・チャット保存・コメント付き動画生成を行うWindowsアプリです。開発版と製品版を別々に管理しています。
 
-> **最新公開版：0.8.1-alpha.87（α版）**  
-> **最新公開版のソース：`release/v0.8.1-alpha.87`（タグ付き）**  
-> 最新α版のインストーラーは公開済みです。**mainブランチのアプリコードは旧β版の履歴的スナップショット**で、最新α版のソースはタグ `v0.8.1-alpha.87` を参照してください。製品版はまだ公開していません。
+## 最新版（2026年11月23日）
 
-## バージョン・ダウンロード
+| 区分 | バージョン | 状態 | 配信AI新聞 |
+|---|---|---|---|
+| **β版** | **`0.8.1-beta.89`** | **公開済み（Pre-release）** | **あり・開発継続** |
+| **製品版** | `1.0.0` | **Windows実機の受け入れテスト待ち・未公開** | **なし** |
+| 旧α版 | `0.8.1-alpha.87` | 過去版として保持 | 旧機能 |
 
-| 区分 | バージョン | 状態 |
-|---|---|---|
-| 最新公開α版 | `0.8.1-alpha.87` | GitHub ReleasesのPre-release・Windowsインストーラー公開済み |
-| 旧β版（履歴） | `0.1.0-beta.50` | 公開済み・保持 |
-| 最新ソース | `v0.8.1-alpha.87` | α版の公開タグ（mainとは別ライン） |
+- [**最新β版をダウンロード（0.8.1-beta.89）**](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.8.1-beta.89)
+- [β版の最新ソース（betaブランチ）](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/beta)
+- [記事を含まない製品版のソース（stableブランチ）](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/stable)
+- [β版・製品版の機能差分／正式公開条件](https://github.com/kanenao/Kick-Live-Message-Recorder/blob/beta/docs/RELEASE_CHANNELS.md)
+- [最新の更新履歴](https://github.com/kanenao/Kick-Live-Message-Recorder/blob/beta/CHANGELOG.md)
 
-- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.8.1-alpha.87)
-- [公開α版のソースコード](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/v0.8.1-alpha.87)
-- [バージョン更新履歴（CHANGELOG）](CHANGELOG.md)
-- [α版・製品版の運用方針](docs/RELEASE_CHANNELS.md)
+**注意：この `main` ブランチのアプリコードは旧版の歴史的スナップショットです。** 新しいβ版の開発は `beta`、製品版の準備は `stable` で行います。`main` 内の古い説明・ワークフローは過去の開発履歴です。旧α版からβ版へは最新版インストーラーで移行してください。従来の保存済み録画・チャット・配信記事は自動削除しません。
 
-α版の録画継続機能は改善中で、実際の長時間LIVE配信での検証は引き続き必要です。
+---
 
-**旧β版・旧α版の自動更新について：** 新版側で互換配信ファイルを用意しましたが、過去にインストールされたアプリ自体の更新処理が故障している場合は旧プログラムを遠隔修正できません。更新エラーが出た場合は上記のインストーラーで一度更新してください。
+## 旧α版・過去の開発記録（以下は歴史的な記録です）
 
 ## Kick版の不具合自動検出・開発中の修正
 
