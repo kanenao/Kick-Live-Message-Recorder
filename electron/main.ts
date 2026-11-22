@@ -533,9 +533,9 @@ function initializeAutoUpdater(): void {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
-  // GitHubのα版Releaseはalpha.ymlで配布する。暗黙のチャンネル判定に任せず固定する。
+  // GitHubのβ版Releaseはbeta.ymlで配布する。暗黙のチャンネル判定に任せず固定する。
   // channel setterはダウングレードを許可するため、明示的に再度禁止する。
-  autoUpdater.channel = "alpha";
+  autoUpdater.channel = "beta";
   autoUpdater.allowPrerelease = true;
   autoUpdater.allowDowngrade = false;
 
