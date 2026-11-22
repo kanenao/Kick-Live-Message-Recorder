@@ -654,10 +654,12 @@ export class LiveStreamArticleManager {
       session.pendingComments.length > 0 ||
       session.pendingAudioSegments.length > 0 ||
       Boolean(session.videoFrames?.length && !session.article.videoAnalyzed);
-    for (let pass = 0; pass < 8 && hasFinalAnalysisInput(); pass += 1) {
+    const finalAnalysisDeadline = Date.now() + 8 * 60_000;
+    let finalRetryAttempt = 0;
+    for (let pass = 0; pass < 24 && hasFinalAnalysisInput() && Date.now() < finalAnalysisDeadline; pass += 1) {
       if (session.analysisInFlight) {
-        const deadline = Date.now() + 180_000;
-        while (session.analysisInFlight && Date.now() < deadline) {
+        const waitDeadline = Math.min(finalAnalysisDeadline, Date.now() + 180_000);
+        while (session.analysisInFlight && Date.now() < waitDeadline) {
           await new Promise(resolve => setTimeout(resolve, 250));
         }
         if (session.analysisInFlight) break;
@@ -665,10 +667,28 @@ export class LiveStreamArticleManager {
       const beforeComments = session.pendingComments.length;
       const beforeAudio = session.pendingAudioSegments.length;
       const beforeVideoAnalyzed = session.article.videoAnalyzed === true;
-      await this.analyze(session, true, session.forceAi === true);
+      const succeeded = await this.analyze(session, true, session.forceAi === true);
+      if (!succeeded) {
+        if (!isRetryableAiAnalysisError(session.article.aiError) ||
+            finalRetryAttempt >= MAX_FINAL_AI_ANALYSIS_RETRIES) break;
+        finalRetryAttempt += 1;
+        const delayMs = getAiAnalysisRetryDelayMs(finalRetryAttempt);
+        if (Date.now() + delayMs >= finalAnalysisDeadline) break;
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        continue;
+      }
+      finalRetryAttempt = 0;
       if (session.pendingComments.length === beforeComments &&
           session.pendingAudioSegments.length === beforeAudio &&
           (session.article.videoAnalyzed === true) === beforeVideoAnalyzed) break;
+    }
+    session.article.pendingAnalysisComments = session.pendingComments.length
+      ? session.pendingComments.slice(-2000) : undefined;
+    session.article.pendingAnalysisAudioSegments = session.pendingAudioSegments.length
+      ? session.pendingAudioSegments.slice(-80) : undefined;
+    if (session.pendingComments.length > 0 || session.pendingAudioSegments.length > 0) {
+      const pendingNote = `未解析の入力を記事データに保存しました（コメント ${session.pendingComments.length.toLocaleString("ja-JP")}件・音声 ${session.pendingAudioSegments.length.toLocaleString("ja-JP")}区間）。配信記事の「映像・音声・コメントでAI再解析」から再試行できます。`;
+      session.article.aiError = [session.article.aiError, pendingNote].filter(Boolean).join(" ");
     }
     session.article.status = "completed";
     session.article.durationSeconds = Math.max(0, Math.floor((Date.now() - Date.parse(session.article.startedAt)) / 1000));
