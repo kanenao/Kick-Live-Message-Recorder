@@ -190,7 +190,7 @@ type StreamArticle = {
   evidenceTimeline?: ArticleEvidenceEvent[];
   status?: "live" | "completed"; aiGenerated?: boolean; aiSummary?: string; highlights?: string[];
   lastAiUpdateAt?: string | null; viewerCount?: number; peakViewerCount?: number; aiError?: string;
-  videoAnalyzed?: boolean; videoFrameCount?: number; videoSummary?: string; videoScenes?: string[]; videoAnalyzedAt?: string | null;
+  videoAnalyzed?: boolean; videoFrameCount?: number; videoAnalyzedSampleCount?: number; videoSummary?: string; videoScenes?: string[]; videoAnalyzedAt?: string | null;
   videoPreviewAvailable?: boolean; videoPreviewTimeSeconds?: number; videoPreviewUpdatedAt?: string;
   audioAnalyzed?: boolean; audioSamplingMode?: "continuous" | "distributed"; audioSegmentCount?: number; audioSummary?: string; audioTranscript?: string;
   audioTranscriptSegments?: Array<{ startSeconds: number; endSeconds: number; text: string }>;
@@ -216,7 +216,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.7.5-alpha.85";
+const APP_VERSION = "0.7.6-alpha.86";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -244,6 +244,16 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  {
+    version: "0.7.6-alpha.86",
+    title: "LIVE配信AI新聞の映像解析を全時間帯サンプリングへ改善",
+    changes: [
+      "LIVE映像の直近8枚だけでなく、配信全体から均等に選んだ最大7枚＋最新フレームをAI解析へ送信",
+      "映像キャプチャの一時切断・再接続をまたいでサンプリング履歴を保持",
+      "AIに実際に送った代表フレーム数と取得累計を分けて表示",
+      "長時間配信でも冒頭・中盤・終盤の場面が記事へ反映されるよう改善"
+    ]
+  },
   {
     version: "0.7.5-alpha.85",
     title: "正式アイコンのアプリ内表示をWindowsインストール版で修正",
@@ -3458,7 +3468,7 @@ export default function App() {
                   </li>)}
                 </ol>
               </details>}
-              {article.videoAnalyzed && <div className="article-video-analysis"><strong>映像から確認した場面（代表フレーム {article.videoFrameCount ?? article.videoScenes?.length ?? 0}枚）</strong>{deduplicateArticleSentences(article.videoSummary, 1000) && <p>{deduplicateArticleSentences(article.videoSummary, 1000)}</p>}{deduplicateArticleList(article.videoScenes ?? [], 8, 300, article.videoSummary ?? "").length > 0 && <ul>{deduplicateArticleList(article.videoScenes ?? [], 8, 300, article.videoSummary ?? "").map((scene, index) => <li key={index}>{scene}</li>)}</ul>}</div>}
+              {article.videoAnalyzed && <div className="article-video-analysis"><strong>映像から確認した場面（AI解析した代表フレーム {article.videoAnalyzedSampleCount ?? article.videoScenes?.length ?? 0}枚／取得累計 {article.videoFrameCount ?? 0}枚）</strong>{deduplicateArticleSentences(article.videoSummary, 1000) && <p>{deduplicateArticleSentences(article.videoSummary, 1000)}</p>}{deduplicateArticleList(article.videoScenes ?? [], 8, 300, article.videoSummary ?? "").length > 0 && <ul>{deduplicateArticleList(article.videoScenes ?? [], 8, 300, article.videoSummary ?? "").map((scene, index) => <li key={index}>{scene}</li>)}</ul>}</div>}
               {article.audioAnalyzed && <div className="article-audio-analysis">
                 <strong>音声から確認した内容</strong>
                 {article.audioSamplingMode === "distributed" && <p className="article-audio-coverage-note">長時間配信のため、全時間帯から一部の音声区間を抜き出して文字起こししています。配信全体の発言を網羅したものではありません。</p>}
