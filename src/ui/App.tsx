@@ -216,7 +216,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.7.6-alpha.86";
+const APP_VERSION = "0.8.0-alpha.86";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -245,7 +245,7 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
 ];
 const VERSION_HISTORY = [
   {
-    version: "0.7.6-alpha.86",
+    version: "0.8.0-alpha.86",
     title: "LIVE配信AI新聞の映像解析を全時間帯サンプリングへ改善",
     changes: [
       "LIVE映像の直近8枚だけでなく、配信全体から均等に選んだ最大7枚＋最新フレームをAI解析へ送信",
