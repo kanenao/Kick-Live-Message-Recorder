@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+assert.ok(live.includes("if (videoFrames.length > 0) article.videoAnalyzed = false"),
+  "保存済み記事の再解析で新しい映像フレームを再送信する");
 import { readFileSync } from "node:fs";
 
 const live = readFileSync(new URL("../electron/live-articles.ts", import.meta.url), "utf8");
