@@ -1728,12 +1728,12 @@ export default function App() {
   }, [commentLogFiles, librarySelectedLogPath]);
 
   useEffect(() => {
-    if (!isDesktop || !window.kickRecorder) return;
+    if (!ARTICLES_ENABLED || !isDesktop || !window.kickRecorder) return;
     return window.kickRecorder.onLiveArticleCaptureStatus(status => setLiveArticleCaptureStatus(status));
   }, [isDesktop]);
 
   useEffect(() => {
-    if (tab !== "articles" || !isDesktop || !window.kickRecorder) return;
+    if (!ARTICLES_ENABLED || tab !== "articles" || !isDesktop || !window.kickRecorder) return;
     let active = true;
     Promise.all([window.kickRecorder.listStreamArticles(), window.kickRecorder.listCommentLogFiles()])
       .then(([articles, logs]) => {
@@ -1746,7 +1746,7 @@ export default function App() {
   }, [tab, isDesktop, libraryRefreshKey, settings.outputDirectory]);
 
   useEffect(() => {
-    if (!isDesktop || !window.kickRecorder) return;
+    if (!ARTICLES_ENABLED || !isDesktop || !window.kickRecorder) return;
     let active = true;
     void window.kickRecorder.getAiArticleStatus().then(status => {
       if (active) setAiArticleStatus(status);
