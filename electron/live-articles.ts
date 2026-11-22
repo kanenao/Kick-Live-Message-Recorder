@@ -41,6 +41,7 @@ export type LiveArticle = {
   aiError?: string;
   videoAnalyzed?: boolean;
   videoFrameCount?: number;
+  videoAnalyzedSampleCount?: number;
   videoSummary?: string;
   videoScenes?: string[];
   videoAnalyzedAt?: string | null;
@@ -1060,6 +1061,7 @@ export class LiveStreamArticleManager {
       if (videoFramesForAnalysis.length) {
         article.videoFrameCount = videoFrameTotalCountForAnalysis;
         if (result.videoSummary.trim()) {
+          article.videoAnalyzedSampleCount = videoFramesForAnalysis.length;
           article.videoAnalyzed = (session.videoFrameTotalCount ?? videoFrameTotalCountForAnalysis) <= videoFrameTotalCountForAnalysis;
           article.videoSummary = result.videoSummary;
           article.videoScenes = result.videoScenes;
