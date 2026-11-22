@@ -187,6 +187,8 @@ type StreamArticle = {
   durationSeconds: number; commentCount: number; uniqueCommenters: number; keywords: string[];
   paragraphs: string[]; sourceVideo: string; sourceLogs: string[]; createdAt: string;
   commentEvidenceCount?: number;
+  pendingAnalysisComments?: Array<{ at: string; text: string; timeInSeconds?: number }>;
+  pendingAnalysisAudioSegments?: Array<{ startSeconds: number; endSeconds: number; text: string }>;
   evidenceTimeline?: ArticleEvidenceEvent[];
   status?: "live" | "completed"; aiGenerated?: boolean; aiSummary?: string; highlights?: string[];
   lastAiUpdateAt?: string | null; viewerCount?: number; peakViewerCount?: number; aiError?: string;
@@ -3456,6 +3458,8 @@ export default function App() {
                 <span className={article.audioAnalyzed ? "is-analyzed" : ""}>音声 {article.audioAnalyzed ? `文字起こし ${(article.audioSegmentCount ?? article.audioTranscriptSegments?.length ?? 0).toLocaleString("ja-JP")}区間` : "未解析"}</span>
                 <span className={article.commentCount > 0 ? "is-analyzed" : ""}>コメント {article.commentCount.toLocaleString("ja-JP")}件</span>
                 {typeof article.commentEvidenceCount === "number" && <span className={article.commentEvidenceCount > 0 ? "is-analyzed" : ""}>AI参照候補 {article.commentEvidenceCount.toLocaleString("ja-JP")}件</span>}
+                {((article.pendingAnalysisComments?.length ?? 0) + (article.pendingAnalysisAudioSegments?.length ?? 0)) > 0 &&
+                  <span>AI未解析 {article.pendingAnalysisComments?.length ?? 0}コメント・{article.pendingAnalysisAudioSegments?.length ?? 0}音声区間</span>}
               </div>
               {Boolean(article.evidenceTimeline?.length) && <details className="article-evidence-details">
                 <summary>解析に使った時刻付きの情報源（{article.evidenceTimeline?.length ?? 0}件・抜粋）</summary>
@@ -3487,7 +3491,7 @@ export default function App() {
               <div className="comment-video-actions article-card-actions">
                 <button className="small-action" onClick={() => void reanalyzeStreamArticle(article)}
                   disabled={reanalyzingArticleId !== null || articleBusy}>
-                  {reanalyzingArticleId === article.id ? "AIで再解析中..." : article.status === "live" ? "LIVE終了後の記事を復旧・再解析" : "映像・音声・コメントでAI再解析"}
+                  {reanalyzingArticleId === article.id ? "AIで再解析中..." : article.status === "live" ? "LIVE終了後の記事を復旧・再解析" : ((article.pendingAnalysisComments?.length ?? 0) + (article.pendingAnalysisAudioSegments?.length ?? 0)) > 0 ? "保存済み未解析データを含めてAI再解析" : "映像・音声・コメントでAI再解析"}
                 </button>
                 <button className="remove" onClick={() => void deleteStreamArticle(article)} disabled={deletingArticleId !== null}>
                   {deletingArticleId === article.id ? "削除中..." : "この記事を削除"}
