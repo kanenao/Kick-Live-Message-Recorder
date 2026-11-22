@@ -1,8 +1,8 @@
 {
   "name": "kick-live-message-recorder",
-  "version": "0.8.1-alpha.87",
+  "version": "1.0.0",
   "private": true,
-  "description": "Kick配信の映像・音声・チャットを保存するWindowsアプリ",
+  "description": "Kick配信の映像・音声・チャット保存とコメント付き動画の生成を行うWindows製品版",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && cross-env KICK_RECORDER_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
@@ -38,8 +38,8 @@
     "@types/ws": "^8.18.2"
   },
   "build": {
-    "appId": "jp.kanenao.kickrecorder",
-    "productName": "Kick Live Message Recorder",
+    "appId": "jp.kanenao.kickrecorder.stable",
+    "productName": "Kick Live Message Recorder Stable",
     "asar": true,
     "directories": {
       "output": "release"
@@ -68,7 +68,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Kick Live Message Recorder",
+      "shortcutName": "Kick Live Message Recorder Stable",
       "language": 1041,
       "installerLanguages": [
         "ja_JP"
@@ -80,8 +80,8 @@
         "provider": "github",
         "owner": "kanenao",
         "repo": "Kick-Live-Message-Recorder",
-        "releaseType": "prerelease",
-        "channel": "alpha"
+        "releaseType": "release",
+        "channel": "latest"
       }
     ],
     "extraResources": [
@@ -116,5 +116,5 @@
     "type": "git",
     "url": "https://github.com/kanenao/Kick-Live-Message-Recorder.git"
   },
-  "productName": "Kick Live Message Recorder"
+  "productName": "Kick Live Message Recorder Stable"
 }
