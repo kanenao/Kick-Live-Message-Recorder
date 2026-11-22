@@ -51,7 +51,7 @@ jobs:
       - name: Kickユーザーアイコン・配信者名のページ遷移テスト
         run: node --experimental-strip-types scripts/test-kick-profile-links.mjs
       - name: 動画サムネイル抽出のファイル安全性テスト
-        run: node --experimental-strip-types scripts/test-recording-thumbnails.mjs
+        run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-recording-thumbnails.mjs
       - name: 録画・配信AI新聞の時刻別場面プレビュー自動テスト
         run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-recording-storyboard.mjs
       - name: VOD ASS字幕生成テスト
