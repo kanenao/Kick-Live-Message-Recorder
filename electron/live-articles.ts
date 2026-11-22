@@ -12,6 +12,7 @@ import { saveArticlePreviewFrame } from "./article-preview";
 import { articleDurationForSave } from "./article-timeline";
 import { nextLiveArticleAnalysisDelayMs } from "./article-analysis-policy";
 import { getAudioTranscriptionRetryDelayMs, isRetryableAudioTranscriptionError } from "./audio-retry-policy";
+import { getAiAnalysisRetryDelayMs, isRetryableAiAnalysisError, MAX_FINAL_AI_ANALYSIS_RETRIES } from "./ai-retry-policy";
 
 export type LiveArticle = {
   id: string;
@@ -24,6 +25,8 @@ export type LiveArticle = {
   durationSeconds: number;
   commentCount: number;
   commentEvidenceCount?: number;
+  pendingAnalysisComments?: CommentSample[];
+  pendingAnalysisAudioSegments?: AudioTranscriptSegment[];
   evidenceTimeline?: ArticleEvidenceEvent[];
   uniqueCommenters: number;
   keywords: string[];
@@ -286,9 +289,10 @@ export class LiveStreamArticleManager {
       article, directory: articleRoot, commenters: new Set(),
       uniqueCommenterBaseline: previous?.uniqueCommenters ?? 0,
       keywordCounts: new Map((previous?.keywords ?? []).map(word => [word, 1])),
-      pendingComments: [], lastAnalysisAt: 0, analysisInFlight: false, analysisTimer: null, finishing: false,
+      pendingComments: Array.isArray(previous?.pendingAnalysisComments) ? previous.pendingAnalysisComments.slice(-2000) : [],
+      lastAnalysisAt: 0, analysisInFlight: false, analysisTimer: null, finishing: false,
       videoFrameTotalCount: previous?.videoFrameCount ?? 0,
-      pendingAudioSegments: [],
+      pendingAudioSegments: Array.isArray(previous?.pendingAnalysisAudioSegments) ? previous.pendingAnalysisAudioSegments.slice(-80) : [],
       audioQueue: [],
       audioTranscriptionInFlight: false,
       audioRetryTimer: null,
@@ -846,15 +850,15 @@ export class LiveStreamArticleManager {
     return { ok: true, message: `OpenAI APIに接続できました（モデル：${model}）。` };
   }
 
-  private async analyze(session: LiveSession, final: boolean, force = false): Promise<void> {
+  private async analyze(session: LiveSession, final: boolean, force = false): Promise<boolean> {
     if (session.analysisInFlight || (
       session.pendingComments.length === 0 &&
       session.pendingAudioSegments.length === 0 &&
       !(session.videoFrames?.length && !session.article.videoAnalyzed)
-    )) return;
+    )) return false;
     const config = this.getConfig();
     const key = config.provider === "ollama" ? "local" : this.getApiKey();
-    if ((!config.enabled && !session.forceAi && !force) || !key) return;
+    if ((!config.enabled && !session.forceAi && !force) || !key) return false;
     if (session.analysisTimer) {
       clearTimeout(session.analysisTimer);
       session.analysisTimer = null;
@@ -864,6 +868,10 @@ export class LiveStreamArticleManager {
     const batch = session.pendingComments.splice(0, final ? 120 : 80);
     const audioBatch = session.pendingAudioSegments.splice(0, final ? 40 : 30);
     const article = session.article;
+    // Persist the in-flight batch before contacting the model so an app crash or
+    // transient provider failure cannot silently discard captured source material.
+    article.pendingAnalysisComments = [...batch, ...session.pendingComments].slice(-2000);
+    article.pendingAnalysisAudioSegments = [...audioBatch, ...session.pendingAudioSegments].slice(-80);
     const videoFramesForAnalysis = session.videoFrames?.length && !article.videoAnalyzed
       ? session.videoFrames
       : [];
@@ -879,6 +887,7 @@ export class LiveStreamArticleManager {
       18
     );
     this.persist(session);
+    let succeeded = false;
     const userInput = {
       broadcaster: article.displayName,
       streamTitle: article.streamTitle || article.headline,
@@ -1075,6 +1084,7 @@ export class LiveStreamArticleManager {
       }
       article.aiGenerated = true;
       article.aiError = visualWarning;
+      succeeded = true;
       article.lastAiUpdateAt = new Date().toISOString();
     } catch (error) {
       session.pendingComments.unshift(...batch);
@@ -1082,12 +1092,15 @@ export class LiveStreamArticleManager {
       article.aiError = error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500);
     } finally {
       session.analysisInFlight = false;
+      article.pendingAnalysisComments = session.pendingComments.length ? session.pendingComments.slice(-2000) : undefined;
+      article.pendingAnalysisAudioSegments = session.pendingAudioSegments.length ? session.pendingAudioSegments.slice(-80) : undefined;
       this.persist(session);
       if (final && (session.pendingComments.length > 0 || session.pendingAudioSegments.length > 0) && !article.aiGenerated) {
         article.aiError = article.aiError || "AI最終分析を完了できませんでした。";
       }
       if (!session.finishing && !final) this.scheduleAnalysis(session);
     }
+    return succeeded;
   }
 
   private persist(session: LiveSession): void {
