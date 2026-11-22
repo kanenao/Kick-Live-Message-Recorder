@@ -25,6 +25,46 @@ try {
   assert.equal(recordingThumbnailSource(directory, 123), null,
     "Invalid renderer input must be rejected");
 
+  const recordings = join(directory, "Recordings", "daibututv2");
+  mkdirSync(recordings, { recursive: true });
+  const newRecording = join(recordings, "daibututv2_20261122_120000.mp4");
+  writeFileSync(newRecording, Buffer.alloc(4096));
+  assert.ok(recordingThumbnailSource(directory, newRecording),
+    "Per-broadcaster recording files still support thumbnails");
+
+  const comments = join(directory, "CommentVideos", "daibututv2");
+  mkdirSync(comments, { recursive: true });
+  const composed = join(comments, "daibututv2_20261122_120000_comments.mp4");
+  writeFileSync(composed, Buffer.alloc(4096));
+  assert.ok(recordingThumbnailSource(directory, composed),
+    "Composed videos in per-broadcaster folders remain available");
+
+  const oldComposed = join(directory, "CommentVideos", "old_20261122_120000.mp4");
+  writeFileSync(oldComposed, Buffer.alloc(4096));
+  assert.ok(recordingThumbnailSource(directory, oldComposed),
+    "Legacy composed video thumbnails remain supported");
+
+  const chatDirectory = join(directory, "Chat", "daibututv2");
+  mkdirSync(chatDirectory, { recursive: true });
+  const chatVideo = join(chatDirectory, "hidden_20261122_120000.mp4");
+  writeFileSync(chatVideo, Buffer.alloc(4096));
+  assert.equal(recordingThumbnailSource(directory, chatVideo), null,
+    "A video-like file inside Chat is not a recording-library preview target");
+
+  const unrelatedDirectory = join(directory, "SomeOtherFolder");
+  mkdirSync(unrelatedDirectory);
+  const unrelatedVideo = join(unrelatedDirectory, "sample.mp4");
+  writeFileSync(unrelatedVideo, Buffer.alloc(4096));
+  assert.equal(recordingThumbnailSource(directory, unrelatedVideo), null,
+    "Unrelated files inside the root folder must not be previewed");
+
+  const nestedDirectory = join(recordings, "nested");
+  mkdirSync(nestedDirectory);
+  const tooDeep = join(nestedDirectory, "hidden.mp4");
+  writeFileSync(tooDeep, Buffer.alloc(4096));
+  assert.equal(recordingThumbnailSource(directory, tooDeep), null,
+    "Unlisted subdirectories inside a broadcaster folder must be excluded");
+
   const link = join(directory, "linked.mp4");
   try {
     symlinkSync(video, link, "file");
