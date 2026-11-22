@@ -2,13 +2,13 @@
 
 Kick配信の監視・録画・コメント保存・コメント付き動画生成と、**配信AI新聞**を開発するWindowsアプリです。
 
-> **最新公開β版：`0.8.1-beta.88`**（Windowsインストーラー公開済み）
-> **次期β版：`0.8.1-beta.89`**（更新欄のβ表記修正を検証中）
+> **最新公開β版：`0.8.1-beta.89`**（Windowsインストーラー公開済み）
+> **製品版：`1.0.0`**（記事なし・Windows実機検証待ちで未公開）
 > 製品版 `1.0.0` は別の `stable` ブランチで準備し、配信記事を含めません。
 
 - [β版開発ソース](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/beta)
 - [製品版開発ソース](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/stable)
-- [β版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.8.1-beta.88)
+- [β版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.8.1-beta.89)
 - [最後に公開したα版](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.8.1-alpha.87)
 - [版の違い・リリース条件](docs/RELEASE_CHANNELS.md)
 - [更新履歴](CHANGELOG.md)
