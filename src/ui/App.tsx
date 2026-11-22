@@ -219,8 +219,6 @@ type CommentVideoPreviewData = {
 };
 
 const APP_VERSION = "1.0.0";
-const CURRENT_EDITION: "beta" | "stable" = APP_VERSION.includes("-beta.") ? "beta" : "stable";
-const SWITCH_TO_EDITION: "beta" | "stable" = CURRENT_EDITION === "beta" ? "stable" : "beta";
 // Product edition never exposes beta-only AI articles.
 const ARTICLES_ENABLED = APP_VERSION.includes("-beta.");
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
@@ -1284,14 +1282,6 @@ export default function App() {
     message: "起動時に自動で更新を確認します。"
   });
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
-  const [editionReleases, setEditionReleases] = useState<{
-    beta: Array<{ version: string; title: string; publishedAt: string; notes: string; url: string; installerUrl: string }>;
-    stable: Array<{ version: string; title: string; publishedAt: string; notes: string; url: string; installerUrl: string }>;
-  }>({ beta: [], stable: [] });
-  const [editionReleasesLoading, setEditionReleasesLoading] = useState(false);
-  const [editionReleasesError, setEditionReleasesError] = useState("");
-  const [editionSwitching, setEditionSwitching] = useState(false);
-  const [editionSwitchMessage, setEditionSwitchMessage] = useState("");
   const [recordingRequests, setRecordingRequests] = useState<Record<string, boolean>>({});
   const [recordingFiles, setRecordingFiles] = useState<RecordingFile[]>([]);
   const [storyboardTarget, setStoryboardTarget] = useState<{ path: string; title: string } | null>(null);
@@ -1865,39 +1855,6 @@ export default function App() {
       setStorageError("ブラウザー内に設定を保存できませんでした。");
     }
   }, [channels, recordingOnlyChannels, settings, isReady]);
-
-  useEffect(() => {
-    if (tab !== "updates" || !isDesktop || !window.kickRecorder) return;
-    let active = true;
-    setEditionReleasesLoading(true);
-    setEditionReleasesError("");
-    void window.kickRecorder.getEditionReleases()
-      .then(items => { if (active) setEditionReleases(items); })
-      .catch(error => {
-        if (active) setEditionReleasesError(error instanceof Error ? error.message : "版の公開履歴を取得できません。");
-      })
-      .finally(() => { if (active) setEditionReleasesLoading(false); });
-    return () => { active = false; };
-  }, [tab, isDesktop]);
-
-  async function openEditionSwitcher() {
-    if (!window.kickRecorder || editionSwitching) return;
-    setEditionSwitching(true);
-    setEditionSwitchMessage("");
-    try {
-      const result = await window.kickRecorder.openEditionInstaller(SWITCH_TO_EDITION);
-      if (result.opened) {
-        setEditionSwitchMessage(
-          (SWITCH_TO_EDITION === "stable" ? "製品版" : "β版") + " v" + result.version +
-          " のインストーラーをブラウザーで開きました。ダウンロード後に実行すると、その版を利用できます。現在の版は自動削除されません。"
-        );
-      }
-    } catch (error) {
-      setEditionSwitchMessage(error instanceof Error ? error.message : "版を切り替えられませんでした。");
-    } finally {
-      setEditionSwitching(false);
-    }
-  }
 
   async function openRecordingFolder() {
     if (!window.kickRecorder) return;
@@ -3594,51 +3551,7 @@ export default function App() {
             <small className="version-update-hint">起動時と約6時間ごとに製品版の更新を自動確認・ダウンロードします。開発途中のβ版は自動的に配信されません。録画・VOD保存を完了してから再起動し更新してください。</small>
           </div>
         </div>
-        <div className="version-history-section edition-switch-panel">
-          <div className="settings-subheading">
-            <h3>版の切り替え（確認用）</h3>
-            <span className="comment-video-log-count">現在：{CURRENT_EDITION === "beta" ? "β版" : "製品版"}</span>
-          </div>
-          <p>β版は配信AI新聞を搭載、製品版は配信記事なしです。両版は別アプリとしてインストールされるため、いつでも公開済みの版に戻せます。</p>
-          <div className="edition-switch-actions">
-            <div className="edition-switch-details">
-              <strong>{SWITCH_TO_EDITION === "stable" ? "製品版へ切り替える" : "β版へ戻す"}</strong>
-              <small>{editionReleasesLoading ? "GitHub Releasesを確認しています..." :
-                editionReleases[SWITCH_TO_EDITION][0]
-                ? "公開中：v" + editionReleases[SWITCH_TO_EDITION][0].version
-                : SWITCH_TO_EDITION === "stable" ? "製品版は未公開（1.0.0は開発候補）" : "公開済みβ版を確認できません"}</small>
-            </div>
-            <button type="button" className="primary-small"
-              onClick={() => void openEditionSwitcher()}
-              disabled={!isDesktop || editionReleasesLoading || editionSwitching || !editionReleases[SWITCH_TO_EDITION].length}>
-              {editionSwitching ? "確認中..." : SWITCH_TO_EDITION === "stable" ? "製品版のインストーラーを取得" : "β版のインストーラーを取得"}
-            </button>
-          </div>
-          {editionReleasesError && <p className="version-update-message" role="alert">{editionReleasesError}</p>}
-          {editionSwitchMessage && <p className="version-update-message" role="status">{editionSwitchMessage}</p>}
-          <small className="version-update-hint">操作前に録画・VOD取得・コメント付き動画生成を終了してください。確認後にGitHub公式のインストーラーを開きます。元の版と録画・コメントデータは削除せず、自動更新先も分離します。二重録画を避けるため、両版で監視を同時にONにしないでください。</small>
-        </div>
-        {CURRENT_EDITION === "beta" && <div className="version-history-section product-history-panel">
-          <div className="settings-subheading">
-            <h3>製品版のバージョン更新履歴</h3>
-            <span className="comment-video-log-count">{editionReleases.stable.length}件・公開済みのみ</span>
-          </div>
-          {editionReleasesLoading ? <p>製品版の公開履歴を読み込み中...</p> :
-           editionReleasesError ? <p>GitHub Releasesの取得に失敗しました。再度バージョン更新画面を開いてください。</p> :
-           editionReleases.stable.length === 0
-             ? <p>製品版はまだ公開されていません。1.0.0はテスト用ビルドの段階です。正式公開後、この欄にバージョンと更新内容が自動的に表示されます。</p>
-             : <div className="version-history-list">
-                 {editionReleases.stable.map((release, index) => <article className="version-history-item" key={release.version}>
-                   <div className="version-history-marker">{index === 0 ? "NEW" : "製"}</div>
-                   <div className="version-history-content">
-                     <div className="version-history-heading"><strong>v{release.version}</strong><span>{release.title}</span></div>
-                     <small>{release.publishedAt ? new Date(release.publishedAt).toLocaleDateString("ja-JP") : "公開日未取得"}</small>
-                     {release.notes ? <details className="edition-release-details"><summary>更新内容を見る</summary><ReleaseNotesContent value={release.notes} /></details> : <p>更新内容はGitHub Releasesで確認できます。</p>}
-                     <a href={release.url} target="_blank" rel="noreferrer">GitHubで公開情報を見る ↗</a>
-                   </div>
-                 </article>)}
-               </div>}
-        </div>}
+        <div className="notice">製品版は製品版の更新のみを扱います。β版への切り替え機能はありません。β版・製品版の選択は、別途インストールしたβ版の「バージョン更新」画面から操作してください。</div>
         {updateStatus.releaseNotes && <div className="release-notes-panel">
           <div className="settings-subheading"><h3>公開中のリリースノート</h3>{updateStatus.releaseDate && <span className="comment-video-log-count">{new Date(updateStatus.releaseDate).toLocaleDateString("ja-JP")}</span>}</div>
           <ReleaseNotesContent value={updateStatus.releaseNotes} />
@@ -3655,7 +3568,7 @@ export default function App() {
             </article>)}
           </div>
         </div>
-        <div className="notice">Windowsインストーラー版の更新に対応します。旧β版や更新機能のない古い版では自動更新に失敗する場合があります。その場合は <a href="https://github.com/kanenao/Kick-Live-Message-Recorder/releases" target="_blank" rel="noreferrer">GitHub Releasesから最新製品版を手動インストール</a> してください。ZIP版・ブラウザープレビューでは自動更新できません。安定版への自動切り替えは行いません。</div>
+        <div className="notice">Windowsインストーラー版は製品版専用チャンネルから更新します。更新機能のない古い製品版では更新に失敗する場合があります。その場合は <a href="https://github.com/kanenao/Kick-Live-Message-Recorder/releases" target="_blank" rel="noreferrer">GitHub Releasesから最新製品版を手動インストール</a> してください。ZIP版・ブラウザープレビューでは自動更新できません。安定版への自動切り替えは行いません。</div>
       </section>}
 
       {tab === "settings" && <section className="panel">
