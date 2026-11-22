@@ -1,0 +1,205 @@
+name: Kick β版・製品版の分離検証と配布
+
+on:
+  push:
+    branches: [beta, stable, "release/v*"]
+  pull_request:
+    branches: [beta, stable]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: 版の整合性・回帰テスト・型チェック
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 依存パッケージをインストール
+        run: npm install --no-audit --no-fund --no-package-lock
+      - name: β版・製品版の分離ポリシーテスト
+        run: node scripts/test-edition-split.mjs
+      - name: 既存の録画・コメント・AI回帰テスト
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=0
+          for file in scripts/test-*.mjs; do
+            case "$file" in
+              scripts/test-release-tag-policy.mjs|scripts/test-auto-updater-channel.mjs|scripts/test-readme-version.mjs|scripts/test-update-assets.mjs|scripts/test-edition-split.mjs)
+                continue ;;
+            esac
+            echo "::group::$file"
+            node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs "$file"
+            echo "::endgroup::"
+            count=$((count + 1))
+          done
+          test "$count" -ge 30
+          echo "既存の回帰テスト $count 件実行" >> "$GITHUB_STEP_SUMMARY"
+      - name: TypeScript型チェック
+        run: npm run typecheck
+      - name: Electronアプリビルド
+        run: npm run build
+      - name: file:// 向け相対アセット検証
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs=require("node:fs");
+          const html=fs.readFileSync("dist/index.html","utf8");
+          const assets=[...html.matchAll(/(?:src|href)=["']([^"']+)["']/g)].map(m=>m[1]).filter(p=>/\.js|\.css/.test(p));
+          if(assets.length<2 || assets.some(p=>!p.startsWith("./"))) throw Error("Electronで読み込めないアセットURL: "+assets.join(", "));
+          NODE
+
+  windows-installer:
+    name: Windowsインストーラーと更新マニフェスト
+    runs-on: windows-latest
+    needs: quality
+    if: ${{ github.event_name != 'pull_request' }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 依存パッケージをインストール
+        run: npm install --no-audit --no-fund --no-package-lock
+      - name: yt-dlp Windows版を取得してアプリへ同梱
+
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "vendor/win-x64" | Out-Null
+          $target = "vendor/win-x64/yt-dlp.exe"
+          Invoke-WebRequest -Uri "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" -OutFile $target
+          if ((Get-Item $target).Length -lt 10000000) {
+            throw "yt-dlp.exe のダウンロードサイズが不正です。"
+          }
+          & $target --version
+          if ($LASTEXITCODE -ne 0) { throw "yt-dlp.exe を実行できませんでした。" }
+
+      - name: FFmpeg LGPL版を取得してアプリへ同梱
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "vendor/win-x64" | Out-Null
+          $archiveName = "ffmpeg-n9.0-latest-win64-lgpl-9.0.zip"
+          $archivePath = Join-Path $env:RUNNER_TEMP $archiveName
+          $archiveUrl = "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/latest/$archiveName"
+          Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath
+          if ((Get-Item $archivePath).Length -lt 80000000) {
+            throw "FFmpegアーカイブのサイズが不正です。"
+          }
+
+          $extractPath = Join-Path $env:RUNNER_TEMP "ffmpeg-extract"
+          if (Test-Path $extractPath) { Remove-Item -Recurse -Force $extractPath }
+          Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
+          $ffmpegSource = Get-ChildItem -Path $extractPath -Filter "ffmpeg.exe" -File -Recurse | Select-Object -First 1
+          if (-not $ffmpegSource) { throw "FFmpegアーカイブ内にffmpeg.exeがありません。" }
+
+          $ffmpegTarget = "vendor/win-x64/ffmpeg.exe"
+          Copy-Item -LiteralPath $ffmpegSource.FullName -Destination $ffmpegTarget -Force
+          if ((Get-Item $ffmpegTarget).Length -lt 20000000) {
+            throw "ffmpeg.exe のサイズが不正です。"
+          }
+          & $ffmpegTarget -version
+          if ($LASTEXITCODE -ne 0) { throw "同梱するffmpeg.exeを実行できませんでした。" }
+
+          $ffprobeSource = Get-ChildItem -Path $extractPath -Filter "ffprobe.exe" -File -Recurse | Select-Object -First 1
+          if (-not $ffprobeSource) { throw "FFmpegアーカイブ内にffprobe.exeがありません。" }
+          $ffprobeTarget = "vendor/win-x64/ffprobe.exe"
+          Copy-Item -LiteralPath $ffprobeSource.FullName -Destination $ffprobeTarget -Force
+          if ((Get-Item $ffprobeTarget).Length -lt 1000000) {
+            throw "ffprobe.exe のサイズが不正です。"
+          }
+          & $ffprobeTarget -version
+          if ($LASTEXITCODE -ne 0) { throw "同梱するffprobe.exeを実行できませんでした。" }
+
+          $licenseTarget = "vendor/win-x64/FFmpeg-LGPL-2.1.txt"
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FFmpeg/FFmpeg/n9.0/COPYING.LGPLv2.1" -OutFile $licenseTarget
+          if ((Get-Item $licenseTarget).Length -lt 10000) {
+            throw "FFmpeg LGPLライセンス文書を取得できませんでした。"
+          }
+
+          @"
+          FFmpeg 9.0 Windows x64 (LGPL static build)
+          Binary distribution: FFmpeg-Builds/FFmpeg-Builds
+          Build archive: $archiveName
+          FFmpeg source: https://github.com/FFmpeg/FFmpeg/tree/n9.0
+          Build scripts and package information: https://github.com/FFmpeg-Builds/FFmpeg-Builds
+          License: GNU Lesser General Public License version 2.1 or later.
+          The accompanying FFmpeg-LGPL-2.1.txt contains the LGPL v2.1 license text.
+          "@ | Set-Content -Path "vendor/win-x64/FFmpeg-NOTICE.txt" -Encoding UTF8
+
+      - name: Windowsインストーラーを作成
+        run: npm run dist:win
+      - name: 当該版の更新マニフェスト・exe名・SHA512を確認
+        run: node scripts/validate-channel-release.mjs release
+      - name: インストーラーと更新情報を保存
+        uses: actions/upload-artifact@v4
+        with:
+          name: kick-channel-windows
+          path: |
+            release/*.exe
+            release/*.blockmap
+            release/*.yml
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: テスト済みリリースブランチだけを公開
+    runs-on: ubuntu-latest
+    needs: [quality, windows-installer]
+    if: ${{ startsWith(github.ref, 'refs/heads/release/v') }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: kick-channel-windows
+          path: release
+      - name: バージョンとリリース枝の一致を検査
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          test "$GITHUB_REF_NAME" = "release/v$version"
+          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]; then
+            test -s release/beta.yml
+            test ! -f release/latest.yml
+          elif [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            test -s release/latest.yml
+            test ! -f release/beta.yml
+          else
+            echo "::error::β版か製品版以外は公開禁止: $version"
+            exit 1
+          fi
+          node scripts/validate-channel-release.mjs release
+      - name: GitHub Releaseを公開（βのみプレリリース）
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          tag="v$version"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release $tag は既に存在します。既存Releaseを変更しません。"
+            exit 1
+          fi
+          if [[ "$version" == *-beta.* ]]; then
+            channel=beta
+            prerelease=(--prerelease)
+          else
+            channel=latest
+            prerelease=()
+          fi
+          files=(release/*.exe release/*.blockmap "release/$channel.yml")
+          for file in "${files[@]}"; do test -s "$file"; done
+          gh release create "$tag" "${files[@]}" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Kick Live Message Recorder $version" \
+            --notes-file docs/CHANNEL_RELEASE_NOTES.md "${prerelease[@]}"
