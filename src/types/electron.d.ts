@@ -161,6 +161,16 @@ type KickRecorderCredentialsStatus = {
   clientId: string;
 };
 
+type KickRecorderEditionRelease = {
+  edition: "beta" | "stable";
+  version: string; title: string; publishedAt: string; notes: string;
+  url: string; installerUrl: string;
+};
+type KickRecorderEditionHistory = {
+  beta: KickRecorderEditionRelease[];
+  stable: KickRecorderEditionRelease[];
+};
+
 type KickRecorderUpdateStatus = {
   status: "idle" | "checking" | "available" | "downloading" | "downloaded" | "not-available" | "error";
   currentVersion: string;
@@ -252,6 +262,8 @@ declare global {
       copyText: (value: string) => Promise<{ ok: boolean }>;
       onChatMessage: (callback: (message: KickRecorderChatMessage) => void) => () => void;
       onChatStatus: (callback: (status: KickRecorderChatStatus) => void) => () => void;
+      getEditionReleases: () => Promise<KickRecorderEditionHistory>;
+      openEditionInstaller: (target: "beta" | "stable") => Promise<{ opened: boolean; version?: string }>;
       getUpdateStatus: () => Promise<KickRecorderUpdateStatus>;
       checkForUpdates: () => Promise<KickRecorderUpdateStatus>;
       installUpdate: () => Promise<{ ok: boolean }>;
