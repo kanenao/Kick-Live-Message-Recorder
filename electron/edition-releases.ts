@@ -23,8 +23,8 @@ export type KickEditionHistory = {
 const REPOSITORY = "kanenao/Kick-Live-Message-Recorder";
 const API = "https://api.github.com/repos/" + REPOSITORY + "/releases?per_page=100";
 const RELEASE_ROOT = "https://github.com/" + REPOSITORY + "/releases";
-const betaVersion = /^\\d+\\.\\d+\\.\\d+-beta\\.\\d+$/;
-const stableVersion = /^\\d+\\.\\d+\\.\\d+$/;
+const betaVersion = /^\d+\.\d+\.\d+-beta\.\d+$/;
+const stableVersion = /^\d+\.\d+\.\d+$/;
 
 type RawAsset = { name?: unknown; browser_download_url?: unknown; size?: unknown };
 type RawRelease = {
