@@ -1,25 +1,19 @@
-# Kick Live Message Recorder
+# Kick Live Message Recorder — 製品版（準備中）
 
-Kick配信の映像・音声・コメントを録画・保存するWindowsデスクトップアプリです。24時間の配信監視、コメント付き動画の生成、映像・音声・コメントを組み合わせたAI配信記事に対応しています。
+**録画・コメント保存・コメント付き動画生成に特化したWindows用製品版**です。配信AI新聞（記事機能）は提供しません。
 
-> **最新公開版：0.8.0-alpha.86（α版）**  
-> **次期α版：0.8.1-alpha.87（録画ライブラリのサムネイル・保存先の安全性改善をテスト中）**  
-> 現在の開発・テスト対象はα版です。過去に公開したβ版は履歴として保持し、製品版は未完成のため公開・自動更新していません。
+> **製品版候補：`1.0.0`（未公開）**。Windows実機による録画・コメント・更新・インストールの受け入れ確認後に正式公開を判断します。
+> **β版候補：`0.8.1-beta.88`**。映像・音声・コメントによる配信AI新聞はβ版だけで開発します。
+> **旧α版最終公開：`0.8.1-alpha.87`**（履歴保持）。
 
-## バージョン・ダウンロード
+- [製品版のソースとビルド状況](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/stable)
+- [配信AI新聞を含むβ版](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/beta)
+- [β版・製品版の機能分離と受け入れ条件](docs/RELEASE_CHANNELS.md)
+- [更新履歴](CHANGELOG.md)
 
-| 区分 | バージョン | 状態 |
-|---|---|---|
-| 最新公開α版 | `0.8.0-alpha.86` | GitHub ReleasesのPre-release・Windowsインストーラー公開済み |
-| 旧β版（履歴） | `0.1.0-beta.50` | 公開済み・保持 |
-| 次期α版 | `0.8.1-alpha.87` | 録画・コメント付き動画のサムネイル対象と保存先の高速な安全確認（未公開・テスト中） |
+製品版には配信監視、LIVE／過去配信録画、チャットの自動受信・保存、ASS字幕、録画ライブラリ、リアルタイムプレビュー、コメント付き動画生成を残します。製品版では記事メニュー・AI記事生成API・記事用のバックグラウンド取得処理を無効化し、記事データは削除しません。製品版はβ版とは独立したWindowsアプリIDと更新チャンネルを使用します。
 
-- [α版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.8.0-alpha.86)
-- [次期α版の開発ブランチ](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/release/v0.8.1-alpha.87)
-- [バージョン更新履歴（CHANGELOG）](CHANGELOG.md)
-- [α版・製品版の運用方針](docs/RELEASE_CHANNELS.md)
-
-α版の録画継続機能は開発中のため、実際の長時間LIVE配信での検証は引き続き必要です。
+## 参考：旧α版までの更新内容（製品版の機能ではありません）
 
 ## 0.8.1-alpha.87 録画ライブラリの動画プレビュー安全性（開発中）
 
