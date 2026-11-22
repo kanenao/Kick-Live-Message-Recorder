@@ -3624,7 +3624,7 @@ export default function App() {
           {editionReleasesLoading ? <p>製品版の公開履歴を読み込み中...</p> :
            editionReleasesError ? <p>GitHub Releasesの取得に失敗しました。再度バージョン更新画面を開いてください。</p> :
            editionReleases.stable.length === 0
-             ? <p>製品版はまだ公開されていません。1.0.0はテスト用ビルドの段階です。正式公開後、この欄にバージョンと更新内容が自動的に表示されます。</p>
+             ? <p>製品版はまだ公開されていません。1.0.0はテスト用ビルドの段階です。正式公開後、この欄にバージョンと更新内容が自動的に表示されます。テスト用のWindowsインストーラーは <a href="https://github.com/kanenao/Kick-Live-Message-Recorder/actions/workflows/channel-release.yml?query=branch%3Astable" target="_blank" rel="noreferrer">製品版の検証ビルド（GitHub Actions）</a> から確認できます。検証ビルドは正式な製品版ではありません。</p>
              : <div className="version-history-list">
                  {editionReleases.stable.map((release, index) => <article className="version-history-item" key={release.version}>
                    <div className="version-history-marker">{index === 0 ? "NEW" : "製"}</div>
