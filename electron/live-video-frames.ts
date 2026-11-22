@@ -376,7 +376,7 @@ export function startLiveVideoFrameCapture(
           };
           frameCount += 1;
           onFrame(frame);
-          publish("capturing", `LIVE映像の代表フレームを継続取得中です（累計${frameCount}枚）。記事のAI分析には直近8枚を使用します。`);
+          publish("capturing", `LIVE映像の代表フレームを継続取得中です（累計${frameCount}枚）。記事のAI分析には配信全体から選んだ代表フレーム最大8枚を使用します。`);
         }
       });
       child.stderr?.on("data", chunk => {
