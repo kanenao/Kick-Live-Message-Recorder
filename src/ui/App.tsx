@@ -218,7 +218,9 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.8.1-alpha.87";
+const APP_VERSION = "1.0.0";
+// Product edition never exposes beta-only AI articles.
+const ARTICLES_ENABLED = APP_VERSION.includes("-beta.");
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -246,6 +248,7 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  { version: "1.0.0", title: "製品版：録画・コメント・動画生成に特化", changes: ["製品版から配信記事メニューと関連する操作を除外", "β版と製品版の自動更新経路を分離"] },
   {
     version: "0.8.1-alpha.87",
     title: "録画ライブラリのサムネイル表示とフォルダー安全性を改善",
@@ -2591,17 +2594,17 @@ export default function App() {
       <button className={tab === "recording" ? "nav-item selected" : "nav-item"} onClick={() => setTab("recording")}>● <span>録画専用</span></button>
       <button className={tab === "library" ? "nav-item selected" : "nav-item"} onClick={() => setTab("library")}>▤ <span>録画ライブラリ</span></button>
       <button className={tab === "comment-video" ? "nav-item selected" : "nav-item"} onClick={() => setTab("comment-video")}>✦ <span>コメント付き動画</span></button>
-      <button className={tab === "articles" ? "nav-item selected" : "nav-item"} onClick={() => setTab("articles")}>▤ <span>配信記事</span></button>
+      {ARTICLES_ENABLED && <button className={tab === "articles" ? "nav-item selected" : "nav-item"} onClick={() => setTab("articles")}>▤ <span>配信記事</span></button>}
       <div className="nav-label">アプリ</div>
       <button className={tab === "updates" ? "nav-item selected" : "nav-item"} onClick={() => setTab("updates")}>↻ <span>バージョン更新</span></button>
       <button className={tab === "settings" ? "nav-item selected" : "nav-item"} onClick={() => setTab("settings")}>⚙ <span>設定</span></button>
-      <div className="sidebar-bottom"><span className="status-dot" /> α版・開発テスト中<small>現在のバージョン {appVersion}</small></div>
+      <div className="sidebar-bottom"><span className="status-dot" /> 製品版<small>現在のバージョン {appVersion}</small></div>
     </aside>
 
     <main className={tab === "library" ? "main main-library" : "main"}>
       <header className="topbar">
         <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "recording" ? "録画専用" : tab === "library" ? "録画ライブラリ" : tab === "comment-video" ? "コメント付き動画を生成" : tab === "articles" ? "配信記事" : tab === "updates" ? "バージョン更新" : "設定"}</h1></div>
-        <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="alpha-tag">α版</span><img className="avatar avatar-brand" src="./app-icon.png" alt="Kick Live Message Recorder アイコン" /></div>
+        <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="alpha-tag">製品版</span><img className="avatar avatar-brand" src="./app-icon.png" alt="Kick Live Message Recorder アイコン" /></div>
       </header>
 
       {storageError && <div className="storage-error" role="alert">{storageError}</div>}
@@ -2936,7 +2939,7 @@ export default function App() {
           <div className="recording-library-stat"><span>登録ファイル</span><strong>{(recordingFiles.length + commentLogFiles.length).toLocaleString("ja-JP")}</strong></div>
           <div className="recording-library-stat"><span>録画動画</span><strong>{recordingFiles.length.toLocaleString("ja-JP")}</strong></div>
           <div className="recording-library-stat"><span>コメントログ</span><strong>{commentLogFiles.length.toLocaleString("ja-JP")}</strong></div>
-          <div className="recording-library-stat"><span>AI記事付きの配信</span><strong>{recordingSessions.filter(session => Boolean(session.article)).length.toLocaleString("ja-JP")}</strong></div>
+          {ARTICLES_ENABLED && <div className="recording-library-stat"><span>AI記事付きの配信</span><strong>{recordingSessions.filter(session => Boolean(session.article)).length.toLocaleString("ja-JP")}</strong></div>}
         </div>
 
         <div className="recording-library-filter-row">
@@ -2950,7 +2953,7 @@ export default function App() {
               <option value="all">すべて</option>
               <option value="videos">録画動画あり</option>
               <option value="comments">コメントログあり</option>
-              <option value="articles">AI記事付きの録画</option>
+              {ARTICLES_ENABLED && <option value="articles">AI記事付きの録画</option>}
             </select>
           </label>
         </div>
@@ -2998,7 +3001,7 @@ export default function App() {
 
                       {expandedLibraryVideosChannel === group.slug && <div className="recording-library-expanded">
                         <div className="recording-library-expanded-title">
-                          <strong>配信別：動画・コメント・AI記事</strong>
+                          <strong>配信別：動画・コメント{ARTICLES_ENABLED ? "・AI記事" : ""}</strong>
                           <span>{group.sessions.length}件の配信</span>
                         </div>
                         <div className="recording-session-list" role="region" tabIndex={0} aria-label={group.displayName + "の配信別録画"}>
@@ -3015,7 +3018,7 @@ export default function App() {
                                 </div>
                                 <strong>{session.title || (group.displayName + " の" + (session.kind === "LIVE" ? "生放送" : "過去配信"))}</strong>
                                 <small>{Number.isFinite(Date.parse(session.startedAt)) ? new Date(session.startedAt).toLocaleString("ja-JP") : "日時未取得"}</small>
-                                <small>動画 {session.videos.length}件 ・ コメント {session.logs.length}件 ・ AI記事 {session.article ? "あり" : "なし"}</small>
+                                <small>動画 {session.videos.length}件 ・ コメント {session.logs.length}件{ARTICLES_ENABLED ? " ・ AI記事 " + (session.article ? "あり" : "なし") : ""}</small>
                               </div>
                               <div className="recording-session-quick-actions">
                                 {session.videos.length > 0 && <button className="primary-small" onClick={() => void openRecordingFile(session.videos[0].path)}>再生</button>}
@@ -3026,7 +3029,7 @@ export default function App() {
                               </div>
                             </div>
                             {expandedLibrarySessions[session.id] && <>
-                            {session.article && <div className="recording-session-article">
+                            {ARTICLES_ENABLED && session.article && <div className="recording-session-article">
                               <strong>AI配信記事：{session.article.headline}</strong>
                               <p>{session.article.aiSummary || session.article.paragraphs?.[0] || "記事を見ると内容を確認できます。"}</p>
                               <button className="small-action" onClick={() => {
@@ -3093,7 +3096,7 @@ export default function App() {
                                         </div>}
                               </div>}
                             </div>)}
-                            {!session.article && session.videos.length > 0 && <div className="recording-session-actions">
+                            {ARTICLES_ENABLED && !session.article && session.videos.length > 0 && <div className="recording-session-actions">
                               <button className="small-action" onClick={() => {
                                 setArticleSlug(session.slug);
                                 setArticleVideoPath(session.videos[0].path);
@@ -3340,7 +3343,7 @@ export default function App() {
           </>}
       </section>}
 
-      {tab === "articles" && <section className="panel stream-articles-panel">
+      {ARTICLES_ENABLED && tab === "articles" && <section className="panel stream-articles-panel">
         <div className="panel-heading">
           <div><h2>登録配信者の放送記事</h2><p>録画とコメントログから配信ごとの記事を作成し、配信者別・日付順に保存します</p></div>
           <button className="small-action" onClick={() => setLibraryRefreshKey(value => value + 1)} disabled={!isDesktop || articleBusy}>一覧を更新</button>
@@ -3741,7 +3744,7 @@ export default function App() {
         {!isDesktop && <div className="notice">保存先フォルダーの選択はWindowsデスクトップ版で利用できます。ブラウザープレビューでは設定をブラウザー内に保存します。</div>}
       </section>}
 
-      <footer>Kick Live Message Recorder <span>•</span> α版 {appVersion} <span>•</span> 日本語版</footer>
+      <footer>Kick Live Message Recorder <span>•</span> 製品版 {appVersion} <span>•</span> 日本語版</footer>
     </main>
     <RecordingStoryboardDialog filePath={storyboardTarget?.path ?? null}
       title={storyboardTarget?.title ?? ""} onClose={() => setStoryboardTarget(null)} />
