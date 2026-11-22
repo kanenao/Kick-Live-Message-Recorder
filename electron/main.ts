@@ -17,6 +17,7 @@ import {
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { autoUpdater } from "electron-updater";
+import { fetchEditionReleases, type KickEdition } from "./edition-releases";
 import { KickChatReceiver } from "./chat";
 import { KickVodChatDownloader, getVodBroadcastDetails } from "./vod-chat";
 import { regenerateSavedVodAss } from "./vod-ass-reexport";
@@ -1387,6 +1388,53 @@ function registerIpcHandlers(): void {
       defaultOutputDirectory: getRecordingOutputDirectory(),
       isPackaged: app.isPackaged
     };
+  });
+
+  ipcMain.handle("editions:list", async event => {
+    assertTrustedSender(event);
+    return fetchEditionReleases();
+  });
+
+  ipcMain.handle("editions:switch", async (event, target: unknown) => {
+    assertTrustedSender(event);
+    if (target !== "beta" && target !== "stable") {
+      throw new Error("切り替え先の版が不正です。");
+    }
+    const edition = target as KickEdition;
+    const currentEdition: KickEdition = app.getVersion().includes("-beta.") ? "beta" : "stable";
+    if (currentEdition === edition) throw new Error("すでに選択した版を使用しています。");
+    if (process.platform !== "win32" || !app.isPackaged) {
+      throw new Error("版の切り替えはインストール済みWindows版から利用できます。");
+    }
+    // Changing between different application IDs is never an electron-updater downgrade.
+    // Refuse while output files are being written, including ASS/MP4 encoding.
+    if (recordingManager.hasActiveRecordings() || vodDownloadManager.hasActiveDownloads() ||
+        commentVideoGenerator.isRunning() || vodChatDownloader.isRunning()) {
+      throw new Error("録画・VOD取得・コメント付き動画生成が実行中です。処理を停止・完了してから切り替えてください。");
+    }
+    const releases = await fetchEditionReleases();
+    const release = releases[edition][0];
+    if (!release) {
+      throw new Error(edition === "stable"
+        ? "製品版はまだ正式公開されていません。公開済みのWindowsインストーラーが確認できるまで切り替えできません。"
+        : "β版の公開インストーラーを確認できませんでした。GitHub Releasesを確認してください。");
+    }
+    if (!mainWindow) throw new Error("確認画面を開けませんでした。");
+    const editionLabel = edition === "stable" ? "製品版" : "β版";
+    const choice = await dialog.showMessageBox(mainWindow, {
+      type: "question",
+      buttons: ["インストーラーを取得", "キャンセル"],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+      title: editionLabel + "への切り替え",
+      message: editionLabel + " " + release.version + " のインストーラーを開きますか？",
+      detail: "別のアプリとしてインストールする方式です。今の版は削除されません。ダウンロード後にインストーラーを実行し、切り替え先を起動してください。\n\n録画・コメントなどの保存済みファイルは削除しません。両方の版で24時間監視を同時に有効にすると二重録画になるため、元の版の監視を停止してください。"
+    });
+    if (choice.response !== 0) return { opened: false as const };
+    // Trusted, fixed GitHub release asset URL, derived from validated release metadata.
+    await shell.openExternal(release.installerUrl);
+    return { opened: true as const, version: release.version };
   });
 
   ipcMain.handle("updater:get-status", event => {
