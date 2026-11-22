@@ -3524,7 +3524,7 @@ export default function App() {
 
       {tab === "updates" && <section className="panel version-update-panel">
         <div className="panel-heading">
-          <div><h2>バージョン更新</h2><p>新しいα版の確認・ダウンロード・更新履歴をここで管理できます</p></div>
+          <div><h2>バージョン更新</h2><p>製品版の更新確認・ダウンロード・更新履歴をここで管理できます</p></div>
           <a className="text-button" href="https://github.com/kanenao/Kick-Live-Message-Recorder/releases" target="_blank" rel="noreferrer">GitHub Releases ↗</a>
         </div>
         <div className="version-update-grid">
@@ -3532,7 +3532,7 @@ export default function App() {
             <span className="version-card-label">現在インストール中</span>
             <strong>v{appVersion}</strong>
             <small>Kick Live Message Recorder</small>
-            <div className="version-card-foot">Windows 64bit・α版</div>
+            <div className="version-card-foot">Windows 64bit・製品版</div>
           </div>
           <div className="version-check-card">
             <div className="version-check-heading">
@@ -3548,7 +3548,7 @@ export default function App() {
               <button className="primary-small" onClick={() => void checkForAppUpdates()} disabled={isCheckingUpdates || updateStatus.status === "checking" || updateStatus.status === "downloading"}>{isCheckingUpdates || updateStatus.status === "checking" ? "確認中..." : "更新を確認"}</button>
               {updateStatus.status === "downloaded" && <button className="small-action" onClick={() => void installAppUpdate()}>再起動して更新</button>}
             </div>
-            <small className="version-update-hint">起動時と約6時間ごとに最新α版を自動確認・ダウンロードします。旧β版からの移行にも互換配信を用意しています。更新は録画・VOD保存の完了後、アプリを再起動して適用してください。</small>
+            <small className="version-update-hint">起動時と約6時間ごとに製品版の更新を自動確認・ダウンロードします。開発途中のβ版は自動的に配信されません。録画・VOD保存を完了してから再起動し更新してください。</small>
           </div>
         </div>
         {updateStatus.releaseNotes && <div className="release-notes-panel">
@@ -3571,7 +3571,7 @@ export default function App() {
       </section>}
 
       {tab === "settings" && <section className="panel">
-        <div className="panel-heading"><div><h2>基本設定</h2><p>α版の録画動作・保存先の設定</p></div></div>
+        <div className="panel-heading"><div><h2>基本設定</h2><p>製品版の録画動作・保存先の設定</p></div></div>
         <div className="setting-row">
           <div><strong>配信開始時に自動録画</strong><small>自動モードの登録チャンネルが配信を開始すると録画します</small></div>
           <label className="setting-control"><input type="checkbox" checked={settings.autoRecordOnStreamStart} onChange={e => setSettings(prev => ({ ...prev, autoRecordOnStreamStart: e.target.checked }))} /><span>{settings.autoRecordOnStreamStart ? "有効" : "無効"}</span></label>
