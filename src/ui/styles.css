@@ -616,3 +616,26 @@
 .comment-video-live-error{margin:8px 0 10px;padding:9px 11px;border:1px solid #a45057;background:#3f1d23;border-radius:6px;color:#ffe3df;font-size:11px}
 .comment-video-live-note{display:block;margin-top:9px;font-size:10px;line-height:1.7;color:#9cb5a5}
 @media(max-width:700px){.comment-video-live-heading{flex-direction:column}.comment-video-live-panel{padding:11px}.comment-video-live-file-row input{max-width:100%}.comment-video-live-stage{min-height:130px}}
+
+/* Explicit beta/product edition switching. Never imply an automatic update or downgrade. */
+.edition-switch-panel { margin-top: 20px; }
+.edition-switch-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 14px 0;
+  padding: 14px;
+  background: rgba(255, 255, 255, .035);
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 12px;
+}
+.edition-switch-details { display: flex; flex-direction: column; gap: 5px; min-width: 190px; flex: 1; }
+.edition-switch-details small { color: #b7bfcc; }
+.edition-switch-actions button:disabled { cursor: not-allowed; opacity: .6; }
+.product-history-panel { margin-top: 20px; }
+.edition-release-details { margin: 8px 0; }
+.edition-release-details summary { cursor: pointer; font-weight: 600; }
+.edition-release-details .release-notes-content { max-height: 250px; overflow-y: auto; padding-top: 8px; }
+.product-history-panel .version-history-content a { display: inline-block; margin-top: 10px; }
