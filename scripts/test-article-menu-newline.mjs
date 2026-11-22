@@ -13,7 +13,7 @@ assert.match(app, articleButton, "配信記事のメニューを維持するこ�
 // JSXボタンの間に\\nという通常文字が混入すると、画面にもそのまま出てしまう。
 const start = app.search(videoButton) + app.match(videoButton)[0].length;
 const end = app.search(articleButton);
-assert.match(app.slice(start, end), /^\s*$/, "メニュー間に余計なテキストを描画しないこと");
+assert.match(app.slice(start, end), /^\s*(?:\{ARTICLES_ENABLED &&\s*)?$/, "メニュー間に余計なテキストを描画しないこと");
 assert.ok(!css.split(/\r?\n/).some(line => line.trim() === String.raw`\n`), "CSSの不要な改行文字列を除去すること");
 
 console.log("配信記事メニューの不要文字（\\n）回帰テスト成功");
