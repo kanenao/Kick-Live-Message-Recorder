@@ -564,6 +564,7 @@ export class LiveStreamArticleManager {
       audioByKey.set(normalized.startSeconds + "|" + normalized.text, normalized);
     }
     audioSegments = [...audioByKey.values()].sort((a, b) => a.startSeconds - b.startSeconds);
+    if (videoFrames.length > 0) article.videoAnalyzed = false;
     if (audioSegments.length > 0) {
       article.audioAnalyzed = true;
       article.audioSegmentCount = audioSegments.length;
