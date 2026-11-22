@@ -74,7 +74,7 @@ function resolveLiveStreamUrl(slug: string, isCancelled: () => boolean, onChild:
 
 /**
  * Decodes a live HLS stream without saving a full recording.
- * Only sampled JPEG frames are emitted; callers keep a rolling window and stop the process with the returned callback.
+ * Only sampled JPEG frames are emitted; callers keep a bounded sample across the full broadcast and stop the process with the returned callback.
  */
 export function startLiveVideoFrameCapture(
   slugInput: string,
