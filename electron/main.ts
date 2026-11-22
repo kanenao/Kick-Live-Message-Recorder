@@ -1397,8 +1397,10 @@ function registerIpcHandlers(): void {
       throw new Error("切り替え先の版が不正です。");
     }
     const edition = target as KickEdition;
-    const currentEdition: KickEdition = app.getVersion().includes("-beta.") ? "beta" : "stable";
-    if (currentEdition === edition) throw new Error("すでに選択した版を使用しています。");
+    // Only the beta edition can manage installers for either edition.
+    if (!app.getVersion().includes("-beta.")) {
+      throw new Error("版の選択・切り替えはβ版のバージョン更新画面からのみ操作できます。");
+    }
     if (process.platform !== "win32" || !app.isPackaged) {
       throw new Error("版の切り替えはインストール済みWindows版から利用できます。");
     }
@@ -1423,9 +1425,9 @@ function registerIpcHandlers(): void {
       defaultId: 1,
       cancelId: 1,
       noLink: true,
-      title: editionLabel + "への切り替え",
+      title: "β版から" + editionLabel + "を選択",
       message: editionLabel + " " + release.version + " のインストーラーを開きますか？",
-      detail: "別のアプリとしてインストールする方式です。今の版は削除されません。ダウンロード後にインストーラーを実行し、切り替え先を起動してください。\n\n録画・コメントなどの保存済みファイルは削除しません。両方の版で24時間監視を同時に有効にすると二重録画になるため、元の版の監視を停止してください。"
+      detail: "β版画面だけから両方の版を選択できます。現在のアプリは削除されません。インストーラーをダウンロード・実行し、目的の版を起動してください。\n\n既存の録画・コメント・記事ファイルは削除しません。両方の版を同時に監視・録画させないでください。"
     });
     if (choice.response !== 0) return { opened: false as const };
     // Trusted, fixed GitHub release asset URL, derived from validated release metadata.
