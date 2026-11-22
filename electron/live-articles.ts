@@ -642,7 +642,7 @@ export class LiveStreamArticleManager {
       article.aiError = [article.aiError, "映像分析はスキップしました（" + videoError + "）。利用できるほかの情報源で記事を生成しました。"].filter(Boolean).join(" ");
     }
     if (audioError) article.audioError = audioError.slice(0, 500);
-    if (videoError || audioError) this.persist(session);
+    this.persist(session);
     return {
       ...article,
       paragraphs: [...article.paragraphs],
