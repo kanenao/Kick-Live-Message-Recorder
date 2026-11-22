@@ -83,7 +83,28 @@ export function recordingLibraryDirectories(outputDirectory: string): string[] {
   return directories;
 }
 
+/**
+ * Recognize only the documented video storage layout without walking every
+ * broadcaster folder. Reject symlinked/junction directories even if the final
+ * file happens to resolve under the user's output root.
+ */
 export function isRecordingLibraryFileParent(outputDirectory: string, filePath: string): boolean {
+  const root = resolve(outputDirectory);
   const parent = resolve(dirname(filePath));
-  return recordingLibraryDirectories(outputDirectory).some(folder => resolve(folder) === parent);
+  const samePath = (a: string, b: string) => process.platform === "win32"
+    ? a.toLowerCase() === b.toLowerCase() : a === b;
+  if (!regularDirectory(root)) return false;
+  if (samePath(parent, root)) return true; // recordings from old α/β releases
+
+  const composed = join(root, COMPOSED_FOLDER);
+  if (samePath(parent, composed)) return regularDirectory(composed); // old composed videos
+
+  for (const type of [RECORDINGS_FOLDER, COMPOSED_FOLDER]) {
+    const base = join(root, type);
+    if (!samePath(resolve(dirname(parent)), base)) continue;
+    const slug = parent.slice(base.length + 1);
+    return /^[a-zA-Z0-9_-]{1,40}$/.test(slug) &&
+      regularDirectory(base) && regularDirectory(parent);
+  }
+  return false;
 }
