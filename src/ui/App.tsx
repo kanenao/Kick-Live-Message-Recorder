@@ -218,7 +218,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.8.1-beta.88";
+const APP_VERSION = "0.8.1-beta.89";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -246,6 +246,7 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  { version: "0.8.1-beta.89", title: "β版表示・更新画面の切り替え漏れを修正", changes: ["更新画面に残っていたα版の表示をβ版に修正", "β版専用更新チャンネルの表示を統一"] },
   { version: "0.8.1-beta.88", title: "β版へ移行・製品版と更新経路を分離", changes: ["配信AI新聞はβ版に残し、映像・音声・コメントの解析を強化します", "β版専用の更新チャンネルで製品版とは別に配布します"] },
   {
     version: "0.8.1-alpha.87",
@@ -3520,7 +3521,7 @@ export default function App() {
 
       {tab === "updates" && <section className="panel version-update-panel">
         <div className="panel-heading">
-          <div><h2>バージョン更新</h2><p>新しいα版の確認・ダウンロード・更新履歴をここで管理できます</p></div>
+          <div><h2>バージョン更新</h2><p>新しいβ版の確認・ダウンロード・更新履歴をここで管理できます</p></div>
           <a className="text-button" href="https://github.com/kanenao/Kick-Live-Message-Recorder/releases" target="_blank" rel="noreferrer">GitHub Releases ↗</a>
         </div>
         <div className="version-update-grid">
@@ -3528,7 +3529,7 @@ export default function App() {
             <span className="version-card-label">現在インストール中</span>
             <strong>v{appVersion}</strong>
             <small>Kick Live Message Recorder</small>
-            <div className="version-card-foot">Windows 64bit・α版</div>
+            <div className="version-card-foot">Windows 64bit・β版</div>
           </div>
           <div className="version-check-card">
             <div className="version-check-heading">
@@ -3544,7 +3545,7 @@ export default function App() {
               <button className="primary-small" onClick={() => void checkForAppUpdates()} disabled={isCheckingUpdates || updateStatus.status === "checking" || updateStatus.status === "downloading"}>{isCheckingUpdates || updateStatus.status === "checking" ? "確認中..." : "更新を確認"}</button>
               {updateStatus.status === "downloaded" && <button className="small-action" onClick={() => void installAppUpdate()}>再起動して更新</button>}
             </div>
-            <small className="version-update-hint">起動時と約6時間ごとに最新α版を自動確認・ダウンロードします。旧β版からの移行にも互換配信を用意しています。更新は録画・VOD保存の完了後、アプリを再起動して適用してください。</small>
+            <small className="version-update-hint">起動時と約6時間ごとに最新β版を自動確認・ダウンロードします。旧α版からβ版へ移行する場合は、最初の1回だけβ版インストーラーを手動で実行してください。録画・VOD保存を完了してから再起動し更新してください。</small>
           </div>
         </div>
         {updateStatus.releaseNotes && <div className="release-notes-panel">
@@ -3567,7 +3568,7 @@ export default function App() {
       </section>}
 
       {tab === "settings" && <section className="panel">
-        <div className="panel-heading"><div><h2>基本設定</h2><p>α版の録画動作・保存先の設定</p></div></div>
+        <div className="panel-heading"><div><h2>基本設定</h2><p>β版の録画動作・保存先の設定</p></div></div>
         <div className="setting-row">
           <div><strong>配信開始時に自動録画</strong><small>自動モードの登録チャンネルが配信を開始すると録画します</small></div>
           <label className="setting-control"><input type="checkbox" checked={settings.autoRecordOnStreamStart} onChange={e => setSettings(prev => ({ ...prev, autoRecordOnStreamStart: e.target.checked }))} /><span>{settings.autoRecordOnStreamStart ? "有効" : "無効"}</span></label>
