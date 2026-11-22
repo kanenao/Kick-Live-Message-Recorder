@@ -220,12 +220,6 @@ type KickChannelCheck = {
   startedAt: string | null;
 };
 
-type EditionRelease = {
-  edition: "beta" | "stable"; version: string; title: string; publishedAt: string;
-  notes: string; url: string; installerUrl: string;
-};
-type EditionHistory = { beta: EditionRelease[]; stable: EditionRelease[] };
-
 const api = {
   loadState: (): Promise<AppState> => ipcRenderer.invoke("app:load-state"),
   saveState: (state: AppState): Promise<{ ok: boolean }> => ipcRenderer.invoke("app:save-state", state),
@@ -281,9 +275,6 @@ const api = {
     ipcRenderer.on("chat:status", listener);
     return () => ipcRenderer.removeListener("chat:status", listener);
   },
-  getEditionReleases: (): Promise<EditionHistory> => ipcRenderer.invoke("editions:list"),
-  openEditionInstaller: (target: "beta" | "stable"): Promise<{ opened: boolean; version?: string }> =>
-    ipcRenderer.invoke("editions:switch", target),
   getUpdateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke("updater:get-status"),
   checkForUpdates: (): Promise<UpdateStatus> => ipcRenderer.invoke("updater:check"),
   installUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("updater:install"),
