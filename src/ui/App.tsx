@@ -218,7 +218,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.8.1-alpha.87";
+const APP_VERSION = "0.8.1-beta.88";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
   { text: "うぽつ！！！！！！", color: "#ffffff", lane: 1, delay: 0.7, position: "top" },
@@ -246,6 +246,7 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  { version: "0.8.1-beta.88", title: "β版へ移行・製品版と更新経路を分離", changes: ["配信AI新聞はβ版に残し、映像・音声・コメントの解析を強化します", "β版専用の更新チャンネルで製品版とは別に配布します"] },
   {
     version: "0.8.1-alpha.87",
     title: "録画ライブラリのサムネイル表示とフォルダー安全性を改善",
@@ -2595,13 +2596,13 @@ export default function App() {
       <div className="nav-label">アプリ</div>
       <button className={tab === "updates" ? "nav-item selected" : "nav-item"} onClick={() => setTab("updates")}>↻ <span>バージョン更新</span></button>
       <button className={tab === "settings" ? "nav-item selected" : "nav-item"} onClick={() => setTab("settings")}>⚙ <span>設定</span></button>
-      <div className="sidebar-bottom"><span className="status-dot" /> α版・開発テスト中<small>現在のバージョン {appVersion}</small></div>
+      <div className="sidebar-bottom"><span className="status-dot" /> β版・開発テスト中<small>現在のバージョン {appVersion}</small></div>
     </aside>
 
     <main className={tab === "library" ? "main main-library" : "main"}>
       <header className="topbar">
         <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "recording" ? "録画専用" : tab === "library" ? "録画ライブラリ" : tab === "comment-video" ? "コメント付き動画を生成" : tab === "articles" ? "配信記事" : tab === "updates" ? "バージョン更新" : "設定"}</h1></div>
-        <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="alpha-tag">α版</span><img className="avatar avatar-brand" src="./app-icon.png" alt="Kick Live Message Recorder アイコン" /></div>
+        <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="alpha-tag">β版</span><img className="avatar avatar-brand" src="./app-icon.png" alt="Kick Live Message Recorder アイコン" /></div>
       </header>
 
       {storageError && <div className="storage-error" role="alert">{storageError}</div>}
@@ -3741,7 +3742,7 @@ export default function App() {
         {!isDesktop && <div className="notice">保存先フォルダーの選択はWindowsデスクトップ版で利用できます。ブラウザープレビューでは設定をブラウザー内に保存します。</div>}
       </section>}
 
-      <footer>Kick Live Message Recorder <span>•</span> α版 {appVersion} <span>•</span> 日本語版</footer>
+      <footer>Kick Live Message Recorder <span>•</span> β版 {appVersion} <span>•</span> 日本語版</footer>
     </main>
     <RecordingStoryboardDialog filePath={storyboardTarget?.path ?? null}
       title={storyboardTarget?.title ?? ""} onClose={() => setStoryboardTarget(null)} />
