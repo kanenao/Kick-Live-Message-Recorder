@@ -42,9 +42,9 @@ const main = readFileSync(new URL("../electron/main.ts", import.meta.url), "utf8
 const preload = readFileSync(new URL("../electron/preload.ts", import.meta.url), "utf8");
 const ui = readFileSync(new URL("../src/ui/App.tsx", import.meta.url), "utf8");
 // Stable does not expose any edition switching capability, even through IPC.
-assert.doesNotMatch(main, /ipcMain.handle\\("editions:list"/);
-assert.doesNotMatch(main, /ipcMain.handle\\("editions:switch"/);
-assert.doesNotMatch(preload, /ipcRenderer\\.invoke\\("editions:switch"/);
+assert.doesNotMatch(main, /ipcMain\.handle\("editions:list"/);
+assert.doesNotMatch(main, /ipcMain\.handle\("editions:switch"/);
+assert.doesNotMatch(preload, /ipcRenderer\.invoke\("editions:switch"/);
 assert.doesNotMatch(preload, /openEditionInstaller/);
 assert.doesNotMatch(ui, /className="version-history-section edition-switch-panel"/);
 assert.doesNotMatch(ui, /openEditionSwitcher/);
