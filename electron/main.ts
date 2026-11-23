@@ -1417,7 +1417,7 @@ function registerIpcHandlers(): void {
     }
     const releases = await fetchEditionReleases();
     const beta = releases.beta[0];
-    if (!beta || !/^\\d+\\.\\d+\\.\\d+-beta\\.\\d+$/.test(beta.version)) {
+    if (!beta || !/^\d+\.\d+\.\d+-beta\.\d+$/.test(beta.version)) {
       throw new Error("公開済みのβ版インストーラーを確認できませんでした。");
     }
     if (!mainWindow) throw new Error("確認画面を開けませんでした。");
@@ -1428,8 +1428,8 @@ function registerIpcHandlers(): void {
       title: "以前のβ版ユーザー：β版へ戻る",
       message: "β版 v" + beta.version + " の取得を許可しますか？",
       detail: "以前のβ版利用履歴を確認しました。GitHub公式のβ版インストーラーをブラウザーで開きます。" +
-        "\\n許可するまで何もダウンロードしません。製品版は削除されず、録画・コメントなどの保存データも変更しません。" +
-        "\\n二重録画を避けるため、起動しない版では24時間監視を停止してください。"
+        "\n許可するまで何もダウンロードしません。製品版は削除されず、録画・コメントなどの保存データも変更しません。" +
+        "\n二重録画を避けるため、起動しない版では24時間監視を停止してください。"
     });
     if (confirm.response !== 0) return { opened: false as const };
     await shell.openExternal(beta.installerUrl);
