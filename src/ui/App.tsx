@@ -3568,7 +3568,7 @@ export default function App() {
       </section>}
 
       {tab === "feedback" && <section className="panel feedback-panel">
-        <div className="panel-heading"><div><h2>不具合情報・機能要望</h2><p>このアプリの{CURRENT_EDITION === "beta" ? "β版" : "製品版"}向けに報告できます。対象バージョン：{appVersion}</p></div></div>
+        <div className="panel-heading"><div><h2>不具合情報・機能要望</h2><p>このアプリの{APP_VERSION.includes("-beta.") ? "β版" : "製品版"}向けに報告できます。対象バージョン：{appVersion}</p></div></div>
         <div className="feedback-kinds">
           <article className="feedback-kind">
             <strong className="feedback-chip">不具合情報</strong>
