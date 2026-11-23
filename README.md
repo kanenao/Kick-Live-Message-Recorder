@@ -2,19 +2,19 @@
 
 Kick配信の監視・録画・コメント保存・コメント付き動画生成と、**配信AI新聞**を開発するWindowsアプリです。
 
-> **最新公開β版：`0.9.0-beta.91`**（Windowsインストーラー公開済み）
+> **最新公開β版：`0.9.0-beta.92`**（Windowsインストーラー公開済み）
 > **最新版：β版からβ版・製品版を選択可能。製品版側からの変更は不可**
 > **製品版：`1.0.0`**（記事なし・Windows実機検証待ちで未公開）
 > 製品版 `1.0.0` は別の `stable` ブランチで準備し、配信記事を含めません。
 
 - [β版開発ソース](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/beta)
 - [製品版開発ソース](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/stable)
-- [β版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.9.0-beta.91)
+- [β版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.9.0-beta.92)
 - [最後に公開したα版](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.8.1-alpha.87)
 - [版の違い・リリース条件](docs/RELEASE_CHANNELS.md)
 - [更新履歴](CHANGELOG.md)
 
-## 0.9.0-beta.92（開発・検証中）―版選択の見やすさと更新安全性
+## 0.9.0-beta.92（公開済みβ版）―版選択の見やすさと更新安全性
 
 - β版専用の版選択画面に「公開状況を再確認」ボタンを追加。取得日時・β版/製品版の公開バージョン・公開日・リリースノートを表示します。
 - GitHub Releasesから情報を取得できなかった場合、以前の公開情報で版を選択できないようにします。製品版が未公開の場合も選択不可のまま維持します。
