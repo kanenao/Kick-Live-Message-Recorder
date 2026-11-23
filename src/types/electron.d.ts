@@ -264,6 +264,7 @@ declare global {
       onChatStatus: (callback: (status: KickRecorderChatStatus) => void) => () => void;
       getEditionReleases: () => Promise<KickRecorderEditionHistory>;
       openEditionInstaller: (target: "beta" | "stable") => Promise<{ opened: boolean; version?: string }>;
+      openFeedbackForm: (kind: "bug" | "feature") => Promise<{ opened: boolean }>;
       getUpdateStatus: () => Promise<KickRecorderUpdateStatus>;
       checkForUpdates: () => Promise<KickRecorderUpdateStatus>;
       installUpdate: () => Promise<{ ok: boolean }>;

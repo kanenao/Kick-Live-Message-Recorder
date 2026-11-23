@@ -218,7 +218,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "1.0.1-beta.95";
+const APP_VERSION = "1.0.1-beta.96";
 const CURRENT_EDITION: "beta" | "stable" = APP_VERSION.includes("-beta.") ? "beta" : "stable";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
@@ -247,6 +247,7 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  { version: "1.0.1-beta.96", title: "β版・製品版の不具合情報／機能要望の受付を改善", changes: ["β版のメニューから不具合情報・機能要望の各GitHubフォームを開けるようにした", "投稿後は対象版・種類タグとAI判定待ちを付けて整理", "製品版向けの報告も同じ受付経路に分離し、録画・記事データは変更しない"] },
   { version: "1.0.1-beta.95", title: "製品版1.0.1に合わせβ版の基本番号を統一", changes: ["製品版1.0.1に合わせ基本番号を1.0.1へ更新、beta.95は連番を維持", "今後は軽微な開発でbeta.Nを進め、段階的な改善はpatch、機能追加はminor、大きな互換性変更はmajorで判断", "β版と製品版の更新先・アプリIDを引き続き分離し、配信AI新聞はβ版専用"] },
 
   { version: "0.9.0-beta.94", title: "配信AI新聞：要約と本文の重複・文字列の改行を修正", changes: ["配信AI新聞の見出し下の要約と本文が同じ文章を繰り返す場合、二重表示しない", "Ollamaが出力した文字列の\\n・＼nを記事の改行として扱い、本文に出さない", "異なる時刻・件数や新しい場面の文章は残し、元コメント・音声文字起こし・保存記事を変更しない"] },
@@ -1249,7 +1250,22 @@ export default function App() {
     const ticker = window.setInterval(() => setVodClock(Date.now()), 1000);
     return () => window.clearInterval(ticker);
   }, []);
-  const [tab, setTab] = useState<"dashboard" | "recording" | "library" | "comment-video" | "articles" | "updates" | "settings">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "recording" | "library" | "comment-video" | "articles" | "updates" | "feedback" | "settings">("dashboard");
+  const [feedbackMessage, setFeedbackMessage] = useState("");
+  const openFeedback = async (kind: "bug" | "feature"): Promise<void> => {
+    if (!window.kickRecorder) {
+      setFeedbackMessage("報告フォームはWindowsデスクトップ版で開けます。");
+      return;
+    }
+    setFeedbackMessage("GitHubの投稿フォームをブラウザーで開いています。");
+    try {
+      await window.kickRecorder.openFeedbackForm(kind);
+      setFeedbackMessage("ブラウザーでGitHubにログインし、内容を入力して送信してください。送信後にタグが付与され、AIが確認します。");
+    } catch (error) {
+      setFeedbackMessage("フォームを開けませんでした：" + (error instanceof Error ? error.message : String(error)));
+    }
+  };
+
   const [isReady, setIsReady] = useState(false);
   const [storageError, setStorageError] = useState("");
   const [appDataDirectory, setAppDataDirectory] = useState("");
@@ -2654,6 +2670,7 @@ export default function App() {
       <button className={tab === "comment-video" ? "nav-item selected" : "nav-item"} onClick={() => setTab("comment-video")}>✦ <span>コメント付き動画</span></button>
       <button className={tab === "articles" ? "nav-item selected" : "nav-item"} onClick={() => setTab("articles")}>▤ <span>配信記事</span></button>
       <div className="nav-label">アプリ</div>
+      <button className={tab === "feedback" ? "nav-item selected" : "nav-item"} onClick={() => setTab("feedback")}>✉ <span>不具合情報・機能要望</span></button>
       <button className={tab === "updates" ? "nav-item selected" : "nav-item"} onClick={() => setTab("updates")}>↻ <span>バージョン更新</span></button>
       <button className={tab === "settings" ? "nav-item selected" : "nav-item"} onClick={() => setTab("settings")}>⚙ <span>設定</span></button>
       <div className="sidebar-bottom"><span className="status-dot" /> β版・開発テスト中<small>現在のバージョン {appVersion}</small></div>
@@ -2661,7 +2678,7 @@ export default function App() {
 
     <main className={tab === "library" ? "main main-library" : "main"}>
       <header className="topbar">
-        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "recording" ? "録画専用" : tab === "library" ? "録画ライブラリ" : tab === "comment-video" ? "コメント付き動画を生成" : tab === "articles" ? "配信記事" : tab === "updates" ? "バージョン更新" : "設定"}</h1></div>
+        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "recording" ? "録画専用" : tab === "library" ? "録画ライブラリ" : tab === "comment-video" ? "コメント付き動画を生成" : tab === "articles" ? "配信記事" : tab === "updates" ? "バージョン更新" : tab === "feedback" ? "不具合情報・機能要望" : "設定"}</h1></div>
         <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="alpha-tag">β版</span><img className="avatar avatar-brand" src="./app-icon.png" alt="Kick Live Message Recorder アイコン" /></div>
       </header>
 
@@ -3576,6 +3593,25 @@ export default function App() {
             </section>)}
           </div>
         </>}
+      </section>}
+
+      {tab === "feedback" && <section className="panel feedback-panel">
+        <div className="panel-heading"><div><h2>不具合情報・機能要望</h2><p>このアプリの{APP_VERSION.includes("-beta.") ? "β版" : "製品版"}向けに報告できます。対象バージョン：{appVersion}</p></div></div>
+        <div className="feedback-kinds">
+          <article className="feedback-kind">
+            <strong className="feedback-chip">不具合情報</strong>
+            <p>録画が止まる、コメントが取得できない、操作しても反応しないなどの問題を報告します。</p>
+            <button className="small-act" type="button" onClick={() => void openFeedback("bug")}>不具合情報を報告</button>
+          </article>
+          <article className="feedback-kind">
+            <strong className="feedback-chip">機能要望</strong>
+            <p>追加してほしい機能や操作性の改善を提案します。β版・製品版の区分が自動的に付けられます。</p>
+            <button className="small-act" type="button" onClick={() => void openFeedback("feature")}>機能要望を送る</button>
+          </article>
+        </div>
+        <p className="feedback-hint">報告はGitHub Issuesで投稿します。投稿時に「不具合情報／機能要望」と「β版／製品版」のタグを自動付与し、AIが内容・重複・優先度を定期的に確認します。AIが投稿文の命令をそのまま実行したり、確認なしに製品版を更新することはありません。</p>
+        <p className="feedback-hint">パスワード、APIキー、認証Cookie、配信のセッショントークン、個人情報は投稿しないでください。製品版の通常修正は月1回程度です。</p>
+        {feedbackMessage && <p className="feedback-message" role="status">{feedbackMessage}</p>}
       </section>}
 
       {tab === "updates" && <section className="panel version-update-panel">
