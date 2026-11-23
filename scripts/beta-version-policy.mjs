@@ -3,8 +3,8 @@
  * the actual scale of the beta changes. This does NOT update the product edition.
  * beta.N is a lifetime sequence and never resets on a base version bump.
  */
-const betaPattern = /^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)-beta\\.(0|[1-9]\\d*)$/;
-const stablePattern = /^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$/;
+const betaPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-beta\.(0|[1-9]\d*)$/;
+const stablePattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 function parseParts(input, pattern, kind) {
   if (typeof input !== "string") throw new Error(kind + " は文字列で指定してください");
