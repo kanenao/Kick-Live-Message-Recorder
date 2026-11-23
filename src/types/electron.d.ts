@@ -254,6 +254,7 @@ declare global {
       onChatStatus: (callback: (status: KickRecorderChatStatus) => void) => () => void;
       getBetaReturnStatus: () => Promise<{ eligible: boolean; version?: string; activatedAt?: string }>;
       openBetaReturnInstaller: () => Promise<{ opened: boolean; version?: string }>;
+      openFeedbackForm: (kind: "bug" | "feature") => Promise<{ opened: boolean }>;
       getUpdateStatus: () => Promise<KickRecorderUpdateStatus>;
       checkForUpdates: () => Promise<KickRecorderUpdateStatus>;
       installUpdate: () => Promise<{ ok: boolean }>;
