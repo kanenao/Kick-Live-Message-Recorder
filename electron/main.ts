@@ -532,7 +532,9 @@ function initializeAutoUpdater(): void {
   if (!app.isPackaged || process.platform !== "win32") return;
 
   autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  // 録画・コメント・動画生成の途中終了を防ぐため、終了時の無確認インストールは行わない。
+  // 更新ファイルは自動取得し、再起動のタイミングは利用者が選択する。
+  autoUpdater.autoInstallOnAppQuit = false;
 
   // GitHubのβ版Releaseはbeta.ymlで配布する。暗黙のチャンネル判定に任せず固定する。
   // channel setterはダウングレードを許可するため、明示的に再度禁止する。
@@ -1454,8 +1456,9 @@ function registerIpcHandlers(): void {
     if (updateStatus.status !== "downloaded") {
       throw new Error("更新ファイルのダウンロードが完了していません。");
     }
-    if (recordingManager.hasActiveRecordings() || vodDownloadManager.hasActiveDownloads()) {
-      throw new Error("録画またはVODダウンロード中です。保存を完了・停止してから更新を適用してください。");
+    if (recordingManager.hasActiveRecordings() || vodDownloadManager.hasActiveDownloads() ||
+        commentVideoGenerator.isRunning() || vodChatDownloader.isRunning()) {
+      throw new Error("録画・VOD取得・コメント付き動画生成が進行中です。処理を完了または停止してから更新を適用してください。");
     }
     autoUpdater.quitAndInstall();
     return { ok: true };

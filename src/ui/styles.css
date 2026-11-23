@@ -639,3 +639,10 @@
 .edition-release-details summary { cursor: pointer; font-weight: 600; }
 .edition-release-details .release-notes-content { max-height: 250px; overflow-y: auto; padding-top: 8px; }
 .product-history-panel .version-history-content a { display: inline-block; margin-top: 10px; }
+
+/* β92: Version selector verification and release note preview */
+.edition-heading-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.edition-current-label { display: inline-block; margin-left: 6px; color: #a0d9bb; font-size: 11px; font-weight: 600; }
+.edition-switch-details .edition-release-details { margin-top: 7px; }
+.edition-switch-details .edition-release-details summary { font-size: 12px; }
+.edition-switch-details .edition-release-details p { max-width: 700px; overflow-wrap: anywhere; }
