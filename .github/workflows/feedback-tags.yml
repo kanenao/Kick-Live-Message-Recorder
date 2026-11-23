@@ -1,0 +1,59 @@
+name: フィードバックのタグ自動付与
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  tag:
+    if: ${{ github.event.issue.pull_request == null }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 投稿フォームから版・種類・AI確認待ちのタグを付ける
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const matched = /^\[(β版|製品版)\]\[(不具合情報|機能要望)\]/.exec(issue.title);
+            // Do not execute issue text; route only submitted form metadata.
+            if (!matched) {
+              core.info("自由投稿：タグの自動付与対象外");
+              return;
+            }
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = issue.number;
+            const desired = [matched[1], matched[2], "AI判定待ち"];
+            const names = {
+              "β版": { color: "6554C0", description: "開発β版の報告・要望" },
+              "製品版": { color: "137CBD", description: "安定製品版の報告・要望" },
+              "不具合情報": { color: "D73A4A", description: "不具合・動作障害の報告" },
+              "機能要望": { color: "1D76DB", description: "新機能・改善の提案" },
+              "AI判定待ち": { color: "FBCA04", description: "AIが内容・優先度・重複を確認する前" },
+              "AI確認済み": { color: "C2E0C6", description: "AIが分類・既存課題との照合を完了" }
+            };
+            for (const [name, meta] of Object.entries(names)) {
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+                try {
+                  await github.rest.issues.createLabel({ owner, repo, name, ...meta });
+                } catch (createError) {
+                  if (createError.status !== 422) throw createError;
+                }
+              }
+            }
+            // An edited title must not leave contradictory edition/kind labels.
+            const existing = issue.labels.map(label => label.name);
+            for (const name of ["β版","製品版","不具合情報","機能要望","AI確認済み"]) {
+              if (!desired.includes(name) && existing.includes(name)) {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name });
+              }
+            }
+            await github.rest.issues.addLabels({ owner, repo, issue_number, labels: desired });
+            core.info("投稿 " + issue_number + " にタグ " + desired.join(", ") + " を付与");
