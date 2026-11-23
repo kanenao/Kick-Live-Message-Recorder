@@ -46,7 +46,14 @@ function sameMeaningRepeated(a: string, b: string): boolean {
 }
 
 function sentencePieces(text: string): string[] {
+  // Some smaller Ollama models output literal \n or full-width ＼n rather
+  // than line breaks inside generated article fields. This conversion applies
+  // only to AI-produced prose; raw chat logs and transcripts are never edited.
   return text.replace(/\r\n?/g, "\n")
+    .replace(/\\r\\n|\\n|\\r|＼n/g, "\n")
+    // A scene timestamp split from its caption by a model-produced newline
+    // must remain attached. Otherwise dedupe could discard real later scenes.
+    .replace(/(^|\n)(\d{1,2}:\d{2}(?::\d{2})?)\s*\n(?=\S)/g, "$1$2 ")
     .split(/(?<=[。！？!?])\s*|\n+/u)
     .map(piece => piece.trim()).filter(Boolean);
 }

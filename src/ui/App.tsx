@@ -218,7 +218,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.9.0-beta.93";
+const APP_VERSION = "0.9.0-beta.94";
 const CURRENT_EDITION: "beta" | "stable" = APP_VERSION.includes("-beta.") ? "beta" : "stable";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
@@ -247,6 +247,8 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  { version: "0.9.0-beta.94", title: "配信AI新聞：要約と本文の重複・文字列の改行を修正", changes: ["配信AI新聞の見出し下の要約と本文が同じ文章を繰り返す場合、二重表示しない", "Ollamaが出力した文字列の\\n・＼nを記事の改行として扱い、本文に出さない", "異なる時刻・件数や新しい場面の文章は残し、元コメント・音声文字起こし・保存記事を変更しない"] },
+
   { version: "0.9.0-beta.93", title: "製品版の誤自動取得を停止・β版ユーザーの復帰履歴を記録", changes: ["β版自動更新の対象を検証済みβ版Releaseに限定", "正規版は版選択ボタンから明示的に許可した場合だけ取得", "β版の起動履歴を記録し、製品版からβ版へ戻れる対象を以前のβ版ユーザーに限定"] },
   { version: "0.9.0-beta.92", title: "版の公開状況再確認と安全な更新適用を強化", changes: ["β版画面に公開状況の再取得ボタン、取得日時、各版の最新リリース情報を表示", "取得に失敗した際は古い公開情報のままインストーラーを選べないよう修正", "録画・VOD・コメント動画生成中の更新再起動を禁止し、更新の適用は利用者が明示的に操作する方式に変更"] },
   { version: "0.9.0-beta.91", title: "β版だけで製品版・β版の両方を選択できる版管理に変更", changes: ["製品版の画面からβ版への変更操作を廃止", "β版のバージョン更新にβ版・製品版の両方のインストーラー取得を追加", "既存の版・録画データを保持し、製品版の更新チャンネルは固定"] },
@@ -3554,7 +3556,7 @@ export default function App() {
                 </details>}
               </div>}
               {article.audioError && <div className="storage-error article-error">音声認識エラー：{article.audioError}</div>}
-              {deduplicateArticleList(article.paragraphs, 5, 1000).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+              {deduplicateArticleList(article.paragraphs, 5, 1000, article.aiSummary ?? "").map((paragraph, index) => <p key={index}>{paragraph}</p>)}
               {Boolean(article.highlights?.length) && <div className="article-highlights"><strong>注目ポイント</strong><ul>{deduplicateArticleList(article.highlights ?? [], 5, 240).map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
               {article.aiError && <div className="storage-error article-error">{article.aiGenerated ? "一部情報源の解析状況：" : "AI更新エラー："}{article.aiError}</div>}
               <div className="article-stats">配信時間 {Math.floor((article.durationSeconds ?? 0) / 60).toLocaleString("ja-JP")}分 ・ コメント {article.commentCount.toLocaleString("ja-JP")}件 ・ 投稿者 {article.uniqueCommenters.toLocaleString("ja-JP")}人 ・ 視聴者数 {article.viewerCount?.toLocaleString("ja-JP") ?? "—"}人（最大 {article.peakViewerCount?.toLocaleString("ja-JP") ?? "—"}人） ・ 分析キーワード {article.keywords.join("、") || "なし"}{article.lastAiUpdateAt ? ` ・ AI更新 ${new Date(article.lastAiUpdateAt).toLocaleTimeString("ja-JP")}` : ""}</div>

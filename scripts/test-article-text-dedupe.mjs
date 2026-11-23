@@ -25,6 +25,20 @@ assert.deepEqual(deduplicateArticleList(["00:01:20 映像では猫が寝てい�
 assert.deepEqual(deduplicateArticleList(["短い反応", "短い反応", "違う反応"]), ["短い反応", "違う反応"],
   "短い定型文の完全重複だけ除去");
 
+// The article intro is rendered above the body: show every sentence only once.
+const intro = "配信ではゲームの途中で予期しないイベントが発生したと説明しています。";
+const bodyExtra = "その後、配信者は次のエリアに移動して視聴者の質問へ回答しました。";
+assert.deepEqual(deduplicateArticleList([intro + bodyExtra, intro, bodyExtra], 5, 1000, intro), [bodyExtra],
+  "記事の要約と本文で同じ文を2度表示しないが、本文独自の内容は残す");
+// Earlier generated articles contain literal backslash-n or full-width ＼n.
+assert.equal(deduplicateArticleSentences(String.raw`\n` + intro + String.raw`\n` + intro),
+  intro, "文字列として混入した改行記号を画面に残さず、重複文を除去");
+assert.equal(deduplicateArticleSentences("＼n" + intro + "＼n" + bodyExtra),
+  intro + " " + bodyExtra, "全角スラッシュの改行文字列を正規化");
+assert.deepEqual(deduplicateArticleList([
+  String.raw`00:01:20 \n` + intro, String.raw`00:02:20 \n` + intro
+]), ["00:01:20 " + intro, "00:02:20 " + intro],
+  "異なる再生位置の説明は文章が同じでも両方残す");
 const payload = { message: { content: JSON.stringify({
   headline: "映画配信を紹介",
   summary: repetitive + repetitive,
@@ -45,4 +59,5 @@ const source = readFileSync(new URL("../src/ui/App.tsx", import.meta.url), "utf8
 assert.match(source, /deduplicateArticleList\(article\.videoScenes/, "保存済みの記事の画面表示も重複除去する");
 assert.match(source, /deduplicateArticleSentences\(article\.videoSummary/, "古い映像要約にも重複除去を適用");
 assert.match(source, /deduplicateArticleList\(article\.paragraphs/, "記事本文にも重複除去を適用");
+assert.match(source, /deduplicateArticleList\(article\.paragraphs, 5, 1000, article\.aiSummary \?\? ""\)/, "表示用本文は要約と共通の文章を重複表示しない");
 console.log("配信AI新聞：重複した映像場面・要約・記事本文・古い記事の表示対策テスト成功");
