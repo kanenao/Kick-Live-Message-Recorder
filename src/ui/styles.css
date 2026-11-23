@@ -639,3 +639,15 @@
 .edition-release-details summary { cursor: pointer; font-weight: 600; }
 .edition-release-details .release-notes-content { max-height: 250px; overflow-y: auto; padding-top: 8px; }
 .product-history-panel .version-history-content a { display: inline-block; margin-top: 10px; }
+
+
+/* Compact feedback entry shared by beta and product editions. */
+.feedback-panel .panel-heading { margin-bottom: 12px; }
+.feedback-kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.feedback-kind { padding: 15px; border: 1px solid rgba(255,255,255,.11); border-radius: 11px; background: rgba(255,255,255,.035); }
+.feedback-chip { display: inline-flex; padding: 3px 9px; border-radius: 7px; color: #e4eaf6; background: rgba(255,255,255,.09); font-size: 12px; }
+.feedback-kind p { margin: 12px 0; color: #b7c2ce; line-height: 1.65; font-size: 12px; }
+.feedback-kind button { font-size: 12px; }
+.feedback-hint { color: #b1bdcd; font-size: 12px; line-height: 1.75; margin: 14px 0 0; }
+.feedback-message { margin-top: 12px; color: #a5dfb5; font-size: 12px; overflow-wrap: anywhere; }
+@media (max-width: 850px) { .feedback-kinds { grid-template-columns: 1fr; } }
