@@ -2,7 +2,7 @@
 
 Kick配信の監視・録画・コメント保存・コメント付き動画生成と、**配信AI新聞**を開発するWindowsアプリです。
 
-> **最新公開β版：`0.9.0-beta.92`**（Windowsインストーラー公開済み）
+> **最新公開β版：`0.9.0-beta.93`**（Windowsインストーラー公開済み）
 > **最新版：β版からβ版・製品版を選択可能。製品版側からの変更は不可**
 > **最新製品版：`1.0.0`**（2026年11月23日公開・配信AI新聞なし、実機検証は継続）
 > 製品版 `1.0.0` は `stable` ブランチで独立して管理し、配信記事を含めません。
@@ -10,16 +10,16 @@ Kick配信の監視・録画・コメント保存・コメント付き動画生�
 - [β版開発ソース](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/beta)
 - [製品版 v1.0.0 をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v1.0.0)
 - [製品版開発ソース](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/stable)
-- [β版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.9.0-beta.92)
+- [β版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.9.0-beta.93)
 - [最後に公開したα版](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.8.1-alpha.87)
 - [版の違い・リリース条件](docs/RELEASE_CHANNELS.md)
 - [更新履歴](CHANGELOG.md)
 
-## 0.9.0-beta.93（検証中）―製品版の誤ダウンロードを禁止
+## 0.9.0-beta.93（公開済みβ版）―製品版の誤ダウンロードを禁止
 
 - β版の自動更新対象はGitHub Releasesに公開済みの**β版のみ**。最新版β版のインストーラーと `beta.yml` を検証し、ダウンロードする版が一致した場合だけ自動取得します。製品版の公開がβ版より新しくても、β版から勝手に製品版は取得しません。
 - 製品版のインストーラーはβ版の「バージョン更新」にある専用ボタンからのみ取得可能。確認ダイアログで「インストーラーを取得」を選ぶまで開始しません。
-- Windowsにβ版を起動した履歴を保持し、**以前のβ版ユーザーのみ**製品版の「β版に戻る」を利用できるようにします。旧β版の履歴がない場合はβ93を一度起動すると利用履歴が登録されます。
+- Windowsにβ版を起動した履歴を保持し、**以前のβ版ユーザーのみ**製品版1.0.1以降の「β版に戻る」を利用できるようにします。旧β版の履歴がない場合はβ93を一度起動すると利用履歴が登録されます。
 - 履歴は同じWindowsユーザーのローカル領域にのみ保存し、パスワードや配信情報は保存しません。β版と製品版は別アプリとして存続し、録画・コメント・記事を削除しません。
 
 ## 0.9.0-beta.92（公開済みβ版）―版選択の見やすさと更新安全性
