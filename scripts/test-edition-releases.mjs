@@ -46,7 +46,8 @@ assert.doesNotMatch(main, /ipcMain\.handle\("editions:list"/);
 assert.doesNotMatch(main, /ipcMain\.handle\("editions:switch"/);
 assert.doesNotMatch(preload, /ipcRenderer\.invoke\("editions:switch"/);
 assert.doesNotMatch(preload, /openEditionInstaller/);
-assert.doesNotMatch(ui, /className="version-history-section edition-switch-panel"/);
+assert.match(ui, /betaReturnStatus\.eligible/);
+assert.match(ui, /β版の取得を許可する/);
 assert.doesNotMatch(ui, /openEditionSwitcher/);
 assert.match(ui, /製品版は製品版の更新のみを扱います/);
 assert.match(main, /autoUpdater\.autoInstallOnAppQuit\s*=\s*false/,
