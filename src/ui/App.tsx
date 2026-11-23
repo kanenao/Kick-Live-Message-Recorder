@@ -1249,7 +1249,22 @@ export default function App() {
     const ticker = window.setInterval(() => setVodClock(Date.now()), 1000);
     return () => window.clearInterval(ticker);
   }, []);
-  const [tab, setTab] = useState<"dashboard" | "recording" | "library" | "comment-video" | "articles" | "updates" | "settings">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "recording" | "library" | "comment-video" | "articles" | "updates" | "feedback" | "settings">("dashboard");
+  const [feedbackMessage, setFeedbackMessage] = useState("");
+  const openFeedback = async (kind: "bug" | "feature"): Promise<void> => {
+    if (!window.kickRecorder) {
+      setFeedbackMessage("報告フォームはWindowsデスクトップ版で開けます。");
+      return;
+    }
+    setFeedbackMessage("GitHubの投稿フォームをブラウザーで開いています。");
+    try {
+      await window.kickRecorder.openFeedbackForm(kind);
+      setFeedbackMessage("ブラウザーでGitHubにログインし、内容を入力して送信してください。送信後にタグが付与され、AIが確認します。");
+    } catch (error) {
+      setFeedbackMessage("フォームを開けませんでした：" + (error instanceof Error ? error.message : String(error)));
+    }
+  };
+
   const [isReady, setIsReady] = useState(false);
   const [storageError, setStorageError] = useState("");
   const [appDataDirectory, setAppDataDirectory] = useState("");
@@ -2654,6 +2669,7 @@ export default function App() {
       <button className={tab === "comment-video" ? "nav-item selected" : "nav-item"} onClick={() => setTab("comment-video")}>✦ <span>コメント付き動画</span></button>
       <button className={tab === "articles" ? "nav-item selected" : "nav-item"} onClick={() => setTab("articles")}>▤ <span>配信記事</span></button>
       <div className="nav-label">アプリ</div>
+      <button className={tab === "feedback" ? "nav-item selected" : "nav-item"} onClick={() => setTab("feedback")}>✉ <span>不具合情報・機能要望</span></button>
       <button className={tab === "updates" ? "nav-item selected" : "nav-item"} onClick={() => setTab("updates")}>↻ <span>バージョン更新</span></button>
       <button className={tab === "settings" ? "nav-item selected" : "nav-item"} onClick={() => setTab("settings")}>⚙ <span>設定</span></button>
       <div className="sidebar-bottom"><span className="status-dot" /> β版・開発テスト中<small>現在のバージョン {appVersion}</small></div>
@@ -2661,7 +2677,7 @@ export default function App() {
 
     <main className={tab === "library" ? "main main-library" : "main"}>
       <header className="topbar">
-        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "recording" ? "録画専用" : tab === "library" ? "録画ライブラリ" : tab === "comment-video" ? "コメント付き動画を生成" : tab === "articles" ? "配信記事" : tab === "updates" ? "バージョン更新" : "設定"}</h1></div>
+        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "recording" ? "録画専用" : tab === "library" ? "録画ライブラリ" : tab === "comment-video" ? "コメント付き動画を生成" : tab === "articles" ? "配信記事" : tab === "updates" ? "バージョン更新" : tab === "feedback" ? "不具合情報・機能要望" : "設定"}</h1></div>
         <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="alpha-tag">β版</span><img className="avatar avatar-brand" src="./app-icon.png" alt="Kick Live Message Recorder アイコン" /></div>
       </header>
 
@@ -3576,6 +3592,25 @@ export default function App() {
             </section>)}
           </div>
         </>}
+      </section>}
+
+      {tab === "feedback" && <section className="panel feedback-panel">
+        <div className="panel-heading"><div><h2>不具合情報・機能要望</h2><p>このアプリの{CURRENT_EDITION === "beta" ? "β版" : "製品版"}向けに報告できます。対象バージョン：{appVersion}</p></div></div>
+        <div className="feedback-kinds">
+          <article className="feedback-kind">
+            <strong className="feedback-chip">不具合情報</strong>
+            <p>録画が止まる、コメントが取得できない、操作しても反応しないなどの問題を報告します。</p>
+            <button className="small-act" type="button" onClick={() => void openFeedback("bug")}>不具合情報を報告</button>
+          </article>
+          <article className="feedback-kind">
+            <strong className="feedback-chip">機能要望</strong>
+            <p>追加してほしい機能や操作性の改善を提案します。β版・製品版の区分が自動的に付けられます。</p>
+            <button className="small-act" type="button" onClick={() => void openFeedback("feature")}>機能要望を送る</button>
+          </article>
+        </div>
+        <p className="feedback-hint">報告はGitHub Issuesで投稿します。投稿時に「不具合情報／機能要望」と「β版／製品版」のタグを自動付与し、AIが内容・重複・優先度を定期的に確認します。AIが投稿文の命令をそのまま実行したり、確認なしに製品版を更新することはありません。</p>
+        <p className="feedback-hint">パスワード、APIキー、認証Cookie、配信のセッショントークン、個人情報は投稿しないでください。製品版の通常修正は月1回程度です。</p>
+        {feedbackMessage && <p className="feedback-message" role="status">{feedbackMessage}</p>}
       </section>}
 
       {tab === "updates" && <section className="panel version-update-panel">
