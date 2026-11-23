@@ -218,7 +218,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.9.0-beta.91";
+const APP_VERSION = "0.9.0-beta.92";
 const CURRENT_EDITION: "beta" | "stable" = APP_VERSION.includes("-beta.") ? "beta" : "stable";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
@@ -247,6 +247,7 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  { version: "0.9.0-beta.92", title: "版の公開状況再確認と安全な更新適用を強化", changes: ["β版画面に公開状況の再取得ボタン、取得日時、各版の最新リリース情報を表示", "取得に失敗した際は古い公開情報のままインストーラーを選べないよう修正", "録画・VOD・コメント動画生成中の更新再起動を禁止し、更新の適用は利用者が明示的に操作する方式に変更"] },
   { version: "0.9.0-beta.91", title: "β版だけで製品版・β版の両方を選択できる版管理に変更", changes: ["製品版の画面からβ版への変更操作を廃止", "β版のバージョン更新にβ版・製品版の両方のインストーラー取得を追加", "既存の版・録画データを保持し、製品版の更新チャンネルは固定"] },
   { version: "0.9.0-beta.90", title: "製品版履歴の表示とβ版・製品版の安全な手動切り替え", changes: ["公開済みの製品版履歴・リリースノートをβ版のバージョン更新に表示", "β版から製品版、製品版からβ版のインストーラー取得を確認付きで案内", "録画・VODダウンロード・コメント付き動画生成中の版切り替えを禁止"] },
   { version: "0.8.1-beta.89", title: "β版表示・更新画面の切り替え漏れを修正", changes: ["更新画面に残っていたα版の表示をβ版に修正", "β版専用更新チャンネルの表示を統一"] },
@@ -1290,6 +1291,8 @@ export default function App() {
   }>({ beta: [], stable: [] });
   const [editionReleasesLoading, setEditionReleasesLoading] = useState(false);
   const [editionReleasesError, setEditionReleasesError] = useState("");
+  const [editionReleasesRefreshKey, setEditionReleasesRefreshKey] = useState(0);
+  const [editionReleasesCheckedAt, setEditionReleasesCheckedAt] = useState<string | null>(null);
   const [editionSwitching, setEditionSwitching] = useState(false);
   const [editionSwitchMessage, setEditionSwitchMessage] = useState("");
   const [recordingRequests, setRecordingRequests] = useState<Record<string, boolean>>({});
@@ -1869,14 +1872,21 @@ export default function App() {
     let active = true;
     setEditionReleasesLoading(true);
     setEditionReleasesError("");
+    setEditionReleasesCheckedAt(null);
+    // 通信失敗の際に過去の公開情報を「現在公開中」と誤表示しない。
+    setEditionReleases({ beta: [], stable: [] });
     void window.kickRecorder.getEditionReleases()
-      .then(items => { if (active) setEditionReleases(items); })
+      .then(items => {
+        if (!active) return;
+        setEditionReleases(items);
+        setEditionReleasesCheckedAt(new Date().toISOString());
+      })
       .catch(error => {
         if (active) setEditionReleasesError(error instanceof Error ? error.message : "版の公開履歴を取得できません。");
       })
       .finally(() => { if (active) setEditionReleasesLoading(false); });
     return () => { active = false; };
-  }, [tab, isDesktop]);
+  }, [tab, isDesktop, editionReleasesRefreshKey]);
 
   async function openEditionSwitcher(target: "beta" | "stable") {
     if (!window.kickRecorder || editionSwitching) return;
@@ -3589,32 +3599,51 @@ export default function App() {
               <button className="primary-small" onClick={() => void checkForAppUpdates()} disabled={isCheckingUpdates || updateStatus.status === "checking" || updateStatus.status === "downloading"}>{isCheckingUpdates || updateStatus.status === "checking" ? "確認中..." : "更新を確認"}</button>
               {updateStatus.status === "downloaded" && <button className="small-action" onClick={() => void installAppUpdate()}>再起動して更新</button>}
             </div>
-            <small className="version-update-hint">起動時と約6時間ごとに最新β版を自動確認・ダウンロードします。旧α版からβ版へ移行する場合は、最初の1回だけβ版インストーラーを手動で実行してください。録画・VOD保存を完了してから再起動し更新してください。</small>
+            <small className="version-update-hint">起動時と約6時間ごとに最新β版を自動確認・ダウンロードします。インストールは「再起動して更新」を押したときだけ実行します。録画・VOD取得・コメント動画生成を終えてから適用してください。旧α版からの初回移行にはβ版インストーラーを使用してください。</small>
           </div>
         </div>
         <div className="version-history-section edition-switch-panel">
           <div className="settings-subheading">
             <h3>版を選択（β版専用）</h3>
-            <span className="comment-video-log-count">現在：β版</span>
+            <div className="edition-heading-actions">
+              <span className="comment-video-log-count">現在：β版</span>
+              <button type="button" className="small-action" disabled={!isDesktop || editionReleasesLoading || editionSwitching}
+                onClick={() => setEditionReleasesRefreshKey(key => key + 1)}>
+                {editionReleasesLoading ? "確認中..." : "公開状況を再確認"}
+              </button>
+            </div>
           </div>
-          <p>このβ版から「β版」と「製品版」の両方を選べます。製品版のアプリ内には版の切り替え機能を置きません。β版は削除せず残しておくと、β版画面で再びどちらのインストーラーも選べます。</p>
+          <p>β版・製品版それぞれの公開済みインストーラーをこの画面から選べます。製品版のアプリ内からβ版への切り替えはできません。β版を残しておけば、ここから両方の版を管理できます。</p>
+          {editionReleasesCheckedAt && <small className="version-update-hint">GitHub Releasesの確認日時：{new Date(editionReleasesCheckedAt).toLocaleString("ja-JP")}</small>}
           {(["beta", "stable"] as const).map(target => <div className="edition-switch-actions" key={target}>
             <div className="edition-switch-details">
-              <strong>{target === "beta" ? "β版を選択" : "製品版を選択"}</strong>
-              <small>{editionReleasesLoading ? "GitHub Releasesを確認しています..." :
+              <strong>{target === "beta" ? "β版を選択" : "製品版を選択"} {target === "beta" && <span className="edition-current-label">現在使用中</span>}</strong>
+              <small>{!isDesktop ? "Windowsインストーラー版から確認できます" : editionReleasesLoading ? "GitHub Releasesを確認しています..." :
+                editionReleasesError ? "取得失敗：再確認してください" :
                 editionReleases[target][0]
                   ? "公開済み：v" + editionReleases[target][0].version
-                  : target === "stable" ? "製品版は未公開（1.0.0は検証候補）" : "公開済みβ版を確認できません"}</small>
+                  : target === "stable" ? "製品版は未公開です" : "公開済みβ版を確認できません"}</small>
+              {!editionReleasesError && editionReleases[target][0] && <>
+                <small>公開日：{editionReleases[target][0].publishedAt ? new Date(editionReleases[target][0].publishedAt).toLocaleDateString("ja-JP") : "未取得"}</small>
+                <details className="edition-release-details">
+                  <summary>最新リリースの更新内容を確認</summary>
+                  {editionReleases[target][0].notes
+                    ? <ReleaseNotesContent value={editionReleases[target][0].notes} />
+                    : <p>GitHub Releasesに更新内容がありません。</p>}
+                </details>
+              </>}
             </div>
             <button type="button" className="primary-small"
               onClick={() => void openEditionSwitcher(target)}
-              disabled={!isDesktop || editionReleasesLoading || editionSwitching || !editionReleases[target].length}>
-              {editionSwitching ? "確認中..." : target === "beta" ? "β版のインストーラーを取得" : "製品版のインストーラーを取得"}
+              disabled={!isDesktop || editionReleasesLoading || Boolean(editionReleasesError) || editionSwitching || !editionReleases[target].length}>
+              {editionSwitching ? "確認中..." : target === "beta"
+                ? (editionReleases.beta[0]?.version === appVersion ? "β版を再取得" : "最新β版を取得")
+                : "製品版を取得"}
             </button>
           </div>)}
-          {editionReleasesError && <p className="version-update-message" role="alert">{editionReleasesError}</p>}
+          {editionReleasesError && <p className="version-update-message" role="alert">公開情報を取得できません：{editionReleasesError}。上の「公開状況を再確認」を押してください。</p>}
           {editionSwitchMessage && <p className="version-update-message" role="status">{editionSwitchMessage}</p>}
-          <small className="version-update-hint">公式リリースのインストーラーを確認付きで開きます。録画・VOD取得・動画生成中は実行できません。製品版は配信AI新聞なし、β版は配信AI新聞あり。録画・コメント等のデータは削除しません。同時監視による二重録画に注意してください。</small>
+          <small className="version-update-hint">確認後にGitHubのWindowsインストーラーを開きます。アプリ内で実行形式を直接切り替える操作ではありません。録画・VOD取得・動画生成中は実行不可。録画やコメントなどのファイルは削除しません。2つのアプリで同時に監視を有効にしないでください。</small>
         </div>
         {CURRENT_EDITION === "beta" && <div className="version-history-section product-history-panel">
           <div className="settings-subheading">
