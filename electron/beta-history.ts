@@ -8,7 +8,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, unlinkSync,
 import { join } from "node:path";
 
 const markerName = "beta-access.json";
-const betaVersion = /^\\d+\\.\\d+\\.\\d+-beta\\.\\d+$/;
+const betaVersion = /^\d+\.\d+\.\d+-beta\.\d+$/;
 const markerMaxBytes = 1024;
 
 export type BetaHistory = {
