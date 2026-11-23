@@ -218,7 +218,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "0.9.0-beta.92";
+const APP_VERSION = "0.9.0-beta.93";
 const CURRENT_EDITION: "beta" | "stable" = APP_VERSION.includes("-beta.") ? "beta" : "stable";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
@@ -247,6 +247,7 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  { version: "0.9.0-beta.93", title: "製品版の誤自動取得を停止・β版ユーザーの復帰履歴を記録", changes: ["β版自動更新の対象を検証済みβ版Releaseに限定", "正規版は版選択ボタンから明示的に許可した場合だけ取得", "β版の起動履歴を記録し、製品版からβ版へ戻れる対象を以前のβ版ユーザーに限定"] },
   { version: "0.9.0-beta.92", title: "版の公開状況再確認と安全な更新適用を強化", changes: ["β版画面に公開状況の再取得ボタン、取得日時、各版の最新リリース情報を表示", "取得に失敗した際は古い公開情報のままインストーラーを選べないよう修正", "録画・VOD・コメント動画生成中の更新再起動を禁止し、更新の適用は利用者が明示的に操作する方式に変更"] },
   { version: "0.9.0-beta.91", title: "β版だけで製品版・β版の両方を選択できる版管理に変更", changes: ["製品版の画面からβ版への変更操作を廃止", "β版のバージョン更新にβ版・製品版の両方のインストーラー取得を追加", "既存の版・録画データを保持し、製品版の更新チャンネルは固定"] },
   { version: "0.9.0-beta.90", title: "製品版履歴の表示とβ版・製品版の安全な手動切り替え", changes: ["公開済みの製品版履歴・リリースノートをβ版のバージョン更新に表示", "β版から製品版、製品版からβ版のインストーラー取得を確認付きで案内", "録画・VODダウンロード・コメント付き動画生成中の版切り替えを禁止"] },
@@ -3599,7 +3600,7 @@ export default function App() {
               <button className="primary-small" onClick={() => void checkForAppUpdates()} disabled={isCheckingUpdates || updateStatus.status === "checking" || updateStatus.status === "downloading"}>{isCheckingUpdates || updateStatus.status === "checking" ? "確認中..." : "更新を確認"}</button>
               {updateStatus.status === "downloaded" && <button className="small-action" onClick={() => void installAppUpdate()}>再起動して更新</button>}
             </div>
-            <small className="version-update-hint">起動時と約6時間ごとに最新β版を自動確認・ダウンロードします。インストールは「再起動して更新」を押したときだけ実行します。録画・VOD取得・コメント動画生成を終えてから適用してください。旧α版からの初回移行にはβ版インストーラーを使用してください。</small>
+            <small className="version-update-hint">起動時と約6時間ごとに公開済みβ版だけを照合して自動ダウンロードします。製品版は自動ダウンロードしません。インストールは「再起動して更新」を押したときだけ実行します。録画・VOD取得・コメント動画生成を終えてから適用してください。旧α版からの初回移行にはβ版インストーラーを使用してください。</small>
           </div>
         </div>
         <div className="version-history-section edition-switch-panel">
@@ -3613,7 +3614,7 @@ export default function App() {
               </button>
             </div>
           </div>
-          <p>β版・製品版それぞれの公開済みインストーラーをこの画面から選べます。製品版のアプリ内からβ版への切り替えはできません。β版を残しておけば、ここから両方の版を管理できます。</p>
+          <p>β版・製品版それぞれの公開済みインストーラーをこの画面から選べます。製品版の取得は、下の専用ボタンと確認画面で自分が許可した場合だけ開始します。以前にβ版を起動した利用履歴があれば、製品版からβ版へ戻す機能も利用できます。</p>
           {editionReleasesCheckedAt && <small className="version-update-hint">GitHub Releasesの確認日時：{new Date(editionReleasesCheckedAt).toLocaleString("ja-JP")}</small>}
           {(["beta", "stable"] as const).map(target => <div className="edition-switch-actions" key={target}>
             <div className="edition-switch-details">
@@ -3638,7 +3639,7 @@ export default function App() {
               disabled={!isDesktop || editionReleasesLoading || Boolean(editionReleasesError) || editionSwitching || !editionReleases[target].length}>
               {editionSwitching ? "確認中..." : target === "beta"
                 ? (editionReleases.beta[0]?.version === appVersion ? "β版を再取得" : "最新β版を取得")
-                : "製品版を取得"}
+                : "製品版の取得を許可"}
             </button>
           </div>)}
           {editionReleasesError && <p className="version-update-message" role="alert">公開情報を取得できません：{editionReleasesError}。上の「公開状況を再確認」を押してください。</p>}
