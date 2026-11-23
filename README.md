@@ -1,11 +1,12 @@
-# Kick Live Message Recorder — 製品版（準備中）
+# Kick Live Message Recorder — 製品版
 
 **録画・コメント保存・コメント付き動画生成に特化したWindows用製品版**です。配信AI新聞（記事機能）は提供しません。
 
-> **製品版候補：`1.0.0`（未公開）**。Windows実機による録画・コメント・更新・インストールの受け入れ確認後に正式公開を判断します。
+> **製品版：`1.0.0`（2026年11月23日公開）**。Windows用インストーラーを配布しています。実機でのLIVE録画・長時間監視などは継続検証中です。
 > **最新公開β版：`0.9.0-beta.92`**。映像・音声・コメントによる配信AI新聞はβ版だけで開発します。
 > **旧α版最終公開：`0.8.1-alpha.87`**（履歴保持）。
 
+- [製品版 v1.0.0 ダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v1.0.0)
 - [製品版のソースとビルド状況](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/stable)
 - [配信AI新聞を含むβ版](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/beta)
 - [β版・製品版の機能分離と受け入れ条件](docs/RELEASE_CHANNELS.md)
