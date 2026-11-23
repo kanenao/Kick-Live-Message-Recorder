@@ -17,6 +17,8 @@ import {
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { autoUpdater } from "electron-updater";
+import { fetchEditionReleases } from "./edition-releases";
+import { readBetaHistory } from "./beta-history";
 import { KickChatReceiver } from "./chat";
 import { KickVodChatDownloader, getVodBroadcastDetails } from "./vod-chat";
 import { regenerateSavedVodAss } from "./vod-ass-reexport";
@@ -1389,6 +1391,49 @@ function registerIpcHandlers(): void {
       defaultOutputDirectory: getRecordingOutputDirectory(),
       isPackaged: app.isPackaged
     };
+  });
+
+  // Read-only eligibility check. Product editions never create or modify the beta-use marker.
+  ipcMain.handle("editions:beta-return-status", event => {
+    assertTrustedSender(event);
+    if (process.platform !== "win32" || !app.isPackaged) return { eligible: false };
+    return readBetaHistory(app.getPath("appData"));
+  });
+
+  // Only a user who previously launched a packaged beta on this Windows account
+  // may return to beta from the product edition. No auto-download or auto-switch.
+  ipcMain.handle("editions:beta-return-open", async event => {
+    assertTrustedSender(event);
+    if (process.platform !== "win32" || !app.isPackaged) {
+      throw new Error("β版への復帰はインストール済みWindows製品版でのみ利用できます。");
+    }
+    const history = readBetaHistory(app.getPath("appData"));
+    if (!history.eligible) {
+      throw new Error("以前にβ版を起動した記録がありません。β版の最新版を一度起動したユーザーのみ利用できます。");
+    }
+    if (recordingManager.hasActiveRecordings() || vodDownloadManager.hasActiveDownloads() ||
+        commentVideoGenerator.isRunning() || vodChatDownloader.isRunning()) {
+      throw new Error("録画・VOD取得・チャット取得・コメント付き動画生成を終了してから操作してください。");
+    }
+    const releases = await fetchEditionReleases();
+    const beta = releases.beta[0];
+    if (!beta || !/^\d+\.\d+\.\d+-beta\.\d+$/.test(beta.version)) {
+      throw new Error("公開済みのβ版インストーラーを確認できませんでした。");
+    }
+    if (!mainWindow) throw new Error("確認画面を開けませんでした。");
+    const confirm = await dialog.showMessageBox(mainWindow, {
+      type: "question",
+      buttons: ["β版の取得を許可", "キャンセル"],
+      defaultId: 1, cancelId: 1, noLink: true,
+      title: "以前のβ版ユーザー：β版へ戻る",
+      message: "β版 v" + beta.version + " の取得を許可しますか？",
+      detail: "以前のβ版利用履歴を確認しました。GitHub公式のβ版インストーラーをブラウザーで開きます。" +
+        "\n許可するまで何もダウンロードしません。製品版は削除されず、録画・コメントなどの保存データも変更しません。" +
+        "\n二重録画を避けるため、起動しない版では24時間監視を停止してください。"
+    });
+    if (confirm.response !== 0) return { opened: false as const };
+    await shell.openExternal(beta.installerUrl);
+    return { opened: true as const, version: beta.version };
   });
 
   ipcMain.handle("updater:get-status", event => {

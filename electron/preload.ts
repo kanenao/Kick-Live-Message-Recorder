@@ -275,6 +275,10 @@ const api = {
     ipcRenderer.on("chat:status", listener);
     return () => ipcRenderer.removeListener("chat:status", listener);
   },
+  getBetaReturnStatus: (): Promise<{ eligible: boolean; version?: string; activatedAt?: string }> =>
+    ipcRenderer.invoke("editions:beta-return-status"),
+  openBetaReturnInstaller: (): Promise<{ opened: boolean; version?: string }> =>
+    ipcRenderer.invoke("editions:beta-return-open"),
   getUpdateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke("updater:get-status"),
   checkForUpdates: (): Promise<UpdateStatus> => ipcRenderer.invoke("updater:check"),
   installUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("updater:install"),

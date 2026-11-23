@@ -218,7 +218,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "1.0.1";
 // Product edition never exposes beta-only AI articles.
 const ARTICLES_ENABLED = APP_VERSION.includes("-beta.");
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
@@ -248,6 +248,7 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  { version: "1.0.1", title: "以前のβ版利用者だけが製品版からβ版へ戻れる機能", changes: ["製品版の更新チャンネルは製品版専用のまま", "β版を起動した履歴があるWindowsユーザーだけにβ版へ戻すボタンを表示", "確認ダイアログで許可するまでβ版はダウンロードしない"] },
   { version: "1.0.0", title: "製品版：録画・コメント・動画生成に特化", changes: ["製品版から配信記事メニューと関連する操作を除外", "β版と製品版の自動更新経路を分離"] },
   {
     version: "0.8.1-alpha.87",
@@ -1282,6 +1283,9 @@ export default function App() {
     message: "起動時に自動で更新を確認します。"
   });
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
+  const [betaReturnStatus, setBetaReturnStatus] = useState<{ eligible: boolean; version?: string; activatedAt?: string }>({ eligible: false });
+  const [betaReturnLoading, setBetaReturnLoading] = useState(false);
+  const [betaReturnMessage, setBetaReturnMessage] = useState("");
   const [recordingRequests, setRecordingRequests] = useState<Record<string, boolean>>({});
   const [recordingFiles, setRecordingFiles] = useState<RecordingFile[]>([]);
   const [storyboardTarget, setStoryboardTarget] = useState<{ path: string; title: string } | null>(null);
@@ -1855,6 +1859,31 @@ export default function App() {
       setStorageError("ブラウザー内に設定を保存できませんでした。");
     }
   }, [channels, recordingOnlyChannels, settings, isReady]);
+
+  useEffect(() => {
+    if (tab !== "updates" || !isDesktop || !window.kickRecorder) return;
+    let active = true;
+    void window.kickRecorder.getBetaReturnStatus()
+      .then(status => { if (active) setBetaReturnStatus(status); })
+      .catch(() => { if (active) setBetaReturnStatus({ eligible: false }); });
+    return () => { active = false; };
+  }, [tab, isDesktop]);
+
+  async function openBetaReturnInstaller() {
+    if (!window.kickRecorder || !betaReturnStatus.eligible || betaReturnLoading) return;
+    setBetaReturnLoading(true);
+    setBetaReturnMessage("");
+    try {
+      const result = await window.kickRecorder.openBetaReturnInstaller();
+      if (result.opened) {
+        setBetaReturnMessage("β版 v" + result.version + " の公式インストーラーを開きました。ダウンロード後にインストールしてください。製品版は残ります。");
+      }
+    } catch (error) {
+      setBetaReturnMessage(error instanceof Error ? error.message : "β版の取得を開始できませんでした。");
+    } finally {
+      setBetaReturnLoading(false);
+    }
+  }
 
   async function openRecordingFolder() {
     if (!window.kickRecorder) return;
@@ -3551,7 +3580,20 @@ export default function App() {
             <small className="version-update-hint">起動時と約6時間ごとに製品版の更新を自動確認・ダウンロードします。開発途中のβ版は自動的に配信されません。録画・VOD保存を完了してから再起動し更新してください。</small>
           </div>
         </div>
-        <div className="notice">製品版は製品版の更新のみを扱います。β版への切り替え機能はありません。β版・製品版の選択は、別途インストールしたβ版の「バージョン更新」画面から操作してください。</div>
+        {betaReturnStatus.eligible
+          ? <div className="version-history-section edition-switch-panel">
+              <div className="settings-subheading"><h3>β版に戻す（以前のβ版ユーザー限定）</h3><span className="comment-video-log-count">利用履歴確認済み</span></div>
+              <p>このWindowsユーザーでβ版を起動した履歴があります。β版の取得は、自分で許可した場合だけ実行します。製品版の通常更新ではβ版を取得しません。</p>
+              {betaReturnStatus.version && <small className="version-update-hint">確認できたβ版の利用履歴：v{betaReturnStatus.version}</small>}
+              <div className="edition-switch-actions">
+                <div className="edition-switch-details"><strong>最新β版に戻る</strong><small>β版を別アプリとしてインストールします。録画・コメントの保存ファイルは削除しません。</small></div>
+                <button type="button" className="primary-small" disabled={!isDesktop || betaReturnLoading}
+                  onClick={() => void openBetaReturnInstaller()}>{betaReturnLoading ? "確認中..." : "β版の取得を許可する"}</button>
+              </div>
+              {betaReturnMessage && <p className="version-update-message" role="status">{betaReturnMessage}</p>}
+              <small className="version-update-hint">録画中・コメント取得中・動画生成中は利用不可。確認画面でキャンセルすると取得は始まりません。</small>
+            </div>
+          : <div className="notice">製品版は製品版の更新のみを扱います。β版に戻る操作は、以前にβ版を起動した履歴を持つユーザーだけに表示されます。過去にβ版を利用していた場合は、新しいβ版を一度起動すると利用履歴を登録できます。</div>}
         {updateStatus.releaseNotes && <div className="release-notes-panel">
           <div className="settings-subheading"><h3>公開中のリリースノート</h3>{updateStatus.releaseDate && <span className="comment-video-log-count">{new Date(updateStatus.releaseDate).toLocaleDateString("ja-JP")}</span>}</div>
           <ReleaseNotesContent value={updateStatus.releaseNotes} />
