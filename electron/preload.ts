@@ -279,6 +279,7 @@ const api = {
     ipcRenderer.invoke("editions:beta-return-status"),
   openBetaReturnInstaller: (): Promise<{ opened: boolean; version?: string }> =>
     ipcRenderer.invoke("editions:beta-return-open"),
+  openFeedbackForm: (kind: "bug" | "feature"): Promise<{ opened: boolean }> => ipcRenderer.invoke("feedback:open", kind),
   getUpdateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke("updater:get-status"),
   checkForUpdates: (): Promise<UpdateStatus> => ipcRenderer.invoke("updater:check"),
   installUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("updater:install"),
