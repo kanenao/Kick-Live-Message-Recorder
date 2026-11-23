@@ -252,6 +252,8 @@ declare global {
       copyText: (value: string) => Promise<{ ok: boolean }>;
       onChatMessage: (callback: (message: KickRecorderChatMessage) => void) => () => void;
       onChatStatus: (callback: (status: KickRecorderChatStatus) => void) => () => void;
+      getBetaReturnStatus: () => Promise<{ eligible: boolean; version?: string; activatedAt?: string }>;
+      openBetaReturnInstaller: () => Promise<{ opened: boolean; version?: string }>;
       getUpdateStatus: () => Promise<KickRecorderUpdateStatus>;
       checkForUpdates: () => Promise<KickRecorderUpdateStatus>;
       installUpdate: () => Promise<{ ok: boolean }>;
