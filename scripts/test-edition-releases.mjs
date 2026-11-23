@@ -49,4 +49,10 @@ assert.doesNotMatch(preload, /openEditionInstaller/);
 assert.doesNotMatch(ui, /className="version-history-section edition-switch-panel"/);
 assert.doesNotMatch(ui, /openEditionSwitcher/);
 assert.match(ui, /製品版は製品版の更新のみを扱います/);
+assert.match(main, /autoUpdater\.autoInstallOnAppQuit\s*=\s*false/,
+  "製品版の終了時に更新を無確認で自動適用しない");
+assert.match(main, /commentVideoGenerator\.isRunning\(\) \|\| vodChatDownloader\.isRunning\(\)/,
+  "コメント付き動画・チャット取得中は更新による再起動を禁止");
+assert.match(main, /autoUpdater\.channel\s*=\s*"latest"/,
+  "製品版ではlatest以外の更新チャンネルを使わない");
 console.log("公開済み製品版履歴・悪意あるURL拒否・製品版からの版変更を拒否の回帰テスト成功");
