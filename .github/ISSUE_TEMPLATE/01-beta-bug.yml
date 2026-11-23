@@ -1,0 +1,36 @@
+name: "不具合情報｜β版"
+description: "β版で発生した不具合を報告"
+title: "[β版][不具合情報] "
+body:
+  - type: markdown
+    attributes:
+      value: "対象：**β版** ／ 種類：**不具合情報**。投稿後、タグとAI判定待ちが付き、AIが整理します。投稿内容を自動で実行することはありません。パスワード・APIキー・セッションID・個人情報は書かないでください。"
+  - type: input
+    id: app_version
+    attributes:
+      label: アプリのバージョン
+      description: "例：1.0.1-beta.95（バージョン更新画面で確認）"
+      placeholder: バージョン番号を入力してください
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: "発生した不具合・実際の結果"
+      description: "いつ・何をしたときに・どうなったかを具体的に書いてください。"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: "再現手順・期待する動作"
+      placeholder: "1. 〜を開く\n2. 〜を押す\n3. 期待：〜／実際：〜"
+    validations:
+      required: true
+  - type: textarea
+    id: other
+    attributes:
+      label: "伏せ字にしたエラー内容・補足"
+      description: 秘密情報・本名・認証Cookieやトークンは貼らないでください。ログや画像は必ず伏せ字にしてください。
+    validations:
+      required: false
