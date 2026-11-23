@@ -18,6 +18,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileS
 import { join } from "node:path";
 import { autoUpdater } from "electron-updater";
 import { fetchEditionReleases, type KickEdition } from "./edition-releases";
+import { registerBetaHistory } from "./beta-history";
 import { KickChatReceiver } from "./chat";
 import { KickVodChatDownloader, getVodBroadcastDetails } from "./vod-chat";
 import { regenerateSavedVodAss } from "./vod-ass-reexport";
@@ -528,88 +529,124 @@ function publishUpdateStatus(next: Partial<UpdateStatus>): void {
   mainWindow?.webContents.send("updater:status", updateStatus);
 }
 
+
+let verifiedBetaUpdate: string | null = null;
+let betaUpdateCheckPromise: Promise<UpdateStatus> | null = null;
+
+function betaVersionParts(value: string): number[] | null {
+  const match = /^(\d+)\.(\d+)\.(\d+)-beta\.(\d+)$/.exec(value);
+  return match ? match.slice(1).map(Number) : null;
+}
+
+function newerBetaVersion(candidate: string, current: string): boolean {
+  const a = betaVersionParts(candidate);
+  const b = betaVersionParts(current);
+  if (!a || !b) return false;
+  for (let i = 0; i < 4; i++) {
+    if (a[i] !== b[i]) return a[i] > b[i];
+  }
+  return false;
+}
+
+/**
+ * Never let electron-updater discover the newest GitHub release itself.
+ * After stable v1.0.0 launched that was a PRODUCT release, not a beta update.
+ * First validate the public beta release + installer + beta.yml via GitHub API,
+ * then point the generic updater exclusively at that exact release directory.
+ * Do not download any bytes until the result version matches the verified beta.
+ */
+async function checkBetaOnlyUpdates(): Promise<UpdateStatus> {
+  if (betaUpdateCheckPromise) return betaUpdateCheckPromise;
+  betaUpdateCheckPromise = (async () => {
+    verifiedBetaUpdate = null;
+    publishUpdateStatus({ status: "checking", availableVersion: undefined, percent: 0,
+      message: "公開済みβ版のみを確認しています（製品版は対象外）。" });
+    const releases = await fetchEditionReleases();
+    const release = releases.beta[0];
+    if (!release) throw new Error("有効なβ版の配布ファイルとbeta.ymlを確認できませんでした。");
+    if (!newerBetaVersion(release.version, app.getVersion())) {
+      publishUpdateStatus({ status: "not-available", availableVersion: undefined,
+        releaseNotes: "", releaseDate: "", percent: 100,
+        message: "β版は最新版です。製品版への移行は自動的に行いません。" });
+      return updateStatus;
+    }
+
+    const feedUrl = "https://github.com/kanenao/Kick-Live-Message-Recorder/releases/download/v" + release.version;
+    autoUpdater.setFeedURL({ provider: "generic", url: feedUrl, channel: "beta" });
+    autoUpdater.allowDowngrade = false;
+    const result = await autoUpdater.checkForUpdates();
+    if (result?.updateInfo?.version !== release.version ||
+        !betaVersionParts(result.updateInfo.version)) {
+      throw new Error("更新情報の版が検証済みβ版と一致しません。ダウンロードを中止しました。");
+    }
+    verifiedBetaUpdate = release.version;
+    // Only a version confirmed in the beta Release + manifest may auto-download.
+    await autoUpdater.downloadUpdate();
+    return updateStatus;
+  })().catch(error => {
+    verifiedBetaUpdate = null;
+    publishUpdateStatus({ status: "error", percent: 0, availableVersion: undefined,
+      message: "β版の更新確認に失敗しました：" + (error instanceof Error ? error.message : String(error)) +
+        "。製品版のダウンロードは行いません。" });
+    return updateStatus;
+  }).finally(() => { betaUpdateCheckPromise = null; });
+  return betaUpdateCheckPromise;
+}
+
 function initializeAutoUpdater(): void {
   if (!app.isPackaged || process.platform !== "win32") return;
 
-  autoUpdater.autoDownload = true;
-  // 録画・コメント・動画生成の途中終了を防ぐため、終了時の無確認インストールは行わない。
-  // 更新ファイルは自動取得し、再起動のタイミングは利用者が選択する。
+  // Never let a GitHub stable release (or any unverified version) auto-download.
+  autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
-
-  // GitHubのβ版Releaseはbeta.ymlで配布する。暗黙のチャンネル判定に任せず固定する。
-  // channel setterはダウングレードを許可するため、明示的に再度禁止する。
   autoUpdater.channel = "beta";
   autoUpdater.allowPrerelease = true;
   autoUpdater.allowDowngrade = false;
 
   autoUpdater.on("checking-for-update", () => {
-    publishUpdateStatus({
-      status: "checking",
-      percent: 0,
-      message: "新しいバージョンを確認しています。"
-    });
+    publishUpdateStatus({ status: "checking", percent: 0,
+      message: "公開済みβ版のみを照合しています。" });
   });
-
   autoUpdater.on("update-available", info => {
-    publishUpdateStatus({
-      status: "available",
-      availableVersion: info.version,
+    if (!betaVersionParts(info.version)) {
+      verifiedBetaUpdate = null;
+      publishUpdateStatus({ status: "error", availableVersion: undefined,
+        message: "製品版または不正な更新候補を検出しました。更新を拒否しました。" });
+      return;
+    }
+    publishUpdateStatus({ status: "available", availableVersion: info.version,
       releaseNotes: normalizeReleaseNotes(info.releaseNotes),
-      releaseDate: info.releaseDate,
-      percent: 0,
-      message: `新しいバージョン ${info.version} が見つかりました。自動でダウンロードします。`
-    });
+      releaseDate: info.releaseDate, percent: 0,
+      message: "新しいβ版 " + info.version + " を照合しています。" });
   });
-
   autoUpdater.on("download-progress", progress => {
-    publishUpdateStatus({
-      status: "downloading",
-      percent: Math.max(0, Math.min(100, progress.percent)),
-      message: `更新をダウンロードしています（${Math.round(progress.percent)}%）。`
-    });
+    if (!verifiedBetaUpdate) return;
+    publishUpdateStatus({ status: "downloading", percent: Math.max(0, Math.min(100, progress.percent)),
+      message: "検証済みβ版の更新ファイルを取得中（" + Math.round(progress.percent) + "%）。" });
   });
-
   autoUpdater.on("update-downloaded", info => {
-    publishUpdateStatus({
-      status: "downloaded",
-      availableVersion: info.version,
+    if (!verifiedBetaUpdate || info.version !== verifiedBetaUpdate || !betaVersionParts(info.version)) {
+      publishUpdateStatus({ status: "error", availableVersion: undefined,
+        message: "β版と一致しない更新ファイルを検出しました。適用できません。" });
+      return;
+    }
+    publishUpdateStatus({ status: "downloaded", availableVersion: info.version,
       releaseNotes: normalizeReleaseNotes(info.releaseNotes) || updateStatus.releaseNotes,
-      releaseDate: info.releaseDate || updateStatus.releaseDate,
-      percent: 100,
-      message: `バージョン ${info.version} をダウンロードしました。再起動して更新できます。`
-    });
+      releaseDate: info.releaseDate || updateStatus.releaseDate, percent: 100,
+      message: "β版 " + info.version + " を取得しました。「再起動して更新」で適用できます。" });
   });
-
-  autoUpdater.on("update-not-available", info => {
-    publishUpdateStatus({
-      status: "not-available",
-      availableVersion: info.version,
-      releaseNotes: normalizeReleaseNotes(info.releaseNotes),
-      releaseDate: info.releaseDate,
-      percent: 100,
-      message: "利用中の更新チャンネルで新しい版は見つかりませんでした。過去のβ版からの移行時はGitHub Releasesも確認してください。"
-    });
+  autoUpdater.on("update-not-available", () => {
+    publishUpdateStatus({ status: "not-available", percent: 100,
+      message: "β版の新しい更新はありません。製品版への自動移行はしません。" });
   });
-
   autoUpdater.on("error", error => {
-    publishUpdateStatus({
-      status: "error",
-      message: `更新に失敗しました：${error.message}。旧α版からβ版へ移行する場合は、GitHub Releasesにある最新β版のインストーラーをご利用ください。`
-    });
+    verifiedBetaUpdate = null;
+    publishUpdateStatus({ status: "error", availableVersion: undefined,
+      message: "β版更新エラー：" + error.message + "。製品版の自動取得は行いません。" });
   });
 
-  const check = (): void => {
-    void autoUpdater.checkForUpdates().catch(error => {
-      publishUpdateStatus({
-        status: "error",
-        message: `更新の確認に失敗しました：${error instanceof Error ? error.message : String(error)}`
-      });
-    });
-  };
-
-  // 起動直後と6時間ごとに確認。取得した更新は自動ダウンロードし、アプリ終了時に適用する。
-  setTimeout(check, 5_000);
-  const periodicCheck = setInterval(check, 6 * 60 * 60 * 1000);
+  setTimeout(() => { void checkBetaOnlyUpdates(); }, 5_000);
+  const periodicCheck = setInterval(() => { void checkBetaOnlyUpdates(); }, 6 * 60 * 60 * 1000);
   periodicCheck.unref();
 }
 
@@ -1447,14 +1484,14 @@ function registerIpcHandlers(): void {
     if (!app.isPackaged || process.platform !== "win32") {
       throw new Error("自動更新はインストール済みのWindows版で利用できます。");
     }
-    await autoUpdater.checkForUpdates();
-    return updateStatus;
+    return checkBetaOnlyUpdates();
   });
 
   ipcMain.handle("updater:install", event => {
     assertTrustedSender(event);
-    if (updateStatus.status !== "downloaded") {
-      throw new Error("更新ファイルのダウンロードが完了していません。");
+    if (updateStatus.status !== "downloaded" || !verifiedBetaUpdate ||
+        updateStatus.availableVersion !== verifiedBetaUpdate || !betaVersionParts(verifiedBetaUpdate)) {
+      throw new Error("検証済みβ版の更新が完了していません。製品版・未検証ファイルは適用できません。");
     }
     if (recordingManager.hasActiveRecordings() || vodDownloadManager.hasActiveDownloads() ||
         commentVideoGenerator.isRunning() || vodChatDownloader.isRunning()) {
@@ -2115,6 +2152,11 @@ if (!hasSingleInstanceLock) {
   app.on("second-instance", () => showMainWindow());
 
   app.whenReady().then(() => {
+    // A previous beta launch is required before the product edition offers a beta return.
+    if (!registerBetaHistory(app.getPath("appData"), app.getVersion(),
+        { packaged: app.isPackaged, platform: process.platform }) && app.isPackaged) {
+      console.warn("β版の利用履歴を登録できませんでした。製品版からのβ版復帰が利用できない可能性があります。");
+    }
     registerIpcHandlers();
     app.setAppUserModelId("jp.kanenao.kickrecorder");
     createJapaneseApplicationMenu();
