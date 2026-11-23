@@ -2,7 +2,7 @@
 
 Kick配信の監視・録画・コメント保存・コメント付き動画生成と、**配信AI新聞**を開発するWindowsアプリです。
 
-> **最新公開β版：`0.9.0-beta.93`**（次期 `0.9.0-beta.94` を検証中）
+> **最新公開β版：`0.9.0-beta.94`**（Windowsインストーラー公開済み）
 > **最新版：β版からβ版・製品版を選択可能。製品版からの復帰は以前のβ版利用者だけ**
 > **最新製品版：`1.0.1`**（2026年11月23日公開・配信AI新聞なし、実機検証は継続）
 > 製品版 `1.0.1` は `stable` ブランチで独立して管理し、配信記事を含めません。
@@ -10,7 +10,7 @@ Kick配信の監視・録画・コメント保存・コメント付き動画生�
 - [β版開発ソース](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/beta)
 - [製品版 v1.0.1 をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v1.0.1)
 - [製品版開発ソース](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/stable)
-- [β版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.9.0-beta.93)
+- [β版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.9.0-beta.94)
 - [最後に公開したα版](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.8.1-alpha.87)
 - [版の違い・リリース条件](docs/RELEASE_CHANNELS.md)
 - [更新履歴](CHANGELOG.md)
@@ -19,7 +19,7 @@ Kick配信の監視・録画・コメント保存・コメント付き動画生�
 
 β版では新機能と不具合修正を継続します。**製品版は致命的な不具合がない限り、月1回程度のまとめた修正リリース**とし、β版の未検証機能は自動で製品版へ反映しません。録画不能・データ破損・重大なセキュリティ障害などは、必要に応じて月次を待たず緊急修正します。詳しくは[版の運用方針](docs/RELEASE_CHANNELS.md)をご確認ください。
 
-## 0.9.0-beta.94（検証中）―配信AI新聞の記事重複と改行表示を改善
+## 0.9.0-beta.94（公開済みβ版）―配信AI新聞の記事重複と改行表示を改善
 
 - **記事の概要と本文の重複を表示時に除去**：要約と同じ文が本文に繰り返される場合は概要だけを残し、本文独自の説明だけを表示します。旧版で保存した記事にも画面表示時に適用します。
 - Ollamaなどが生成した記事テキストに `\n` や `＼n` の文字列が含まれる場合、記事内の改行として扱い、重複する文の除去に利用します。
