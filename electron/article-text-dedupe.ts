@@ -46,7 +46,11 @@ function sameMeaningRepeated(a: string, b: string): boolean {
 }
 
 function sentencePieces(text: string): string[] {
+  // Some smaller Ollama models output literal \n or full-width ＼n rather
+  // than line breaks inside generated article fields. This conversion applies
+  // only to AI-produced prose; raw chat logs and transcripts are never edited.
   return text.replace(/\r\n?/g, "\n")
+    .replace(/\\r\\n|\\n|\\r|＼n/g, "\n")
     .split(/(?<=[。！？!?])\s*|\n+/u)
     .map(piece => piece.trim()).filter(Boolean);
 }
