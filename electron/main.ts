@@ -531,7 +531,9 @@ function initializeAutoUpdater(): void {
   if (!app.isPackaged || process.platform !== "win32") return;
 
   autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  // Unattended quit must not silently install updates while capture or encoding may be finishing.
+  // Download automatically, but apply only from the explicit 「再起動して更新」 action.
+  autoUpdater.autoInstallOnAppQuit = false;
 
   // 製品版はlatest.ymlのみを確認し、β版への自動移行を禁止する。暗黙のチャンネル判定に任せず固定する。
   // channel setterはダウングレードを許可するため、明示的に再度禁止する。
@@ -584,7 +586,7 @@ function initializeAutoUpdater(): void {
       releaseNotes: normalizeReleaseNotes(info.releaseNotes),
       releaseDate: info.releaseDate,
       percent: 100,
-      message: "利用中の更新チャンネルで新しい版は見つかりませんでした。過去のβ版からの移行時はGitHub Releasesも確認してください。"
+      message: "製品版専用の更新チャンネルでは新しい版は見つかりませんでした。"
     });
   });
 
@@ -604,7 +606,7 @@ function initializeAutoUpdater(): void {
     });
   };
 
-  // 起動直後と6時間ごとに確認。取得した更新は自動ダウンロードし、アプリ終了時に適用する。
+  // 起動直後と6時間ごとに確認・ダウンロード。更新の適用は明示操作時だけ。
   setTimeout(check, 5_000);
   const periodicCheck = setInterval(check, 6 * 60 * 60 * 1000);
   periodicCheck.unref();
@@ -1408,8 +1410,9 @@ function registerIpcHandlers(): void {
     if (updateStatus.status !== "downloaded") {
       throw new Error("更新ファイルのダウンロードが完了していません。");
     }
-    if (recordingManager.hasActiveRecordings() || vodDownloadManager.hasActiveDownloads()) {
-      throw new Error("録画またはVODダウンロード中です。保存を完了・停止してから更新を適用してください。");
+    if (recordingManager.hasActiveRecordings() || vodDownloadManager.hasActiveDownloads() ||
+        commentVideoGenerator.isRunning() || vodChatDownloader.isRunning()) {
+      throw new Error("録画・VOD取得・チャット取得・コメント付き動画生成が実行中です。処理を停止または完了してから更新してください。");
     }
     autoUpdater.quitAndInstall();
     return { ok: true };
