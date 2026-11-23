@@ -20,7 +20,9 @@
 
 ## 版数と公開
 
-- β版：`X.Y.Z-beta.N`。開発連番は旧αの `alpha.87` の次を採用して `beta.88` とし、以後更新ごとに増やす。X.Y.Zは機能規模に応じて更新する。
+- β版：`X.Y.Z-beta.N`。**基本番号 X.Y.Z は、必ずGitHub Releasesで確認した最新公開製品版 X.Y.Z 以上**とする。製品版が追いついた際にβ版の基本番号を引き下げない。初回の整合は製品版 `1.0.1` に合わせて `0.9.0-beta.94` → `1.0.1-beta.95`。旧α `alpha.87` に続く `beta.88` からの **beta.N の連番はリセットしない**。
+- β版の番号更新は開発規模で判断する：軽微な機能調整・修正は基本番号を維持して `beta.N` のみ+1（`maintenance`）、節目となる修正はパッチ番号Zを+1（`patch`）、新しい機能群の追加はマイナー番号Yを+1してZを0（`feature`）、互換性を大きく変更する場合はメジャー番号Xを+1してY,Zを0（`breaking`）。製品版に追いつくときは単純同期（`sync`）。いずれもbeta.Nは+1。
+- 次版候補の計算：`node scripts/plan-next-beta-version.mjs 1.0.1 sync`（引数の製品版は毎回GitHub Releasesの**最新通常Release**を確認して指定）。同コマンドは候補のみを計算し、公開を勝手に行わない。自動開発・修正時も変更規模を評価し、package.json・アプリUI・README・CHANGELOGを一致させ、Windows検証後にβ版として公開する。
 - 製品版：`1.0.0` 以降は重大な既知不具合がない状態で公開。テストだけで「不具合ゼロ」とは断定しない。
 - β版の自動更新は `beta.yml`、製品版の自動更新は `latest.yml`。β版から製品版、製品版からβ版へ自動的に乗り換えさせない。製品版のElectron `appId` とユーザーデータ領域はβ版と分離する。
 - GitHub Actions `.github/workflows/channel-release.yml` は `beta`／`stable` への通常pushで品質とWindowsビルドを確認し、`release/vX.Y.Z-beta.N`／`release/vX.Y.Z` ブランチの正しいバージョンのpushだけを公開対象にする。

@@ -1,0 +1,35 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { nextBetaVersion, compareBaseVersions } from "./beta-version-policy.mjs";
+
+assert.equal(nextBetaVersion("0.9.0-beta.94", "1.0.1", "sync"), "1.0.1-beta.95");
+assert.equal(nextBetaVersion("1.0.1-beta.95", "1.0.1", "maintenance"), "1.0.1-beta.96");
+assert.equal(nextBetaVersion("1.0.1-beta.95", "1.0.1", "patch"), "1.0.2-beta.96");
+assert.equal(nextBetaVersion("1.0.1-beta.95", "1.0.1", "feature"), "1.1.0-beta.96");
+assert.equal(nextBetaVersion("1.0.1-beta.95", "1.0.1", "breaking"), "2.0.0-beta.96");
+assert.equal(nextBetaVersion("1.1.0-beta.98", "1.0.2", "sync"), "1.1.0-beta.99");
+assert.equal(nextBetaVersion("1.0.1-beta.98", "1.0.2", "sync"), "1.0.2-beta.99");
+assert.equal(nextBetaVersion("1.1.0-beta.98", "2.0.0", "sync"), "2.0.0-beta.99");
+assert.equal(compareBaseVersions("1.0.1", "0.9.0"), 1);
+assert.equal(compareBaseVersions("1.0.1", "1.0.1"), 0);
+assert.equal(compareBaseVersions("0.9.0", "1.0.1"), -1);
+assert.throws(() => nextBetaVersion("1.0.1", "1.0.1", "sync"));
+assert.throws(() => nextBetaVersion("1.0.1-beta.95", "1.0.1-beta.95", "sync"));
+assert.throws(() => nextBetaVersion("1.0.1-beta.95", "1.0.1", "unknown"));
+assert.throws(() => nextBetaVersion("01.0.1-beta.95", "1.0.1", "sync"));
+
+const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+const ui = readFileSync(new URL("../src/ui/App.tsx", import.meta.url), "utf8");
+const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+const changelog = readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8");
+assert.match(pkg.version, /^\d+\.\d+\.\d+-beta\.\d+$/);
+const currentBase = pkg.version.split("-")[0];
+const stable = readme.match(/最新製品版：`(\d+\.\d+\.\d+)`/)?.[1];
+assert.ok(stable, "README must declare the public product baseline");
+assert.ok(compareBaseVersions(currentBase, stable) >= 0, "beta base must not be older than the public stable version");
+assert.ok(ui.includes(`const APP_VERSION = "${pkg.version}";`), "UI version must equal package.json");
+assert.ok(ui.includes(`version: "${pkg.version}"`), "current beta must be in the UI changelog");
+assert.ok(changelog.includes(`## ${pkg.version}`), "current beta must be in CHANGELOG.md");
+assert.equal(pkg.build.publish[0].channel, "beta", "do not publish beta to latest.yml");
+assert.equal(pkg.build.publish[0].releaseType, "prerelease");
+console.log("β版の製品版基準・開発規模・連番を検証：", pkg.version, "製品版", stable);
