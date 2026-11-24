@@ -1475,6 +1475,27 @@ function registerIpcHandlers(): void {
   });
 
 
+  const feedbackEndpoint = process.env.KICK_FEEDBACK_ENDPOINT || "";
+  const feedbackConfigured = (() => { try { const u = new URL(feedbackEndpoint); return u.protocol === "https:" && Boolean(u.hostname); } catch { return false; } })();
+  ipcMain.handle("feedback:availability", event => { assertTrustedSender(event); return {configured:feedbackConfigured}; });
+  ipcMain.handle("feedback:submit", async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    if (!feedbackConfigured) throw new Error("受付サーバーが未設定です。");
+    if (!raw || typeof raw !== "object") throw new Error("報告内容が不正です。");
+    const x=raw as Record<string,unknown>;
+    const kind=x.kind, title=typeof x.title==="string" ? x.title.trim() : "", description=typeof x.description==="string" ? x.description.trim() : "", steps=typeof x.steps==="string" ? x.steps.trim() : "";
+    if ((kind!=="bug" && kind!=="feature") || !title || title.length>120 || !description || description.length>5000 || steps.length>2000) throw new Error("タイトルと詳細を確認してください。");
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),15000);
+    try {
+      const response=await fetch(feedbackEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind,title,description,steps,edition:app.getVersion().includes("-beta.") ? "beta" : "stable",version:app.getVersion()}),signal:controller.signal});
+      if (!response.ok) throw new Error("受付に失敗しました（HTTP "+response.status+"）。");
+      const json:unknown=await response.json();
+      const n=json && typeof json==="object" ? (json as Record<string,unknown>).issueNumber : null;
+      if (typeof n!=="number" || !Number.isSafeInteger(n) || n<=0) throw new Error("受付番号を確認できません。");
+      return {issueNumber:n};
+    } finally { clearTimeout(timer); }
+  });
   ipcMain.handle("feedback:open", async (event, kind: unknown) => {
     assertTrustedSender(event);
     if (kind !== "bug" && kind !== "feature") throw new Error("報告の種類が不正です。");
