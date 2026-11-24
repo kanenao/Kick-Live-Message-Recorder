@@ -1252,6 +1252,38 @@ export default function App() {
   }, []);
   const [tab, setTab] = useState<"dashboard" | "recording" | "library" | "comment-video" | "articles" | "updates" | "feedback" | "settings">("dashboard");
   const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [feedbackKind,setFeedbackKind] = useState<"bug" | "feature">("bug");
+  const [feedbackTitle,setFeedbackTitle] = useState("");
+  const [feedbackDetail,setFeedbackDetail] = useState("");
+  const [feedbackSteps,setFeedbackSteps] = useState("");
+  const [feedbackConsent,setFeedbackConsent] = useState(false);
+  const [feedbackBusy,setFeedbackBusy] = useState(false);
+  const [feedbackConfigured,setFeedbackConfigured] = useState(false);
+  useEffect(() => {
+    try {
+      const d = JSON.parse(localStorage.getItem("kick-feedback-draft") || "{}");
+      if (d.kind === "bug" || d.kind === "feature") setFeedbackKind(d.kind);
+      if (typeof d.title === "string") setFeedbackTitle(d.title.slice(0,120));
+      if (typeof d.detail === "string") setFeedbackDetail(d.detail.slice(0,5000));
+      if (typeof d.steps === "string") setFeedbackSteps(d.steps.slice(0,2000));
+    } catch { /* Invalid drafts are ignored. */ }
+    void window.kickRecorder?.getFeedbackAvailability().then(x=>setFeedbackConfigured(x.configured)).catch(()=>setFeedbackConfigured(false));
+  },[]);
+  useEffect(() => {
+    try { localStorage.setItem("kick-feedback-draft",JSON.stringify({kind:feedbackKind,title:feedbackTitle,detail:feedbackDetail,steps:feedbackSteps})); }
+    catch { /* Storage can be disabled. */ }
+  },[feedbackKind,feedbackTitle,feedbackDetail,feedbackSteps]);
+  const submitFeedback = async (): Promise<void> => {
+    if (!window.kickRecorder || !feedbackConsent || feedbackBusy) return;
+    setFeedbackBusy(true); setFeedbackMessage("");
+    try {
+      const result = await window.kickRecorder.submitFeedback({kind:feedbackKind,title:feedbackTitle.trim(),description:feedbackDetail.trim(),steps:feedbackSteps.trim()});
+      setFeedbackMessage("送信完了。受付番号 #" + result.issueNumber);
+      setFeedbackTitle(""); setFeedbackDetail(""); setFeedbackSteps(""); setFeedbackConsent(false);
+    } catch (e) {
+      setFeedbackMessage("送信失敗。下書きは保持されます：" + (e instanceof Error ? e.message : String(e)));
+    } finally { setFeedbackBusy(false); }
+  };
   const openFeedback = async (kind: "bug" | "feature"): Promise<void> => {
     if (!window.kickRecorder) {
       setFeedbackMessage("報告フォームはWindowsデスクトップ版で開けます。");
@@ -3596,21 +3628,20 @@ export default function App() {
       </section>}
 
       {tab === "feedback" && <section className="panel feedback-panel">
-        <div className="panel-heading"><div><h2>不具合情報・機能要望</h2><p>このアプリの{APP_VERSION.includes("-beta.") ? "β版" : "製品版"}向けに報告できます。対象バージョン：{appVersion}</p></div></div>
-        <div className="feedback-kinds">
-          <article className="feedback-kind">
-            <strong className="feedback-chip">不具合情報</strong>
-            <p>録画が止まる、コメントが取得できない、操作しても反応しないなどの問題を報告します。</p>
-            <button className="small-act" type="button" onClick={() => void openFeedback("bug")}>不具合情報を報告</button>
-          </article>
-          <article className="feedback-kind">
-            <strong className="feedback-chip">機能要望</strong>
-            <p>追加してほしい機能や操作性の改善を提案します。β版・製品版の区分が自動的に付けられます。</p>
-            <button className="small-act" type="button" onClick={() => void openFeedback("feature")}>機能要望を送る</button>
-          </article>
+        <div className="panel-heading"><div><h2>不具合情報・機能要望</h2><p>アプリ内から直接報告できます。対象：{APP_VERSION.includes("-beta.") ? "β版" : "製品版"} v{appVersion}</p></div></div>
+        <div className="feedback-form">
+          <label>種類<select value={feedbackKind} onChange={e=>setFeedbackKind(e.target.value as "bug" | "feature")}><option value="bug">不具合情報</option><option value="feature">機能要望</option></select></label>
+          <label>タイトル（必須）<input maxLength={120} value={feedbackTitle} onChange={e=>setFeedbackTitle(e.target.value)} placeholder="例：録画開始ボタンが反応しない"/></label>
+          <label>詳細（必須）<textarea rows={6} maxLength={5000} value={feedbackDetail} onChange={e=>setFeedbackDetail(e.target.value)} placeholder="問題や要望を具体的に入力"/></label>
+          <label>再現手順・補足（任意）<textarea rows={3} maxLength={2000} value={feedbackSteps} onChange={e=>setFeedbackSteps(e.target.value)} placeholder="1. 画面を開く 2. 操作する"/></label>
+          <label className="feedback-consent"><input type="checkbox" checked={feedbackConsent} onChange={e=>setFeedbackConsent(e.target.checked)}/> 報告内容が公開GitHub Issuesに掲載されることを了承します。</label>
+          <div className="feedback-form-actions">
+            <button className="primary-small" disabled={!feedbackConfigured || !feedbackConsent || feedbackBusy || !feedbackTitle.trim() || !feedbackDetail.trim()} onClick={()=>void submitFeedback()}>{feedbackBusy ? "送信中..." : "アプリから送信"}</button>
+            <button className="small-action" onClick={()=>void openFeedback(feedbackKind)}>GitHubフォーム（代替）</button>
+          </div>
         </div>
-        <p className="feedback-hint">報告はGitHub Issuesで投稿します。投稿時に「不具合情報／機能要望」と「β版／製品版」のタグを自動付与し、AIが内容・重複・優先度を定期的に確認します。AIが投稿文の命令をそのまま実行したり、確認なしに製品版を更新することはありません。</p>
-        <p className="feedback-hint">パスワード、APIキー、認証Cookie、配信のセッショントークン、個人情報は投稿しないでください。製品版の通常修正は月1回程度です。</p>
+        {!feedbackConfigured && <p className="feedback-hint" role="status">受付サーバー未設定：アプリ内送信はまだ利用できません。入力内容はこのPCに下書き保存されます。</p>}
+        <p className="feedback-hint">送信にはGitHubアカウント不要。録画・ログ・認証キーの自動送信はありません。個人情報やCookieは記入しないでください。</p>
         {feedbackMessage && <p className="feedback-message" role="status">{feedbackMessage}</p>}
       </section>}
 
