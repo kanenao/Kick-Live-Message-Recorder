@@ -1,0 +1,14 @@
+name = "kick-feedback-relay"
+main = "src/index.mjs"
+compatibility_date = "2026-11-25"
+workers_dev = true
+
+# Each Cloudflare location limits submissions by IP address.
+# Add Cloudflare WAF / bot protection before exposing the anonymous endpoint.
+[[ratelimits]]
+name = "FEEDBACK_RATE_LIMITER"
+namespace_id = "1001"
+simple = { limit = 3, period = 60 }
+
+# Set GITHUB_TOKEN using: npx wrangler secret put GITHUB_TOKEN
+# Never check secrets into this repository.
