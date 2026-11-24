@@ -1484,12 +1484,15 @@ function registerIpcHandlers(): void {
     if (!feedbackConfigured) throw new Error("受付サーバーが未設定です。");
     if (!raw || typeof raw !== "object") throw new Error("報告内容が不正です。");
     const x=raw as Record<string,unknown>;
+    const requestId=x.requestId;
+    if (typeof requestId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) throw new Error("受付IDが不正です。");
     const kind=x.kind, title=typeof x.title==="string" ? x.title.trim() : "", description=typeof x.description==="string" ? x.description.trim() : "", steps=typeof x.steps==="string" ? x.steps.trim() : "";
     if ((kind!=="bug" && kind!=="feature") || !title || title.length>120 || !description || description.length>5000 || steps.length>2000) throw new Error("タイトルと詳細を確認してください。");
     const controller=new AbortController();
     const timer=setTimeout(()=>controller.abort(),15000);
     try {
-      const response=await fetch(feedbackEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind,title,description,steps,edition:app.getVersion().includes("-beta.") ? "beta" : "stable",version:app.getVersion()}),signal:controller.signal});
+      const response=await fetch(feedbackEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({requestId,kind,title,description,steps,edition:app.getVersion().includes("-beta.") ? "beta" : "stable",version:app.getVersion()}),signal:controller.signal,redirect:"error"});
+      if (response.status === 409) throw new Error("前の送信の登録結果を確認中です。同じ受付IDで再確認してください。繰り返す場合は管理者に受付IDをお知らせください。");
       if (!response.ok) throw new Error("受付に失敗しました（HTTP "+response.status+"）。");
       const json:unknown=await response.json();
       const n=json && typeof json==="object" ? (json as Record<string,unknown>).issueNumber : null;

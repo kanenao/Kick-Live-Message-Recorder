@@ -666,3 +666,9 @@
 .feedback-form .feedback-consent {display:flex;align-items:start;gap:9px;line-height:1.6;}
 .feedback-form-actions {display:flex;gap:10px;flex-wrap:wrap;}
 .feedback-form-actions button:disabled {opacity:.45;cursor:not-allowed;}
+
+.feedback-history {margin-top:20px;border-top:1px solid #536174;padding-top:14px;max-width:780px;}
+.feedback-history-heading {display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.feedback-history ul {list-style:none;padding:0;margin:12px 0;display:grid;gap:6px;}
+.feedback-history li {display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:9px 10px;border-radius:6px;background:rgba(255,255,255,.055);font-size:12px;}
+.feedback-history li time {color:#b1bdcd;}

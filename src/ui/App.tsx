@@ -1252,37 +1252,60 @@ export default function App() {
   }, []);
   const [tab, setTab] = useState<"dashboard" | "recording" | "library" | "comment-video" | "articles" | "updates" | "feedback" | "settings">("dashboard");
   const [feedbackMessage, setFeedbackMessage] = useState("");
-  const [feedbackKind,setFeedbackKind] = useState<"bug" | "feature">("bug");
-  const [feedbackTitle,setFeedbackTitle] = useState("");
-  const [feedbackDetail,setFeedbackDetail] = useState("");
-  const [feedbackSteps,setFeedbackSteps] = useState("");
+  const [savedFeedbackDraft] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("kick-feedback-draft") || "{}") || {}; }
+    catch { return {}; }
+  });
+  const [feedbackKind,setFeedbackKind] = useState<"bug" | "feature">(savedFeedbackDraft.kind === "feature" ? "feature" : "bug");
+  const [feedbackTitle,setFeedbackTitle] = useState(typeof savedFeedbackDraft.title === "string" ? savedFeedbackDraft.title.slice(0,120) : "");
+  const [feedbackDetail,setFeedbackDetail] = useState(typeof savedFeedbackDraft.detail === "string" ? savedFeedbackDraft.detail.slice(0,5000) : "");
+  const [feedbackSteps,setFeedbackSteps] = useState(typeof savedFeedbackDraft.steps === "string" ? savedFeedbackDraft.steps.slice(0,2000) : "");
+  const [feedbackRequestId,setFeedbackRequestId] = useState<string>(typeof savedFeedbackDraft.requestId === "string" && /^[0-9a-f-]{36}$/i.test(savedFeedbackDraft.requestId) ? savedFeedbackDraft.requestId : "");
+  const [feedbackHistory,setFeedbackHistory] = useState<Array<{issueNumber:number;kind:"bug"|"feature";sentAt:string}>>(() => {
+    try {
+      const entries: unknown = JSON.parse(localStorage.getItem("kick-feedback-history") || "[]");
+      return Array.isArray(entries) ? entries.filter(x => x && Number.isSafeInteger(x.issueNumber) && x.issueNumber > 0 && (x.kind === "bug" || x.kind === "feature") && typeof x.sentAt === "string" && Number.isFinite(Date.parse(x.sentAt))).slice(0,50) : [];
+    } catch { return []; }
+  });
   const [feedbackConsent,setFeedbackConsent] = useState(false);
   const [feedbackBusy,setFeedbackBusy] = useState(false);
+  const feedbackBusyRef = useRef(false);
   const [feedbackConfigured,setFeedbackConfigured] = useState(false);
   useEffect(() => {
-    try {
-      const d = JSON.parse(localStorage.getItem("kick-feedback-draft") || "{}");
-      if (d.kind === "bug" || d.kind === "feature") setFeedbackKind(d.kind);
-      if (typeof d.title === "string") setFeedbackTitle(d.title.slice(0,120));
-      if (typeof d.detail === "string") setFeedbackDetail(d.detail.slice(0,5000));
-      if (typeof d.steps === "string") setFeedbackSteps(d.steps.slice(0,2000));
-    } catch { /* Invalid drafts are ignored. */ }
     void window.kickRecorder?.getFeedbackAvailability().then(x=>setFeedbackConfigured(x.configured)).catch(()=>setFeedbackConfigured(false));
   },[]);
   useEffect(() => {
-    try { localStorage.setItem("kick-feedback-draft",JSON.stringify({kind:feedbackKind,title:feedbackTitle,detail:feedbackDetail,steps:feedbackSteps})); }
-    catch { /* Storage can be disabled. */ }
-  },[feedbackKind,feedbackTitle,feedbackDetail,feedbackSteps]);
+    try { localStorage.setItem("kick-feedback-draft",JSON.stringify({kind:feedbackKind,title:feedbackTitle,detail:feedbackDetail,steps:feedbackSteps,requestId:feedbackRequestId})); }
+    catch { /* Storage can be disabled. Submission checks persistent storage separately. */ }
+  },[feedbackKind,feedbackTitle,feedbackDetail,feedbackSteps,feedbackRequestId]);
   const submitFeedback = async (): Promise<void> => {
-    if (!window.kickRecorder || !feedbackConsent || feedbackBusy) return;
-    setFeedbackBusy(true); setFeedbackMessage("");
+    if (!window.kickRecorder || !feedbackConfigured || !feedbackConsent || feedbackBusyRef.current || !feedbackTitle.trim() || !feedbackDetail.trim()) return;
+    feedbackBusyRef.current = true; setFeedbackBusy(true); setFeedbackMessage("");
     try {
-      const result = await window.kickRecorder.submitFeedback({kind:feedbackKind,title:feedbackTitle.trim(),description:feedbackDetail.trim(),steps:feedbackSteps.trim()});
+      const requestId = feedbackRequestId || crypto.randomUUID();
+      // Persist the exact attempt before any network request, so restarting can retry the same ID.
+      localStorage.setItem("kick-feedback-draft",JSON.stringify({kind:feedbackKind,title:feedbackTitle,detail:feedbackDetail,steps:feedbackSteps,requestId}));
+      setFeedbackRequestId(requestId);
+      const result = await window.kickRecorder.submitFeedback({requestId,kind:feedbackKind,title:feedbackTitle.trim(),description:feedbackDetail.trim(),steps:feedbackSteps.trim()});
+      const receipt = {issueNumber:result.issueNumber,kind:feedbackKind,sentAt:new Date().toISOString()};
+      const next = [receipt,...feedbackHistory.filter(x=>x.issueNumber !== receipt.issueNumber)].slice(0,50);
+      setFeedbackHistory(next);
+      try { localStorage.setItem("kick-feedback-history",JSON.stringify(next)); }
+      catch { /* Show receipt even if history cannot be persisted. */ }
       setFeedbackMessage("送信完了。受付番号 #" + result.issueNumber);
-      setFeedbackTitle(""); setFeedbackDetail(""); setFeedbackSteps(""); setFeedbackConsent(false);
+      setFeedbackTitle(""); setFeedbackDetail(""); setFeedbackSteps(""); setFeedbackConsent(false); setFeedbackRequestId("");
     } catch (e) {
-      setFeedbackMessage("送信失敗。下書きは保持されます：" + (e instanceof Error ? e.message : String(e)));
-    } finally { setFeedbackBusy(false); }
+      setFeedbackMessage("送信を確認できません。下書きの受付IDを保持し、同じ内容で再確認できます：" + (e instanceof Error ? e.message : String(e)));
+    } finally { feedbackBusyRef.current = false; setFeedbackBusy(false); }
+  };
+  const reopenFeedbackDraft = (): void => {
+    if (feedbackBusyRef.current || !window.confirm("前の報告が既に登録されている可能性があります。新しい受付IDで編集を再開すると重複登録になる場合があります。編集を再開しますか？")) return;
+    setFeedbackRequestId(""); setFeedbackConsent(false); setFeedbackMessage("編集を再開しました。送信済みでないことを確認してください。");
+  };
+  const clearFeedbackHistory = (): void => {
+    if (!window.confirm("このPCに保存された受付履歴だけを削除します。GitHubに登録された報告は削除されません。よろしいですか？")) return;
+    try { localStorage.removeItem("kick-feedback-history"); setFeedbackHistory([]); }
+    catch { setFeedbackMessage("履歴を削除できませんでした。"); }
   };
   const openFeedback = async (kind: "bug" | "feature"): Promise<void> => {
     if (!window.kickRecorder) {
@@ -3630,19 +3653,25 @@ export default function App() {
       {tab === "feedback" && <section className="panel feedback-panel">
         <div className="panel-heading"><div><h2>不具合情報・機能要望</h2><p>アプリ内から直接報告できます。対象：{APP_VERSION.includes("-beta.") ? "β版" : "製品版"} v{appVersion}</p></div></div>
         <div className="feedback-form">
-          <label>種類<select value={feedbackKind} onChange={e=>setFeedbackKind(e.target.value as "bug" | "feature")}><option value="bug">不具合情報</option><option value="feature">機能要望</option></select></label>
-          <label>タイトル（必須）<input maxLength={120} value={feedbackTitle} onChange={e=>setFeedbackTitle(e.target.value)} placeholder="例：録画開始ボタンが反応しない"/></label>
-          <label>詳細（必須）<textarea rows={6} maxLength={5000} value={feedbackDetail} onChange={e=>setFeedbackDetail(e.target.value)} placeholder="問題や要望を具体的に入力"/></label>
-          <label>再現手順・補足（任意）<textarea rows={3} maxLength={2000} value={feedbackSteps} onChange={e=>setFeedbackSteps(e.target.value)} placeholder="1. 画面を開く 2. 操作する"/></label>
+          <label>種類<select disabled={feedbackBusy || Boolean(feedbackRequestId)} value={feedbackKind} onChange={e=>setFeedbackKind(e.target.value as "bug" | "feature")}><option value="bug">不具合情報</option><option value="feature">機能要望</option></select></label>
+          <label>タイトル（必須）<input disabled={feedbackBusy || Boolean(feedbackRequestId)} maxLength={120} value={feedbackTitle} onChange={e=>setFeedbackTitle(e.target.value)} placeholder="例：録画開始ボタンが反応しない"/></label>
+          <label>詳細（必須）<textarea disabled={feedbackBusy || Boolean(feedbackRequestId)} rows={6} maxLength={5000} value={feedbackDetail} onChange={e=>setFeedbackDetail(e.target.value)} placeholder="問題や要望を具体的に入力"/></label>
+          <label>再現手順・補足（任意）<textarea disabled={feedbackBusy || Boolean(feedbackRequestId)} rows={3} maxLength={2000} value={feedbackSteps} onChange={e=>setFeedbackSteps(e.target.value)} placeholder="1. 画面を開く 2. 操作する"/></label>
           <label className="feedback-consent"><input type="checkbox" checked={feedbackConsent} onChange={e=>setFeedbackConsent(e.target.checked)}/> 報告内容が公開GitHub Issuesに掲載されることを了承します。</label>
           <div className="feedback-form-actions">
-            <button className="primary-small" disabled={!feedbackConfigured || !feedbackConsent || feedbackBusy || !feedbackTitle.trim() || !feedbackDetail.trim()} onClick={()=>void submitFeedback()}>{feedbackBusy ? "送信中..." : "アプリから送信"}</button>
-            <button className="small-action" onClick={()=>void openFeedback(feedbackKind)}>GitHubフォーム（代替）</button>
+            <button className="primary-small" disabled={!feedbackConfigured || !feedbackConsent || feedbackBusy || !feedbackTitle.trim() || !feedbackDetail.trim()} onClick={()=>void submitFeedback()}>{feedbackBusy ? "送信中..." : feedbackRequestId ? "同じ報告の送信を再確認" : "アプリから送信"}</button>
+            <button className="small-action" disabled={feedbackBusy || Boolean(feedbackRequestId)} onClick={()=>void openFeedback(feedbackKind)}>GitHubフォーム（代替）</button>
           </div>
         </div>
+        {feedbackRequestId && <div className="feedback-hint">受付ID：{feedbackRequestId}<br/>送信を確認できない場合は同じ報告の再確認を行ってください。<button className="small-action" disabled={feedbackBusy} onClick={reopenFeedbackDraft}>編集を再開</button></div>}
         {!feedbackConfigured && <p className="feedback-hint" role="status">受付サーバー未設定：アプリ内送信はまだ利用できません。入力内容はこのPCに下書き保存されます。</p>}
         <p className="feedback-hint">送信にはGitHubアカウント不要。録画・ログ・認証キーの自動送信はありません。個人情報やCookieは記入しないでください。</p>
         {feedbackMessage && <p className="feedback-message" role="status">{feedbackMessage}</p>}
+        <div className="feedback-history">
+          <div className="feedback-history-heading"><h3>送信履歴（このPC）</h3><button className="small-action" disabled={feedbackBusy || !feedbackHistory.length} onClick={clearFeedbackHistory}>履歴を削除</button></div>
+          {feedbackHistory.length === 0 ? <p className="feedback-hint">受付が確認された報告はまだありません。</p> : <ul>{feedbackHistory.map(item => <li key={item.issueNumber}><strong>#{item.issueNumber}</strong><span>{item.kind === "bug" ? "不具合情報" : "機能要望"}</span><time>{new Date(item.sentAt).toLocaleString("ja-JP")}</time><span>受付済み</span></li>)}</ul>}
+          <p className="feedback-hint">最近50件の受付番号のみ保存します。修正状況はまだ同期されません。</p>
+        </div>
       </section>}
 
       {tab === "updates" && <section className="panel version-update-panel">

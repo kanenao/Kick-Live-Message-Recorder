@@ -38,3 +38,9 @@ assert.match(relay, /AI判定待ち/);
 assert.ok(!main.includes("issues:create"), "Never directly embed GitHub issue API in Electron");
 assert.equal(pkg.build.publish[0].channel, beta ? "beta" : "latest");
 console.log("アプリ内報告フォーム・安全な中継送信・代替導線の回帰テスト成功：", pkg.version);
+
+assert.match(ui,/kick-feedback-history/);
+assert.match(ui,/feedbackBusyRef/);
+assert.match(main,/requestId/);
+assert.match(relay,/FEEDBACK_RECEIPTS/);
+assert.match(relay,/storage\.transaction/);
