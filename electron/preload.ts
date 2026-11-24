@@ -285,6 +285,8 @@ const api = {
   openEditionInstaller: (target: "beta" | "stable"): Promise<{ opened: boolean; version?: string }> =>
     ipcRenderer.invoke("editions:switch", target),
   openFeedbackForm: (kind: "bug" | "feature"): Promise<{ opened: boolean }> => ipcRenderer.invoke("feedback:open", kind),
+  getFeedbackAvailability: (): Promise<{configured:boolean}> => ipcRenderer.invoke("feedback:availability"),
+  submitFeedback: (input:{requestId:string;kind:"bug" | "feature";title:string;description:string;steps:string}):Promise<{issueNumber:number}> => ipcRenderer.invoke("feedback:submit",input),
   getUpdateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke("updater:get-status"),
   checkForUpdates: (): Promise<UpdateStatus> => ipcRenderer.invoke("updater:check"),
   installUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("updater:install"),

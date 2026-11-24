@@ -1,0 +1,23 @@
+name = "kick-feedback-relay"
+main = "src/index.mjs"
+compatibility_date = "2026-11-25"
+workers_dev = true
+
+# Each Cloudflare location limits submissions by IP address.
+# Add Cloudflare WAF / bot protection before exposing the anonymous endpoint.
+[[ratelimits]]
+name = "FEEDBACK_RATE_LIMITER"
+namespace_id = "1001"
+simple = { limit = 3, period = 60 }
+
+# Set GITHUB_TOKEN using: npx wrangler secret put GITHUB_TOKEN
+# Never check secrets into this repository.
+
+# Durable receipt records are keyed by random submission UUID; only hash, state and receipt number are stored.
+[[durable_objects.bindings]]
+name = "FEEDBACK_RECEIPTS"
+class_name = "FeedbackReceipt"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["FeedbackReceipt"]

@@ -265,6 +265,8 @@ declare global {
       getEditionReleases: () => Promise<KickRecorderEditionHistory>;
       openEditionInstaller: (target: "beta" | "stable") => Promise<{ opened: boolean; version?: string }>;
       openFeedbackForm: (kind: "bug" | "feature") => Promise<{ opened: boolean }>;
+      getFeedbackAvailability: () => Promise<{configured:boolean}>;
+      submitFeedback: (input:{requestId:string;kind:"bug" | "feature";title:string;description:string;steps:string}) => Promise<{issueNumber:number}>;
       getUpdateStatus: () => Promise<KickRecorderUpdateStatus>;
       checkForUpdates: () => Promise<KickRecorderUpdateStatus>;
       installUpdate: () => Promise<{ ok: boolean }>;
