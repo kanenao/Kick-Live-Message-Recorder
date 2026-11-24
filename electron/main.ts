@@ -18,6 +18,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileS
 import { join } from "node:path";
 import { autoUpdater } from "electron-updater";
 import { fetchEditionReleases, type KickEdition } from "./edition-releases";
+import { RELEASE_FEEDBACK_ENDPOINT } from "./feedback-endpoint";
 import { registerBetaHistory } from "./beta-history";
 import { KickChatReceiver } from "./chat";
 import { KickVodChatDownloader, getVodBroadcastDetails } from "./vod-chat";
@@ -1475,7 +1476,7 @@ function registerIpcHandlers(): void {
   });
 
 
-  const feedbackEndpoint = process.env.KICK_FEEDBACK_ENDPOINT || "";
+  const feedbackEndpoint = process.env.KICK_FEEDBACK_ENDPOINT || RELEASE_FEEDBACK_ENDPOINT;
   const feedbackConfigured = (() => { try { const u = new URL(feedbackEndpoint); return u.protocol === "https:" && Boolean(u.hostname); } catch { return false; } })();
   ipcMain.handle("feedback:availability", event => { assertTrustedSender(event); return {configured:feedbackConfigured}; });
   ipcMain.handle("feedback:submit", async (event, raw: unknown) => {
