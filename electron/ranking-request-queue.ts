@@ -1,9 +1,10 @@
+import {RANKING_REFRESH_MS} from "./ranking-timing";
 /** Serialize scopes and share concurrent requests. Delay from the prior start. */
 export class RankingRequestQueue<K,V>{
   private tail:Promise<unknown>=Promise.resolve();
   private pending=new Map<K,Promise<V>>();
   private lastStart:number|null=null;
-  constructor(private readonly interval=15000,private readonly now=()=>Date.now(),private readonly delay=(ms:number)=>new Promise<void>(r=>setTimeout(r,ms))){}
+  constructor(private readonly interval=RANKING_REFRESH_MS,private readonly now=()=>Date.now(),private readonly delay=(ms:number)=>new Promise<void>(r=>setTimeout(r,ms))){}
   get size():number{return this.pending.size;}
   request(key:K,load:()=>Promise<V>):Promise<V>{
     const existing=this.pending.get(key);if(existing)return existing;

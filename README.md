@@ -2,7 +2,7 @@
 
 Kick配信の監視・録画・コメント保存・コメント付き動画生成と、**配信AI新聞**を開発するWindowsアプリです。
 
-> **最新公開β版：`1.1.2-beta.99`**（Windowsインストーラー公開済み）
+> **最新公開β版：`1.1.3-beta.100`**（Windowsインストーラー公開済み）
 > **最新版：β版からβ版・製品版を選択可能。製品版からの復帰は以前のβ版利用者だけ**
 > **最新製品版：`1.0.1`**（2026年11月23日公開・配信AI新聞なし、実機検証は継続）
 > 製品版 `1.0.1` は `stable` ブランチで独立して管理し、配信記事を含めません。
@@ -10,7 +10,7 @@ Kick配信の監視・録画・コメント保存・コメント付き動画生�
 - [β版開発ソース](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/beta)
 - [製品版 v1.0.1 をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v1.0.1)
 - [製品版開発ソース](https://github.com/kanenao/Kick-Live-Message-Recorder/tree/stable)
-- [β版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v1.1.2-beta.99)
+- [β版をダウンロード](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v1.1.3-beta.100)
 - [最後に公開したα版](https://github.com/kanenao/Kick-Live-Message-Recorder/releases/tag/v0.8.1-alpha.87)
 - [版の違い・リリース条件](docs/RELEASE_CHANNELS.md)
 - [更新履歴](CHANGELOG.md)
@@ -19,7 +19,11 @@ Kick配信の監視・録画・コメント保存・コメント付き動画生�
 
 β版では新機能と不具合修正を継続します。**製品版は致命的な不具合がない限り、月1回程度のまとめた修正リリース**とし、β版の未検証機能は自動で製品版へ反映しません。録画不能・データ破損・重大なセキュリティ障害などは、必要に応じて月次を待たず緊急修正します。詳しくは[版の運用方針](docs/RELEASE_CHANNELS.md)をご確認ください。
 
-## 1.1.3-beta.100（開発候補・未公開）
+## 1.1.4-beta.101（開発候補・未公開）
+
+- 同接ランキングを取得完了後10秒で再取得、チャット連続受信・2秒表示反映、直近10秒コメント数を追加。API制限・通信遅延は明示。
+
+## 1.1.3-beta.100（公開済みβ版）
 
 - ランキングのアクティブ人数（直近5分のユニークコメント投稿者）と人数順。未観測・暫定を区別。
 - 総合勢いを4指標（同接40%、増加25%、毎分コメント20%、アクティブ人数15%）に変更。5分未満の人数は暫定。通常の接続先変更を6分以上に抑制。
