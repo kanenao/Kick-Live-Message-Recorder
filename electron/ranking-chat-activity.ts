@@ -33,6 +33,14 @@ export class RankingChatActivity {
     let count=0;for(const [bucket,n] of this.channels.get(slug)??[])if(bucket>=begin&&bucket<end)count+=n;
     return {observedSeconds,ratePerMinute:Math.round(count*600/observedSeconds)/10};
   }
+  recent10(slug:string,connectedSince:number|null,startedAt:string|null,now=Date.now()):number|null{
+    const start=Date.parse(startedAt??"");
+    if(connectedSince===null||!Number.isFinite(connectedSince)||!Number.isFinite(start)||!Number.isFinite(now))return null;
+    const end=Math.floor(now/5000),begin=end-2;
+    if(Math.max(start,connectedSince)>begin*5000)return null;
+    let count=0;for(const [bucket,n] of this.channels.get(slug)??[])if(bucket>=begin&&bucket<end)count+=n;
+    return count;
+  }
   active(slug:string,connectedSince:number|null,startedAt:string|null,now=Date.now()){return this.activeUsers.measure(slug,connectedSince,startedAt,now);}
   private prune(minute:number):void{
     if(this.lastPruneMinute===minute)return;this.lastPruneMinute=minute;

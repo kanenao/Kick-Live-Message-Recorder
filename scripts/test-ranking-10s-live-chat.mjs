@@ -1,0 +1,15 @@
+import assert from "node:assert/strict";
+import {RankingChatActivity} from "../electron/ranking-chat-activity.ts";
+import {RankingRequestQueue} from "../electron/ranking-request-queue.ts";
+import {RANKING_REFRESH_MS,RANKING_CHAT_DISPLAY_MS} from "../electron/ranking-timing.ts";
+const now=600000,start=new Date(0).toISOString(),a=new RankingChatActivity();
+a.add("room",now-11000,"old",1);a.add("room",now-10000,"a",1);a.add("room",now-1000,"b",2);a.add("room",now-1000,"b",2);a.add("room",now,"current",3);
+assert.equal(a.recent10("room",now-10000,start,now),2);
+assert.equal(a.recent10("room",now-9999,start,now),null);
+assert.equal(a.recent10("room",now-10000,new Date(now-5000).toISOString(),now),null);
+assert.equal(a.recent10("quiet",now-10000,start,now),0);
+assert.equal(a.recent10("room",null,start,now),null);
+assert.equal(RANKING_REFRESH_MS,10000);assert.equal(RANKING_CHAT_DISPLAY_MS,2000);
+let clock=0;const q=new RankingRequestQueue(undefined,()=>clock,async ms=>{clock+=ms;});
+await q.request("ja",async()=>1);await q.request("all",async()=>2);assert.equal(clock,10000);
+console.log("10秒ランキング・直近10秒受信・重複排除・観測不足");

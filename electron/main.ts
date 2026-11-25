@@ -1,6 +1,7 @@
 import { rankingChatTargets } from "./ranking-chat-targets";
 import { LiveRankingPeaks } from "./ranking-live-peaks";
 import { RankingRequestQueue } from "./ranking-request-queue";
+import {RANKING_REFRESH_MS,RANKING_CHAT_KEEP_STALE_MS} from "./ranking-timing";
 import {
   app,
   BrowserWindow,
@@ -373,7 +374,7 @@ const rankingInflight = new RankingRequestQueue<RankingScope,RankingSnapshot>();
 async function getKickRanking(scope:RankingScope):Promise<RankingSnapshot>{
   if(!getKickCredentialsStatus().configured)throw Error("設定画面でKick APIのClient IDとClient Secretを登録してください。");
   const old=rankingCache.get(scope);
-  if(old&&Date.now()-Date.parse(old.fetchedAt)<20000)return old;
+  if(old&&Date.now()-Date.parse(old.fetchedAt)<RANKING_REFRESH_MS)return old;
   return rankingInflight.request(scope,async()=>{
     if(isQuitting||!getKickCredentialsStatus().configured)throw Error("ランキング取得を停止しました。");
     if(Date.now()<kickChannelRateLimitUntil)throw Error("Kick APIのアクセス制限中です。時間をおいてください。");
@@ -813,14 +814,17 @@ function rankingChatMeasurement(snapshot:RankingSnapshot|null,slug:string){
   const row=[...(snapshot?.entries??[]),...(snapshot?.trackedEntries??[])].find(r=>r.slug===slug);
   const since=[chatReceiver.getConnectedSince(slug),rankingChatReceiver.getConnectedSince(slug)].filter((n):n is number=>n!==null);
   const connectedSince=since.length?Math.min(...since):null, startedAt=row?.startedAt??null, now=Date.now();
-  return {...rankingChatActivity.measured(slug,connectedSince,startedAt,now),...rankingChatActivity.active(slug,connectedSince,startedAt,now)};
+  return {...rankingChatActivity.measured(slug,connectedSince,startedAt,now),...rankingChatActivity.active(slug,connectedSince,startedAt,now),recent10:rankingChatActivity.recent10(slug,connectedSince,startedAt,now)};
 }
 function renewRankingChat(scope:RankingScope,selected:string|null):void{
   rankingChatLeaseUntil=Date.now()+35000;
   if(rankingChatLeaseTimer)clearTimeout(rankingChatLeaseTimer);
   rankingChatLeaseTimer=setTimeout(()=>{if(Date.now()>=rankingChatLeaseUntil)stopRankingChat();},36000);
   const snapshot=rankingCache.get(scope);
-  if(!snapshot||Date.now()-Date.parse(snapshot.fetchedAt)>90000){rankingChatWanted=[];if(rankingChatReceiver.getDesiredSlugs().length)void rankingChatReceiver.stop().catch(()=>undefined);return;}
+  const age=snapshot?Date.now()-Date.parse(snapshot.fetchedAt):Infinity;
+  if(!snapshot||age>RANKING_CHAT_KEEP_STALE_MS){rankingChatWanted=[];if(rankingChatReceiver.getDesiredSlugs().length)void rankingChatReceiver.stop().catch(()=>undefined);return;}
+  // A temporarily delayed ranking must not interrupt healthy realtime chat subscriptions.
+  if(age>90000)return;
   const currentConnected=[...chatReceiver.getConnectedSlugs(),...rankingChatReceiver.getConnectedSlugs()];
   const observed=rankingChatActivity.observed(currentConnected,[]).map(row=>({...row,...rankingChatMeasurement(snapshot,row.slug)}));
   const slugs=rankingChatTargets(snapshot,selected,chatReceiver.getConnectedSlugs(),undefined,observed);
