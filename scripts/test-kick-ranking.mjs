@@ -10,4 +10,6 @@ assert.equal(next.entries[0].rankChange,2);assert.equal(next.entries[0].viewerCh
 const capped=await collectRanking("all",async()=>({data:[make("sample",1)],pagination:{next_cursor:"same"}}),undefined,2);assert.equal(capped.complete,false);
 assert.equal(parseRankingPage({data:[make("bad",-1),make("valid",0,{thumbnail:"https://example.com/track"})]}).entries[0].thumbnail,null);
 assert.throws(()=>parseRankingPage({unexpected:[]}));
+assert.equal(parseRankingPage({data:[make("a".repeat(41),100)]}).excluded,1);
+const missingLang=await collectRanking("ja",async()=>({data:[make("sample",1,{language_code:""})],pagination:{}}));assert.equal(missingLang.complete,false);assert.equal(missingLang.excluded,1);
 console.log("Kickランキング：ページ取得、順位・増減、重複除外、暫定表示、安全なサムネイル検証成功");

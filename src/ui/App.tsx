@@ -219,7 +219,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "1.0.1-beta.96";
+const APP_VERSION = "1.1.0-beta.97";
 const CURRENT_EDITION: "beta" | "stable" = APP_VERSION.includes("-beta.") ? "beta" : "stable";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
@@ -248,6 +248,7 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  { version: "1.1.0-beta.97", title: "Kickランキング・追っかけ録画（実験機能）", changes: ["日本語・全世界の同接ランキング、受信コメント勢い、30日間の観測履歴", "ランキングから直接録画、監視登録、任意のVOD・過去コメント補完", "カテゴリ絞り込み、ページ切替、古い取得結果からの録画防止"] },
   { version: "1.0.1-beta.96", title: "β版・製品版の不具合情報／機能要望の受付を改善", changes: ["β版のメニューから不具合情報・機能要望の各GitHubフォームを開けるようにした", "投稿後は対象版・種類タグとAI判定待ちを付けて整理", "製品版向けの報告も同じ受付経路に分離し、録画・記事データは変更しない"] },
   { version: "1.0.1-beta.95", title: "製品版1.0.1に合わせβ版の基本番号を統一", changes: ["製品版1.0.1に合わせ基本番号を1.0.1へ更新、beta.95は連番を維持", "今後は軽微な開発でbeta.Nを進め、段階的な改善はpatch、機能追加はminor、大きな互換性変更はmajorで判断", "β版と製品版の更新先・アプリIDを引き続き分離し、配信AI新聞はβ版専用"] },
 

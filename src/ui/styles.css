@@ -678,3 +678,5 @@
 .ranking-active>div{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:5px 0}
 
 .ranking-history-panel{margin-top:20px;border-top:1px solid #39463e;padding-top:12px}.ranking-graph{margin:12px 0;padding:12px;border:1px solid #33463a;border-radius:6px}.ranking-graph svg{display:block;width:100%;max-height:230px}.ranking-row-actions{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px}
+
+.ranking-pages{display:flex;justify-content:center;align-items:center;gap:12px;margin:12px 0;font-size:12px;color:#aebbc7}.ranking-table tr:hover td{background:#1d2923}.ranking-toolbar select{max-width:230px}.ranking-toolbar button:disabled,.ranking-table button:disabled{opacity:.5;cursor:not-allowed}

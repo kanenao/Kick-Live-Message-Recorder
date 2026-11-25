@@ -13,7 +13,7 @@ export function parseRankingPage(payload:unknown):{entries:RawEntry[];cursor:str
   const entries:RawEntry[]=[];let excluded=0;
   for(const raw of p.data){
     const row=rec(raw),channel=rec(row.channel),user=rec(row.broadcaster_user);
-    const slug=str(channel.slug,40).toLowerCase(),viewers=row.viewer_count;
+    const slug=str(channel.slug,1000).toLowerCase(),viewers=row.viewer_count;
     if(!/^[a-z0-9_-]{1,40}$/.test(slug)||typeof viewers!=="number"||!Number.isSafeInteger(viewers)||viewers<0){excluded++;continue;}
     const started=str(row.started_at,80);
     entries.push({slug,name:str(user.username,100)||slug,title:str(row.title,300)||"タイトルなし",category:str(rec(row.category).name,100)||"未分類",language:str(row.language_code,35),viewers,startedAt:Number.isFinite(Date.parse(started))?new Date(started).toISOString():null,thumbnail:image(row.thumbnail),avatar:image(user.profile_picture)});
@@ -38,6 +38,7 @@ export async function collectRanking(scope:RankingScope,fetchPage:(url:URL)=>Pro
     if(scope==="ja")url.searchParams.set("language_code","ja");
     if(cursor)url.searchParams.set("cursor",cursor);
     const page=parseRankingPage(await fetchPage(url));pages++;excluded+=page.excluded;
+    if(scope==="ja")excluded+=page.entries.filter(row=>!row.language).length;
     entries.push(...page.entries.filter(row=>scope==="all"||/^ja(?:-|$)/i.test(row.language)));
     cursor=page.cursor;
     if(!cursor){complete=true;break;}
