@@ -1,6 +1,6 @@
 export type RankingScope = "ja" | "all";
 export type RankingEntry = {slug:string;name:string;title:string;category:string;language:string;viewers:number;startedAt:string|null;thumbnail:string|null;avatar:string|null;rank:number;rankChange:number|null;viewerChange:number|null};
-export type RankingSnapshot = {scope:RankingScope;entries:RankingEntry[];fetchedAt:string;complete:boolean;pages:number;total:number;excluded:number};
+export type RankingSnapshot = {scope:RankingScope;entries:RankingEntry[];fetchedAt:string;complete:boolean;pages:number;total:number;excluded:number;trackedEntries?:RankingEntry[]};
 type RawEntry = Omit<RankingEntry,"rank"|"rankChange"|"viewerChange">;
 const rec=(x:unknown):Record<string,unknown>=>x&&typeof x==="object"&&!Array.isArray(x)?x as Record<string,unknown>:{};
 const str=(x:unknown,max=500):string=>typeof x==="string"?x.trim().slice(0,max):"";
@@ -25,13 +25,13 @@ export function parseRankingPage(payload:unknown):{entries:RawEntry[];cursor:str
 export function rankEntries(rows:RawEntry[],previous?:RankingSnapshot):RankingEntry[]{
   const unique=new Map<string,RawEntry>();
   for(const row of rows){const existing=unique.get(row.slug);if(!existing||row.viewers>existing.viewers)unique.set(row.slug,row);}
-  const old=new Map(previous?.entries.map(row=>[row.slug,row])??[]);
+  const old=new Map([...(previous?.entries??[]),...(previous?.trackedEntries??[])].map(row=>[row.slug,row]));
   return [...unique.values()].sort((a,b)=>b.viewers-a.viewers||a.slug.localeCompare(b.slug)).map((row,index)=>{
     const before=old.get(row.slug),same=before&&row.startedAt!==null&&before.startedAt===row.startedAt;
     return {...row,rank:index+1,rankChange:same&&previous?.complete?before.rank-(index+1):null,viewerChange:same?row.viewers-before.viewers:null};
   });
 }
-export async function collectRanking(scope:RankingScope,fetchPage:(url:URL)=>Promise<unknown>,previous?:RankingSnapshot,maxPages=20):Promise<RankingSnapshot>{
+export async function collectRanking(scope:RankingScope,fetchPage:(url:URL)=>Promise<unknown>,previous?:RankingSnapshot,maxPages=20,trackedSlugs:readonly string[]=[]):Promise<RankingSnapshot>{
   const entries:RawEntry[]=[];const seen=new Set<string>();let cursor:string|null=null,pages=0,complete=false,excluded=0;
   do{
     const url=new URL("https://api.kick.com/public/v2/livestreams");url.searchParams.set("limit","1000");
@@ -46,5 +46,14 @@ export async function collectRanking(scope:RankingScope,fetchPage:(url:URL)=>Pro
   }while(pages<maxPages);
   const ranked=rankEntries(entries,previous?.scope===scope?previous:undefined);
   if(!complete||excluded)for(const row of ranked)row.rankChange=null;
-  return {scope,entries:ranked.slice(0,500),fetchedAt:new Date().toISOString(),complete:complete&&excluded===0,pages,total:ranked.length,excluded};
+  const tracked=new Set(trackedSlugs.map(s=>s.toLowerCase()));
+  return {scope,entries:ranked.slice(0,500),trackedEntries:ranked.filter(row=>tracked.has(row.slug)),fetchedAt:new Date().toISOString(),complete:complete&&excluded===0,pages,total:ranked.length,excluded};
+}
+
+export function registeredRank(snapshot:RankingSnapshot|null,slug:string,startedAt:string|null,now=Date.now()):string{
+  if(!snapshot||now-Date.parse(snapshot.fetchedAt)>90000)return "更新待ち";
+  const row=[...(snapshot.trackedEntries??[]),...snapshot.entries].find(x=>x.slug===slug.toLowerCase());
+  if(!row)return snapshot.complete?"対象外・未掲載":"取得範囲外";
+  if(!startedAt||!row.startedAt||Math.abs(Date.parse(startedAt)-Date.parse(row.startedAt))>=1000)return "新しい配信を確認中";
+  return (snapshot.complete?"":"暫定 ")+row.rank.toLocaleString("ja-JP")+"位";
 }

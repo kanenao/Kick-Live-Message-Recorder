@@ -191,6 +191,8 @@ export class KickChatReceiver {
     };
   }
 
+  getConnectedSlugs(): string[] {return this.socket?.readyState===WebSocket.OPEN?[...this.connectedSlugs]:[];}
+
   getDesiredSlugs(): string[] {
     return [...this.desiredSlugs];
   }

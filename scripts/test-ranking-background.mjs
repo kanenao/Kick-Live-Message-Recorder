@@ -13,3 +13,5 @@ a.add("sample",now);a.add("sample",now+1000);a.add("other",now);
 assert.deepEqual(a.list(now+2000),[{slug:"sample",messages:2},{slug:"other",messages:1}]);
 assert.equal(a.list(now+300000).length,0);
 console.log("ランキング常時収集：停止・範囲変更・重複防止、受信コメントの時間枠集計成功");
+
+const zero=new RankingChatActivity();assert.deepEqual(zero.observed(["quiet"],["quiet","pending"],now),[{slug:"quiet",messages:0,state:"connected"},{slug:"pending",messages:0,state:"connecting"}]);zero.add("quiet",now,"id");zero.add("quiet",now+1000,"id");assert.equal(zero.observed(["quiet"],[],now+1000)[0].messages,1);

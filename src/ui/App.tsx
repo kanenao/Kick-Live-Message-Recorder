@@ -1,3 +1,4 @@
+import { registeredRank, type RankingSnapshot } from "../../electron/kick-ranking";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { KickRanking } from "./KickRanking";
 import { getRecordingChannelSlug } from "../shared/recording-library";
@@ -1293,6 +1294,8 @@ export default function App() {
   const libraryProfileLastFetchRef = useRef<Map<string, number>>(new Map());
   const [libraryProfileRefreshKey, setLibraryProfileRefreshKey] = useState(0);
   const [liveClock, setLiveClock] = useState(() => Date.now());
+  const [registeredRanks,setRegisteredRanks]=useState<Record<"ja"|"all",RankingSnapshot|null>>({ja:null,all:null});
+  useEffect(()=>{if(tab!=="dashboard"||!isDesktop||!kickCredentialsConfigured)return;let active=true;const refresh=()=>{void window.kickRecorder?.getRegisteredRanks().then(value=>{if(active)setRegisteredRanks(value);}).catch(()=>undefined);};refresh();const timer=window.setInterval(refresh,5000);return()=>{active=false;window.clearInterval(timer);};},[tab,isDesktop,kickCredentialsConfigured]);
   const [isCheckingChannels, setIsCheckingChannels] = useState(false);
   const [lastChannelCheck, setLastChannelCheck] = useState("");
   const [monitorError, setMonitorError] = useState("");
@@ -2739,7 +2742,7 @@ export default function App() {
                       <div className="live-stream-meta">
                         <div><small>配信開始</small><strong>{formatLiveStartTime(live.startedAt)}</strong></div>
                         <div><small>配信時間</small><strong className="live-elapsed">{formatLiveElapsed(live.startedAt, liveClock)}</strong></div>
-                        <div><small>視聴者数</small><strong>{live.viewerCount.toLocaleString("ja-JP")} 人</strong></div>
+                        <div><small>視聴者数</small><strong>{live.viewerCount.toLocaleString("ja-JP")} 人</strong></div><div><small>日本語配信順位</small><strong>{registeredRank(registeredRanks.ja,live.slug,live.startedAt,liveClock)}</strong></div><div><small>全世界順位</small><strong>{registeredRank(registeredRanks.all,live.slug,live.startedAt,liveClock)}</strong></div>
                       </div>
                       <div className="live-stream-actions">
                         <span className={channel.recording ? "live-recording-indicator is-recording" : "live-recording-indicator"}>

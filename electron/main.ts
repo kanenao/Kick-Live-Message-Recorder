@@ -369,7 +369,7 @@ let rankingLastRequestAt=0;
 async function getKickRanking(scope:RankingScope):Promise<RankingSnapshot>{
   if(!getKickCredentialsStatus().configured)throw Error("設定画面でKick APIのClient IDとClient Secretを登録してください。");
   const old=rankingCache.get(scope);
-  if(old&&Date.now()-Date.parse(old.fetchedAt)<60000)return old;
+  if(old&&Date.now()-Date.parse(old.fetchedAt)<20000)return old;
   const pending=rankingInflight.get(scope);if(pending)return pending;
   if(rankingInflight.size)throw Error("別のランキングを取得中です。少し時間をおいてください。");
   if(Date.now()<kickChannelRateLimitUntil)throw Error("Kick APIのアクセス制限中です。時間をおいてください。");
@@ -383,7 +383,7 @@ async function getKickRanking(scope:RankingScope):Promise<RankingSnapshot>{
       if(response.status===429){kickChannelRateLimitUntil=Date.now()+getKickChannelRateLimitWaitSeconds(response)*1000;throw Error("Kick APIのアクセス制限に達しました。自動更新は待機します。");}
       if(!response.ok)throw Error("ランキングを取得できません（HTTP "+response.status+"）。");
       return response.json();
-    },old);
+    },old,20,[...readState().channels,...readState().recordingOnlyChannels].map(c=>c.name));
     rankingCache.set(scope,snapshot);
     try{rankingHistory().save(snapshot);}catch(error){console.warn("ランキング履歴を保存できませんでした:",error);}
     return snapshot;
@@ -788,13 +788,49 @@ const chatReceiver = new KickChatReceiver(
   getRecordingOutputDirectory,
   () => readState().settings.saveChat,
   message => {
-    rankingChatActivity.add(message.channelSlug.toLowerCase());
+    rankingChatActivity.add(message.channelSlug.toLowerCase(),Date.now(),message.eventId);
     liveArticleManager.onChatMessage(message);
     mainWindow?.webContents.send("chat:message", message);
   },
   status => mainWindow?.webContents.send("chat:status", status)
 );
 
+// Independent, bounded ranking chat observation. Never changes recording chat subscriptions or writes logs.
+const rankingChatReceiver = new KickChatReceiver(getRecordingOutputDirectory,()=>false,message=>{
+  rankingChatActivity.add(message.channelSlug.toLowerCase(),Date.now(),message.eventId);
+},()=>{});
+let rankingChatLeaseUntil=0,rankingChatLastStart=0,rankingChatSignature="";
+let rankingChatLeaseTimer:ReturnType<typeof setTimeout>|null=null;
+function stopRankingChat():void{
+  rankingChatLeaseUntil=0;rankingChatSignature="";
+  if(rankingChatLeaseTimer)clearTimeout(rankingChatLeaseTimer);rankingChatLeaseTimer=null;
+  void rankingChatReceiver.stop().catch(()=>undefined);
+}
+function renewRankingChat(scope:RankingScope):void{
+  rankingChatLeaseUntil=Date.now()+35000;
+  if(rankingChatLeaseTimer)clearTimeout(rankingChatLeaseTimer);
+  rankingChatLeaseTimer=setTimeout(()=>{if(Date.now()>=rankingChatLeaseUntil)stopRankingChat();},36000);
+  const snapshot=rankingCache.get(scope);
+  if(!snapshot||Date.now()-Date.parse(snapshot.fetchedAt)>90000)return;
+  const normal=new Set(chatReceiver.getDesiredSlugs());
+  const slugs=snapshot.entries.slice(0,10).map(r=>r.slug).filter(s=>/^[a-z0-9_]{1,25}$/.test(s)&&!normal.has(s)).sort();
+  const signature=slugs.join("|");
+  if(signature===rankingChatSignature&&rankingChatReceiver.getDesiredSlugs().join("|")===signature)return;
+  if(Date.now()-rankingChatLastStart<60000)return;
+  rankingChatLastStart=Date.now();rankingChatSignature=signature;
+  if(!slugs.length){void rankingChatReceiver.stop().catch(()=>undefined);return;}
+  void rankingChatReceiver.start(slugs).catch(()=>{if(rankingChatSignature===signature)rankingChatSignature="";});
+}
+let lastRegisteredRankRequest=0;
+function refreshRegisteredRanks():void{
+  if(isQuitting||rankingInflight.size||Date.now()<kickChannelRateLimitUntil||Date.now()-lastRegisteredRankRequest<20000)return;
+  const scopes:RankingScope[]=["ja","all"];
+  scopes.sort((a,b)=>(Date.parse(rankingCache.get(a)?.fetchedAt??"")||0)-(Date.parse(rankingCache.get(b)?.fetchedAt??"")||0));
+  const scope=scopes[0];
+  if(Date.now()-(Date.parse(rankingCache.get(scope)?.fetchedAt??"")||0)<20000)return;
+  lastRegisteredRankRequest=Date.now();
+  void getKickRanking(scope).catch(()=>undefined);
+}
 let savedVodAssBusy = false;
 const vodChatDownloader = new KickVodChatDownloader(event => {
   mainWindow?.webContents.send("vod-chat:status", event);
@@ -1355,6 +1391,7 @@ async function runBackgroundMonitor(): Promise<void> {
         autoRecordingRetryNotBefore.delete(key);
       }
     }
+    if(results.some(r=>r.found&&r.isLive))refreshRegisteredRanks();
     const lastCheckAt = new Date().toISOString();
     publishBackgroundMonitorStatus({
       running: true, monitoredChannels: slugs.length, intervalSeconds: state.settings.monitorIntervalSeconds,
@@ -1659,7 +1696,13 @@ function registerIpcHandlers(): void {
     assertTrustedSender(event);if(typeof enabled!=="boolean"||(scope!=="ja"&&scope!=="all"))throw Error("ランキング収集設定が不正です。");
     saveRankingBackground(enabled,scope);return rankingBackground.getStatus();
   });
-  ipcMain.handle("kick:ranking-chat-activity",event=>{assertTrustedSender(event);return rankingChatActivity.list();});
+  ipcMain.handle("kick:registered-ranks",event=>{assertTrustedSender(event);return {ja:rankingCache.get("ja")??null,all:rankingCache.get("all")??null};});
+  ipcMain.handle("kick:ranking-chat-activity",(event,scope:unknown,enabled:unknown)=>{
+    assertTrustedSender(event);
+    if((scope!=="ja"&&scope!=="all")||typeof enabled!=="boolean")throw Error("ランキングコメント設定が不正です。");
+    if(enabled)renewRankingChat(scope);else stopRankingChat();
+    return {rows:rankingChatActivity.observed([...chatReceiver.getConnectedSlugs(),...rankingChatReceiver.getConnectedSlugs()],[...chatReceiver.getDesiredSlugs(),...rankingChatReceiver.getDesiredSlugs()]),message:rankingChatReceiver.getStatus().message};
+  });
   ipcMain.handle("kick:ranking-history",(event,scope:unknown,hours:unknown,slug:unknown)=>{
     assertTrustedSender(event);
     if((scope!=="ja"&&scope!=="all")||(hours!==24&&hours!==168&&hours!==720)||(slug!==null&&(typeof slug!=="string"||!/^[a-z0-9_-]{1,40}$/.test(slug))))throw Error("履歴の検索条件が不正です。");
@@ -2291,6 +2334,7 @@ if (!hasSingleInstanceLock) {
 app.on("before-quit", () => {
   isQuitting = true;
   rankingBackground.stop();
+  stopRankingChat();
   if (backgroundMonitorTimer) clearTimeout(backgroundMonitorTimer);
   backgroundMonitorTimer = null;
   clearBackgroundChatRetry();
