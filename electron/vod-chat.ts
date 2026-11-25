@@ -241,15 +241,17 @@ async function fetchVodMetadata(identity: VodIdentity, signal: AbortSignal, requ
     const channel = asRecord(livestream.channel);
     const returnedId = readString(legacy.uuid);
     const returnedSlug = readString(channel.slug);
-    if(requireVerifiedPublic && (returnedId?.toLowerCase()!==identity.videoId || returnedSlug?.toLowerCase()!==identity.slug || legacy.status!=="public" || (legacy.is_live??livestream.is_live)!==false)) {
-      throw new Error("自動補完には配信者・動画ID・公開済み状態の明示確認が必要です。");
-    }
     if (returnedId && returnedId.toLowerCase() !== identity.videoId) {
       throw new Error("Kickから別のVOD情報が返されたため、安全のため中止しました。");
     }
     if (returnedSlug && returnedSlug.toLowerCase() !== identity.slug) {
       throw new Error("URLのチャンネル名とVODの配信者が一致しません。");
     }
+    if(requireVerifiedPublic && ((typeof legacy.status==="string" && legacy.status!=="public") || legacy.is_live===true || livestream.is_live===true)) throw new Error("非公開・配信中のVODは自動補完できません。");
+    const verified=returnedId?.toLowerCase()===identity.videoId && returnedSlug?.toLowerCase()===identity.slug && legacy.status==="public" && (legacy.is_live??livestream.is_live)===false;
+    // Older metadata sometimes omits visibility fields. For auto recovery,
+    // fall through to the newer API rather than treating omission as proof.
+    if(!requireVerifiedPublic || verified) {
     const channelId = readPositiveId(channel.id);
     if (!channelId) throw new Error("VODのチャンネルIDを取得できませんでした。");
     return {
@@ -259,6 +261,7 @@ async function fetchVodMetadata(identity: VodIdentity, signal: AbortSignal, requ
       startAt: parseDate(livestream.start_time),
       durationSeconds: toDurationSeconds(livestream.duration, "milliseconds")
     };
+    }
   }
 
   // Kickの新しいWebサイト用メタデータAPI。旧APIが404の場合だけ使用する。
