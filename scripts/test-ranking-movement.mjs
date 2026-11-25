@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {rankingFrame,rankMovement} from "../electron/ranking-movement.ts";
+import {advanceRankFrame,rankingFrame,rankMovement} from "../electron/ranking-movement.ts";
 const start="2026-11-25T00:00:00Z";
 const row=(slug,rank,viewerChange,startedAt=start)=>({slug,rank,viewers:100-rank,viewerChange,rankChange:null,startedAt});
 const chat=(slug,n)=>({slug,state:"connected",messages:n,observedSeconds:300,ratePerMinute:n,activeUsers:n,activeSeconds:300,activeComplete:true});
@@ -37,3 +37,13 @@ assert.equal(rankMovement(chatAfter,chatBefore,"active",shared.entries[1]).kind,
 assert.equal(rankMovement(chatAfter,chatBefore,"chat",shared.entries[0]).previous,2);
 assert.equal(rankMovement(chatAfter,chatAfter,"chat",shared.entries[0]).kind,"unknown");
 console.log("10秒チャット順位：API更新なしでも順位変動を独立比較");
+
+const history1=advanceRankFrame(undefined,chatBefore);
+const history2=advanceRankFrame(history1,chatAfter);
+assert.equal(history2.previous,chatBefore);
+assert.equal(advanceRankFrame(history2,chatAfter),history2);
+assert.equal(advanceRankFrame(history2,chatBefore),history2);
+const afterGap=rankingFrame(shared,[chat("a",1),chat("b",9)],"2026-11-25T00:09:00Z");
+assert.equal(advanceRankFrame(history2,afterGap).previous,null);
+assert.equal(advanceRankFrame(history2,otherScope).previous,null);
+console.log("10秒観測：重複・逆順を無視し、長い欠測・範囲変更では比較しない");
