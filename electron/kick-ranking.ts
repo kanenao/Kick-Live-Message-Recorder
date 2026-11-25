@@ -1,6 +1,7 @@
+import type {LiveRankPeak} from "./ranking-live-peaks";
 export type RankingScope = "ja" | "all";
 export type RankingEntry = {slug:string;name:string;title:string;category:string;language:string;viewers:number;startedAt:string|null;thumbnail:string|null;avatar:string|null;rank:number;rankChange:number|null;viewerChange:number|null};
-export type RankingSnapshot = {scope:RankingScope;entries:RankingEntry[];fetchedAt:string;complete:boolean;pages:number;total:number;excluded:number;trackedEntries?:RankingEntry[]};
+export type RankingSnapshot = {scope:RankingScope;entries:RankingEntry[];fetchedAt:string;complete:boolean;pages:number;total:number;excluded:number;trackedEntries?:RankingEntry[];livePeaks?:LiveRankPeak[]};
 type RawEntry = Omit<RankingEntry,"rank"|"rankChange"|"viewerChange">;
 const rec=(x:unknown):Record<string,unknown>=>x&&typeof x==="object"&&!Array.isArray(x)?x as Record<string,unknown>:{};
 const str=(x:unknown,max=500):string=>typeof x==="string"?x.trim().slice(0,max):"";
@@ -56,4 +57,23 @@ export function registeredRank(snapshot:RankingSnapshot|null,slug:string,started
   if(!row)return snapshot.complete?"対象外・未掲載":"取得範囲外";
   if(!startedAt||!row.startedAt||!Number.isFinite(Date.parse(startedAt))||Math.floor(Date.parse(startedAt)/1000)!==Math.floor(Date.parse(row.startedAt)/1000))return "新しい配信を確認中";
   return (snapshot.complete?"":"暫定 ")+row.rank.toLocaleString("ja-JP")+"位";
+}
+
+/** Current broadcast only; never promote a partial rank to a confirmed rank. */
+export function registeredRankPeak(snapshot:RankingSnapshot|null,slug:string,startedAt:string|null):LiveRankPeak|null{
+  if(!startedAt||!Number.isFinite(Date.parse(startedAt)))return null;
+  return snapshot?.livePeaks?.find(row=>row.slug===slug.toLowerCase()&&Math.floor(Date.parse(row.startedAt)/1000)===Math.floor(Date.parse(startedAt)/1000))??null;
+}
+export function registeredRankPeakLabel(snapshot:RankingSnapshot|null,slug:string,startedAt:string|null):string{
+  const peak=registeredRankPeak(snapshot,slug,startedAt);
+  if(!peak)return "観測待ち";
+  const exact=peak.bestRank===null?"":peak.bestRank.toLocaleString("ja-JP")+"位";
+  const partial=peak.bestPartialRank===null?"":"暫定 "+peak.bestPartialRank.toLocaleString("ja-JP")+"位";
+  return [exact,partial].filter(Boolean).join(" / ")||"観測待ち";
+}
+export function registeredRankChangeLabel(snapshot:RankingSnapshot|null,slug:string,startedAt:string|null,now=Date.now()):string{
+  if(!snapshot||!snapshot.complete||!startedAt||!Number.isFinite(Date.parse(startedAt))||now-Date.parse(snapshot.fetchedAt)>90000)return "—";
+  const row=(snapshot.trackedEntries??[]).find(r=>r.slug===slug.toLowerCase()&&r.startedAt&&Math.floor(Date.parse(r.startedAt)/1000)===Math.floor(Date.parse(startedAt)/1000));
+  const n=row?.rankChange;
+  return n===undefined||n===null?"—":n>0?"↑ "+n:n<0?"↓ "+Math.abs(n):"→";
 }

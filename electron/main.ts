@@ -1,3 +1,4 @@
+import { LiveRankingPeaks } from "./ranking-live-peaks";
 import { RankingRequestQueue } from "./ranking-request-queue";
 import {
   app,
@@ -366,6 +367,7 @@ async function getKickAccessToken(): Promise<string> {
 
 function rankingHistory():KickRankingHistory{return new KickRankingHistory(join(app.getPath("userData"),"RankingHistory"));}
 const rankingCache = new Map<RankingScope,RankingSnapshot>();
+const liveRankingPeaks = new LiveRankingPeaks();
 const rankingInflight = new RankingRequestQueue<RankingScope,RankingSnapshot>();
 async function getKickRanking(scope:RankingScope):Promise<RankingSnapshot>{
   if(!getKickCredentialsStatus().configured)throw Error("設定画面でKick APIのClient IDとClient Secretを登録してください。");
@@ -383,6 +385,7 @@ async function getKickRanking(scope:RankingScope):Promise<RankingSnapshot>{
       if(!response.ok)throw Error("ランキングを取得できません（HTTP "+response.status+"）。");
       return response.json();
     },old,20,[...readState().channels,...readState().recordingOnlyChannels].map(c=>c.name));
+    snapshot.livePeaks=liveRankingPeaks.observe(snapshot);
     rankingCache.set(scope,snapshot);
     try{rankingHistory().save(snapshot);}catch(error){console.warn("ランキング履歴を保存できませんでした:",error);}
     return snapshot;

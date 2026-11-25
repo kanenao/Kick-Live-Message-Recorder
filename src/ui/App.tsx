@@ -1,4 +1,4 @@
-import { registeredRank, type RankingSnapshot } from "../../electron/kick-ranking";
+import { registeredRank, registeredRankPeak, registeredRankPeakLabel, registeredRankChangeLabel, type RankingSnapshot } from "../../electron/kick-ranking";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { KickRanking } from "./KickRanking";
 import { getRecordingChannelSlug } from "../shared/recording-library";
@@ -2745,7 +2745,7 @@ export default function App() {
                       <div className="live-stream-meta">
                         <div><small>配信開始</small><strong>{formatLiveStartTime(live.startedAt)}</strong></div>
                         <div><small>配信時間</small><strong className="live-elapsed">{formatLiveElapsed(live.startedAt, liveClock)}</strong></div>
-                        <div><small>視聴者数</small><strong>{live.viewerCount.toLocaleString("ja-JP")} 人</strong></div><div><small>日本語配信順位</small><strong>{registeredRank(registeredRanks.ja,live.slug,live.startedAt,liveClock)}</strong></div><div><small>全世界順位</small><strong>{registeredRank(registeredRanks.all,live.slug,live.startedAt,liveClock)}</strong></div>
+                        <div><small>視聴者数</small><strong>{live.viewerCount.toLocaleString("ja-JP")} 人</strong></div><div><small>日本語配信順位</small><strong>{registeredRank(registeredRanks.ja,live.slug,live.startedAt,liveClock)}</strong><span className="live-rank-detail">前回比 {registeredRankChangeLabel(registeredRanks.ja,live.slug,live.startedAt,liveClock)} ／ 観測最高 {registeredRankPeakLabel(registeredRanks.ja,live.slug,live.startedAt)}</span></div><div><small>全世界順位</small><strong>{registeredRank(registeredRanks.all,live.slug,live.startedAt,liveClock)}</strong><span className="live-rank-detail">前回比 {registeredRankChangeLabel(registeredRanks.all,live.slug,live.startedAt,liveClock)} ／ 観測最高 {registeredRankPeakLabel(registeredRanks.all,live.slug,live.startedAt)}</span></div><div><small>放送中の観測最高同接</small><strong>{(()=>{const values=[registeredRankPeak(registeredRanks.ja,live.slug,live.startedAt)?.peakViewers,registeredRankPeak(registeredRanks.all,live.slug,live.startedAt)?.peakViewers].filter((n):n is number=>typeof n==="number");return values.length?Math.max(...values).toLocaleString("ja-JP")+" 人":"観測待ち";})()}</strong><span className="live-rank-detail">アプリ起動後の観測範囲</span></div>
                       </div>
                       <div className="live-stream-actions">
                         <span className={channel.recording ? "live-recording-indicator is-recording" : "live-recording-indicator"}>
