@@ -4,6 +4,7 @@ import {useEffect,useMemo,useRef,useState} from "react";
 import type {RankingScope,RankingSnapshot} from "../../electron/kick-ranking";
 import type {RankingHistory} from "../../electron/kick-ranking-history";
 import type {RankingBackgroundStatus} from "../../electron/ranking-background";
+const RANKING_REFRESH_MS=10000;
 export function KickRanking({configured,desktop,onSettings,registered,canRegister,onRegister,recoverVod,recoverChat}:{configured:boolean;desktop:boolean;onSettings:()=>void;registered:string[];canRegister:boolean;onRegister:(slug:string)=>boolean;recoverVod:boolean;recoverChat:boolean}){
   const [scope,setScope]=useState<RankingScope>("ja");
   const [snapshots,setSnapshots]=useState<Partial<Record<RankingScope,RankingSnapshot>>>({});
@@ -50,7 +51,7 @@ export function KickRanking({configured,desktop,onSettings,registered,canRegiste
       void api.getRankingBackground().then(value=>{if(mounted)setBackground(value);}).catch(()=>undefined);
       void api.getRankingChatActivity(scope,observeChat,previewRef.current).then(value=>{if(mounted){setChatActivity(value.rows);setChatScope(scope);setChatAt(new Date().toISOString());setRankingChatMessage(value.message);setChatCoverage({targets:value.targets,connected:value.connected});}}).catch(e=>{if(mounted){setRankingChatMessage(String(e));setChatActivity([]);setChatCoverage({targets:0,connected:0});setChatScope(null);setChatAt(null);}}).finally(()=>{waiting=false;});
     };
-    refresh();const timer=window.setInterval(refresh,10000);
+    refresh();const timer=window.setInterval(refresh,RANKING_REFRESH_MS);
     return()=>{mounted=false;window.clearInterval(timer);};
   },[desktop,scope,observeChat]);
   useEffect(()=>()=>{void window.kickRecorder?.getRankingChatActivity("ja",false).catch(()=>undefined);},[]);
@@ -79,7 +80,7 @@ export function KickRanking({configured,desktop,onSettings,registered,canRegiste
       void window.kickRecorder?.getKickRanking(scope).then(snapshot=>{if(mounted&&seq===requestSeq.current)setSnapshots(prev=>({...prev,[scope]:snapshot}));}).catch(e=>{if(mounted&&seq===requestSeq.current)setError(e instanceof Error?e.message:String(e));}).finally(()=>{waiting=false;if(mounted&&seq===requestSeq.current)setBusy(false);});
     };
     refreshRef.current=refresh;refresh();
-    const timer=auto?window.setInterval(refresh,10000):undefined;
+    const timer=auto?window.setInterval(refresh,RANKING_REFRESH_MS):undefined;
     return()=>{mounted=false;refreshRef.current=()=>{};if(timer!==undefined)window.clearInterval(timer);};
   },[scope,configured,desktop,auto]);
   useEffect(()=>{
@@ -164,7 +165,7 @@ export function KickRanking({configured,desktop,onSettings,registered,canRegiste
   return <section className="panel kick-ranking">
     <div className="panel-heading"><div><h2>リアルタイム同接ランキング</h2><p>Kick公式APIから独自集計。登録していない配信者も直接録画できます。</p></div><span className="count-pill">{snapshot? snapshot.total.toLocaleString()+" 配信取得":"未取得"}</span></div>
     {!configured&&<div className="notice">ランキングにはKick APIの設定が必要です。<button className="small-action" onClick={onSettings}>設定を開く</button></div>}
-    <div className="ranking-toolbar"><select aria-label="ランキング範囲" value={scope} onChange={e=>setScope(e.target.value as RankingScope)}><option value="ja">日本語配信</option><option value="all">全世界</option></select><select aria-label="並び順" value={sort} onChange={e=>setSort(e.target.value as "viewers"|"growth"|"chat"|"momentum"|"active")}><option value="viewers">同時視聴者数順</option><option value="growth">視聴者増加数順</option><option value="chat">受信コメント勢い順</option><option value="momentum">総合勢い順</option><option value="active">アクティブ人数順</option></select><select aria-label="カテゴリ絞り込み" value={category} onChange={e=>setCategory(e.target.value)}><option value="">全カテゴリ</option>{categories.map(c=><option key={c} value={c}>{c}</option>)}</select><input aria-label="配信検索" placeholder="配信者・タイトル・カテゴリ検索" value={search} onChange={e=>setSearch(e.target.value)}/><label><input type="checkbox" checked={auto} onChange={e=>setAuto(e.target.checked)}/> 自動更新（10秒）</label><button className="small-action" disabled={busy||!configured||!desktop} onClick={()=>refreshRef.current()}>{busy?"取得中…":"更新"}</button></div>
+    <div className="ranking-toolbar"><select aria-label="ランキング範囲" value={scope} onChange={e=>setScope(e.target.value as RankingScope)}><option value="ja">日本語配信</option><option value="all">全世界</option></select><select aria-label="並び順" value={sort} onChange={e=>setSort(e.target.value as "viewers"|"growth"|"chat"|"momentum"|"active")}><option value="viewers">同時視聴者数順</option><option value="growth">視聴者増加数順</option><option value="chat">受信コメント勢い順</option><option value="momentum">総合勢い順</option><option value="active">アクティブ人数順</option></select><select aria-label="カテゴリ絞り込み" value={category} onChange={e=>setCategory(e.target.value)}><option value="">全カテゴリ</option>{categories.map(c=><option key={c} value={c}>{c}</option>)}</select><input aria-label="配信検索" placeholder="配信者・タイトル・カテゴリ検索" value={search} onChange={e=>setSearch(e.target.value)}/><label><input type="checkbox" checked={auto} onChange={e=>setAuto(e.target.checked)}/> 自動更新（{RANKING_REFRESH_MS/1000}秒）</label><button className="small-action" disabled={busy||!configured||!desktop} onClick={()=>refreshRef.current()}>{busy?"取得中…":"更新"}</button></div>
     {background&&<div className="notice"><label><input type="checkbox" checked={background.enabled} disabled={backgroundBusy||(!configured&&!background.enabled)} onChange={e=>void configureBackground(e.target.checked,background.scope)}/> 画面を閉じてもランキングを収集（5分間隔）</label> <select aria-label="常時収集範囲" value={background.scope} disabled={backgroundBusy} onChange={e=>void configureBackground(background.enabled,e.target.value as RankingScope)}><option value="ja">日本語配信</option><option value="all">全世界</option></select><div>{background.running?"取得中":background.enabled?"収集有効":"停止中"} ／ 前回成功：{background.lastAt?new Date(background.lastAt).toLocaleString("ja-JP"):"未取得"} ／ 次回：{background.nextAt?new Date(background.nextAt).toLocaleString("ja-JP"):"—"}</div>{background.error&&<div role="alert">{background.error}</div>}<div>アプリ動作中のみ収集。追加のAPI通信があります。設定は次回起動にも引き継がれます。</div></div>}
     <div className="ranking-caption"><label><input type="checkbox" checked={observeChat} onChange={e=>setObserveChat(e.target.checked)}/> 最大30配信のコメント勢いを受信（追加接続・ログ保存なし）</label> ／ 追加観測 {chatCoverage.connected}/{chatCoverage.targets}件接続 ／ {rankingChatMessage||"受信準備中"}。同接上位10を優先確保し、登録配信者・プレビュー・視聴者増加・総合勢いも優先枠へ。上位10の変更時は60秒以上、通常は360秒以上の間隔で接続先を切り替えます。チャットは接続中リアルタイム受信し、直近約5分の受信件数・毎分コメント数・アクティブ人数・総合順位を10秒ごとに反映します。</div>
     <p className="ranking-caption">順位変動：▲ UP（上昇）／▼ DOWN（下降）／＝ KEEP（変動なし）／★ NEW（新規・新しい放送）／—（比較なし）。同じ範囲の前回取得結果（コメント・アクティブ・総合は前回チャット観測）と比較。絞り込みやページ変更で順位を振り直しません。同接以外は観測範囲内の順位です。</p>
