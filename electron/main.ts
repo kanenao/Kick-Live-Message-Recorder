@@ -1,3 +1,4 @@
+import { RankingRequestQueue } from "./ranking-request-queue";
 import {
   app,
   BrowserWindow,
@@ -364,22 +365,19 @@ async function getKickAccessToken(): Promise<string> {
 
 function rankingHistory():KickRankingHistory{return new KickRankingHistory(join(app.getPath("userData"),"RankingHistory"));}
 const rankingCache = new Map<RankingScope,RankingSnapshot>();
-const rankingInflight = new Map<RankingScope,Promise<RankingSnapshot>>();
-let rankingLastRequestAt=0;
+const rankingInflight = new RankingRequestQueue<RankingScope,RankingSnapshot>();
 async function getKickRanking(scope:RankingScope):Promise<RankingSnapshot>{
   if(!getKickCredentialsStatus().configured)throw Error("設定画面でKick APIのClient IDとClient Secretを登録してください。");
   const old=rankingCache.get(scope);
   if(old&&Date.now()-Date.parse(old.fetchedAt)<20000)return old;
-  const pending=rankingInflight.get(scope);if(pending)return pending;
-  if(rankingInflight.size)throw Error("別のランキングを取得中です。少し時間をおいてください。");
-  if(Date.now()<kickChannelRateLimitUntil)throw Error("Kick APIのアクセス制限中です。時間をおいてください。");
-  if(Date.now()-rankingLastRequestAt<15000)throw Error("連続更新を制限しています。15秒ほどお待ちください。");
-  rankingLastRequestAt=Date.now();
-  const work=(async()=>{
+  return rankingInflight.request(scope,async()=>{
+    if(isQuitting||!getKickCredentialsStatus().configured)throw Error("ランキング取得を停止しました。");
+    if(Date.now()<kickChannelRateLimitUntil)throw Error("Kick APIのアクセス制限中です。時間をおいてください。");
     const token=await getKickAccessToken();
+    const deadline=AbortSignal.timeout(50000);
     const snapshot=await collectRanking(scope,async url=>{
       if(Date.now()<kickChannelRateLimitUntil)throw Error("Kick APIのアクセス制限中です。");
-      const response=await fetch(url,{headers:{"Authorization":"Bearer "+token,"Accept":"application/json"},signal:AbortSignal.timeout(15000),redirect:"error"});
+      const response=await fetch(url,{headers:{"Authorization":"Bearer "+token,"Accept":"application/json"},signal:AbortSignal.any([deadline,AbortSignal.timeout(15000)]),redirect:"error"});
       if(response.status===429){kickChannelRateLimitUntil=Date.now()+getKickChannelRateLimitWaitSeconds(response)*1000;throw Error("Kick APIのアクセス制限に達しました。自動更新は待機します。");}
       if(!response.ok)throw Error("ランキングを取得できません（HTTP "+response.status+"）。");
       return response.json();
@@ -387,9 +385,7 @@ async function getKickRanking(scope:RankingScope):Promise<RankingSnapshot>{
     rankingCache.set(scope,snapshot);
     try{rankingHistory().save(snapshot);}catch(error){console.warn("ランキング履歴を保存できませんでした:",error);}
     return snapshot;
-  })();
-  rankingInflight.set(scope,work);
-  try{return await work;}finally{rankingInflight.delete(scope);}
+  });
 }
 
 const rankingBackground = new RankingBackground(getKickRanking);
@@ -798,7 +794,7 @@ const chatReceiver = new KickChatReceiver(
 // Independent, bounded ranking chat observation. Never changes recording chat subscriptions or writes logs.
 const rankingChatReceiver = new KickChatReceiver(getRecordingOutputDirectory,()=>false,message=>{
   rankingChatActivity.add(message.channelSlug.toLowerCase(),Date.now(),message.eventId);
-},()=>{});
+},()=>{},true);
 let rankingChatLeaseUntil=0,rankingChatLastStart=0,rankingChatSignature="";
 let rankingChatLeaseTimer:ReturnType<typeof setTimeout>|null=null;
 function stopRankingChat():void{
@@ -815,7 +811,8 @@ function renewRankingChat(scope:RankingScope):void{
   const normal=new Set(chatReceiver.getDesiredSlugs());
   const slugs=snapshot.entries.slice(0,10).map(r=>r.slug).filter(s=>/^[a-z0-9_]{1,25}$/.test(s)&&!normal.has(s)).sort();
   const signature=slugs.join("|");
-  if(signature===rankingChatSignature&&rankingChatReceiver.getDesiredSlugs().join("|")===signature)return;
+  const matching=signature===rankingChatSignature&&rankingChatReceiver.getDesiredSlugs().join("|")===signature;
+  if(matching&&(!rankingChatReceiver.getStatus().running||rankingChatReceiver.getConnectedSlugs().length===slugs.length||Date.now()-rankingChatLastStart<120000))return;
   if(Date.now()-rankingChatLastStart<60000)return;
   rankingChatLastStart=Date.now();rankingChatSignature=signature;
   if(!slugs.length){void rankingChatReceiver.stop().catch(()=>undefined);return;}
@@ -1701,7 +1698,7 @@ function registerIpcHandlers(): void {
     assertTrustedSender(event);
     if((scope!=="ja"&&scope!=="all")||typeof enabled!=="boolean")throw Error("ランキングコメント設定が不正です。");
     if(enabled)renewRankingChat(scope);else stopRankingChat();
-    return {rows:rankingChatActivity.observed([...chatReceiver.getConnectedSlugs(),...rankingChatReceiver.getConnectedSlugs()],[...chatReceiver.getDesiredSlugs(),...rankingChatReceiver.getDesiredSlugs()]),message:rankingChatReceiver.getStatus().message};
+    return {rows:rankingChatActivity.observed([...chatReceiver.getConnectedSlugs(),...rankingChatReceiver.getConnectedSlugs()],[...chatReceiver.getDesiredSlugs(),...rankingChatReceiver.getDesiredSlugs().filter(slug=>!rankingChatReceiver.getStatus().running||rankingChatReceiver.getConnectedSlugs().includes(slug))]),message:rankingChatReceiver.getStatus().message};
   });
   ipcMain.handle("kick:ranking-history",(event,scope:unknown,hours:unknown,slug:unknown)=>{
     assertTrustedSender(event);

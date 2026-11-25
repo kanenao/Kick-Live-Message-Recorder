@@ -30,8 +30,9 @@ export function KickRanking({configured,desktop,onSettings,registered,canRegiste
       void api.getRankingChatActivity(scope,observeChat).then(value=>{if(mounted){setChatActivity(value.rows);setRankingChatMessage(value.message);}}).catch(e=>{if(mounted)setRankingChatMessage(String(e));});
     };
     refresh();const timer=window.setInterval(refresh,5000);
-    return()=>{mounted=false;window.clearInterval(timer);void api.getRankingChatActivity(scope,false).catch(()=>undefined);};
+    return()=>{mounted=false;window.clearInterval(timer);};
   },[desktop,scope,observeChat]);
+  useEffect(()=>()=>{void window.kickRecorder?.getRankingChatActivity("ja",false).catch(()=>undefined);},[]);
   async function configureBackground(enabled:boolean,nextScope:RankingScope){
     if(!window.kickRecorder||backgroundBusy)return;
     setBackgroundBusy(true);
@@ -50,10 +51,11 @@ export function KickRanking({configured,desktop,onSettings,registered,canRegiste
   const requestSeq=useRef(0);
   useEffect(()=>{
     if(!desktop||!configured)return;
-    let mounted=true;
+    let mounted=true,waiting=false;
     const refresh=()=>{
+      if(waiting)return;waiting=true;
       const seq=++requestSeq.current;setBusy(true);setError("");
-      void window.kickRecorder?.getKickRanking(scope).then(snapshot=>{if(mounted&&seq===requestSeq.current)setSnapshots(prev=>({...prev,[scope]:snapshot}));}).catch(e=>{if(mounted&&seq===requestSeq.current)setError(e instanceof Error?e.message:String(e));}).finally(()=>{if(mounted&&seq===requestSeq.current)setBusy(false);});
+      void window.kickRecorder?.getKickRanking(scope).then(snapshot=>{if(mounted&&seq===requestSeq.current)setSnapshots(prev=>({...prev,[scope]:snapshot}));}).catch(e=>{if(mounted&&seq===requestSeq.current)setError(e instanceof Error?e.message:String(e));}).finally(()=>{waiting=false;if(mounted&&seq===requestSeq.current)setBusy(false);});
     };
     refreshRef.current=refresh;refresh();
     const timer=auto?window.setInterval(refresh,20000):undefined;

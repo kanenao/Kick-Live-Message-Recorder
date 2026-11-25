@@ -7,7 +7,7 @@ const str=(x:unknown,max=500):string=>typeof x==="string"?x.trim().slice(0,max):
 function image(x:unknown):string|null{
   try{const u=new URL(str(x,2000));return u.protocol==="https:" && !u.username && !u.password && !u.port && (u.hostname==="kick.com"||u.hostname.endsWith(".kick.com"))?u.href:null;}catch{return null;}
 }
-export function parseRankingPage(payload:unknown):{entries:RawEntry[];cursor:string|null;excluded:number}{
+export function parseRankingPage(payload:unknown):{entries:RawEntry[];cursor:string|null;excluded:number;cursorKnown:boolean}{
   const p=rec(payload);
   if(!Array.isArray(p.data))throw Error("Kickランキングの応答形式が不正です。");
   const entries:RawEntry[]=[];let excluded=0;
@@ -20,7 +20,7 @@ export function parseRankingPage(payload:unknown):{entries:RawEntry[];cursor:str
   }
   const rawCursor=rec(p.pagination).next_cursor;
   if(rawCursor!==undefined&&rawCursor!==null&&(typeof rawCursor!=="string"||rawCursor.length>2048))throw Error("ランキングのページ情報が不正です。");
-  return {entries,cursor:typeof rawCursor==="string"&&rawCursor?rawCursor:null,excluded};
+  return {entries,cursor:typeof rawCursor==="string"&&rawCursor?rawCursor:null,excluded,cursorKnown:rawCursor!==undefined};
 }
 export function rankEntries(rows:RawEntry[],previous?:RankingSnapshot):RankingEntry[]{
   const unique=new Map<string,RawEntry>();
@@ -41,7 +41,7 @@ export async function collectRanking(scope:RankingScope,fetchPage:(url:URL)=>Pro
     if(scope==="ja")excluded+=page.entries.filter(row=>!row.language).length;
     entries.push(...page.entries.filter(row=>scope==="all"||/^ja(?:-|$)/i.test(row.language)));
     cursor=page.cursor;
-    if(!cursor){complete=true;break;}
+    if(!cursor){complete=page.cursorKnown;break;}
     if(seen.has(cursor))break;seen.add(cursor);
   }while(pages<maxPages);
   const ranked=rankEntries(entries,previous?.scope===scope?previous:undefined);
@@ -54,6 +54,6 @@ export function registeredRank(snapshot:RankingSnapshot|null,slug:string,started
   if(!snapshot||now-Date.parse(snapshot.fetchedAt)>90000)return "更新待ち";
   const row=[...(snapshot.trackedEntries??[]),...snapshot.entries].find(x=>x.slug===slug.toLowerCase());
   if(!row)return snapshot.complete?"対象外・未掲載":"取得範囲外";
-  if(!startedAt||!row.startedAt||Math.abs(Date.parse(startedAt)-Date.parse(row.startedAt))>=1000)return "新しい配信を確認中";
+  if(!startedAt||!row.startedAt||!Number.isFinite(Date.parse(startedAt))||Math.floor(Date.parse(startedAt)/1000)!==Math.floor(Date.parse(row.startedAt)/1000))return "新しい配信を確認中";
   return (snapshot.complete?"":"暫定 ")+row.rank.toLocaleString("ja-JP")+"位";
 }

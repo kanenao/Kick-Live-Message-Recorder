@@ -178,7 +178,8 @@ export class KickChatReceiver {
     private readonly getOutputDirectory: () => string,
     private readonly shouldSaveMessages: () => boolean,
     private readonly onMessage: (message: KickChatMessage) => void,
-    private readonly onStatus: (status: ChatReceiverStatus) => void
+    private readonly onStatus: (status: ChatReceiverStatus) => void,
+    private readonly allowPartial = false
   ) {}
 
   getStatus(): ChatReceiverStatus {
@@ -303,13 +304,15 @@ export class KickChatReceiver {
           return await resolveChatroom(slug);
         } catch (error) {
           const detail = error instanceof Error ? error.message : String(error);
+          if(this.allowPartial)return null;
           throw new Error(slug + "： " + detail);
         }
       }));
-      resolved.push(...results);
+      resolved.push(...results.filter((item):item is ResolvedChannel=>item!==null));
     }
 
     if (generation !== this.operationGeneration || this.stopping) return;
+    if(!resolved.length)throw new Error("受信可能なチャットルームがありません。");
     const clientId = randomUUID();
     const [connectionUrl, token] = await Promise.all([
       createRealtimeConnection(clientId),
@@ -341,7 +344,8 @@ export class KickChatReceiver {
       let settled = false;
       let subscribed = false;
       let nextCommandId = 2;
-      const pending = new Set<number>();
+      const pending = new Map<number,string>();
+      const accepted=new Set<string>();
       const commandTimeout = setTimeout(() => {
         if (settled) return;
         settled = true;
@@ -400,7 +404,7 @@ export class KickChatReceiver {
               subscribed = true;
               for (const feed of feedMap.keys()) {
                 const id = nextCommandId++;
-                pending.add(id);
+                pending.set(id,feed);
                 socket.send(JSON.stringify({ id, subscribe: { channel: feed } }));
               }
             }
@@ -408,23 +412,25 @@ export class KickChatReceiver {
           }
 
           if (commandId !== null && pending.has(commandId)) {
-            if (message.error) {
+            if (message.error && !this.allowPartial) {
               const detail = asRecord(message.error);
               fail(new Error("Kickのチャット購読に失敗しました：" + String(detail.message ?? detail.code ?? "不明なエラー")));
               return;
             }
-            if (message.subscribe) {
-              pending.delete(commandId);
+            if (message.subscribe || (this.allowPartial&&message.error)) {
+              const feed=pending.get(commandId)!;pending.delete(commandId);
+              if(message.subscribe&&!message.error){const slug=feedMap.get(feed);if(slug)accepted.add(slug);}
               if (pending.size === 0 && !settled) {
+                if(!accepted.size){fail(new Error("受信可能なチャット購読がありません。"));socket.terminate();return;}
                 settled = true;
                 clearTimeout(commandTimeout);
                 if (generation !== this.operationGeneration || this.stopping) {
                   socket.close(1000, "Superseded connection");
                   return;
                 }
-                this.connectedSlugs = [...new Set(feedMap.values())];
+                this.connectedSlugs = [...accepted];
                 this.reconnectAttempt = 0;
-                this.publishStatus("コメント受信中（" + this.connectedSlugs.length + "チャンネル）。");
+                this.publishStatus("コメント受信中（" + this.connectedSlugs.length + "/" + this.desiredSlugs.length + "チャンネル）。");
                 this.tokenRefreshTimer = setTimeout(() => {
                   if (this.socket !== socket || this.stopping) return;
                   this.publishStatus("接続トークンを更新するため再接続しています。");

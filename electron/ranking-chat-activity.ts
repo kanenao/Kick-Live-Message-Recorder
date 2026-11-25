@@ -2,6 +2,7 @@
 export class RankingChatActivity {
   private readonly channels=new Map<string,Map<number,number>>();
   private readonly events=new Map<string,number>();
+  private lastPruneMinute:number|null=null;
   constructor(private readonly maxChannels=400){}
   add(slug:string,now=Date.now(),eventId?:string):void{
     if(!/^[a-z0-9_-]{1,40}$/.test(slug)||!Number.isFinite(now))return;
@@ -21,6 +22,7 @@ export class RankingChatActivity {
     return [...new Set([...online,...wanted,...counts.keys()])].map(slug=>({slug,messages:counts.get(slug)??0,state:online.has(slug)?"connected" as const:wanted.has(slug)?"connecting" as const:"recent" as const}));
   }
   private prune(minute:number):void{
+    if(this.lastPruneMinute===minute)return;this.lastPruneMinute=minute;
     for(const [id,at] of this.events)if(at<minute-4||at>minute)this.events.delete(id);
     for(const [slug,buckets] of this.channels){for(const key of buckets.keys())if(key<minute-4||key>minute)buckets.delete(key);if(!buckets.size)this.channels.delete(slug);}
   }

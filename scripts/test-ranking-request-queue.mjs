@@ -1,0 +1,10 @@
+import assert from "node:assert/strict";
+import {RankingRequestQueue} from "../electron/ranking-request-queue.ts";
+let now=0,release;const calls=[];
+const q=new RankingRequestQueue(15,()=>now,async ms=>{now+=ms;});
+const a=q.request("ja",async()=>{calls.push(["ja",now]);return new Promise(r=>release=r);});
+const b=q.request("all",async()=>{calls.push(["all",now]);return 2;});
+assert.equal(q.request("ja",async()=>99),a);
+await Promise.resolve();release(1);assert.equal(await a,1);assert.equal(await b,2);assert.deepEqual(calls,[["ja",0],["all",15]]);
+await assert.rejects(q.request("ja",async()=>{throw Error("test");}));assert.equal(await q.request("all",async()=>3),3);
+console.log("ランキング取得：直列化・同範囲共有・間隔制限・失敗後の継続");
