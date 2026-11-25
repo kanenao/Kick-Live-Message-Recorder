@@ -373,7 +373,8 @@ const rankingInflight = new RankingRequestQueue<RankingScope,RankingSnapshot>();
 async function getKickRanking(scope:RankingScope):Promise<RankingSnapshot>{
   if(!getKickCredentialsStatus().configured)throw Error("設定画面でKick APIのClient IDとClient Secretを登録してください。");
   const old=rankingCache.get(scope);
-  if(old&&Date.now()-Date.parse(old.fetchedAt)<20000)return old;
+  // Keep short request coalescing without skipping the next 10-second foreground tick.
+  if(old&&Date.now()-Date.parse(old.fetchedAt)<5000)return old;
   return rankingInflight.request(scope,async()=>{
     if(isQuitting||!getKickCredentialsStatus().configured)throw Error("ランキング取得を停止しました。");
     if(Date.now()<kickChannelRateLimitUntil)throw Error("Kick APIのアクセス制限中です。時間をおいてください。");
