@@ -28,6 +28,7 @@ export type RecordingOptions = {
   displayName?: string;
   filenameStartedAt?: string;
   chaseFromEarliest?: boolean;
+  recoverVodAfterLive?: boolean;
 };
 
 type ActiveRecording = {
@@ -47,6 +48,7 @@ type ActiveRecording = {
   sourceUrl: string;
   isVod: boolean;
   chaseFromEarliest: boolean;
+  recoverVodAfterLive: boolean;
   streamStartedAt: string | null;
   watchdogTimer: NodeJS.Timeout | null;
   terminationTimer: NodeJS.Timeout | null;
@@ -200,7 +202,8 @@ export class KickRecordingManager {
   constructor(
     private readonly onEvent: (event: RecordingEvent) => void,
     private readonly probeLive: (slug: string) => Promise<LiveProbeResult> = async () => null,
-    private readonly spawnProcess: typeof spawn = spawn
+    private readonly spawnProcess: typeof spawn = spawn,
+    private readonly onChaseComplete?: (request: {slug:string;startedAt:string|null;outputDirectory:string}) => void
   ) {}
 
   private sessionKey(slug: string, isVod: boolean): string {
@@ -290,6 +293,7 @@ export class KickRecordingManager {
       sourceUrl,
       isVod,
       chaseFromEarliest,
+      recoverVodAfterLive: chaseFromEarliest && options.recoverVodAfterLive === true,
       streamStartedAt: typeof options.streamStartedAt === "string" ? options.streamStartedAt : null,
       watchdogTimer: null,
       terminationTimer: null,
@@ -531,6 +535,7 @@ export class KickRecordingManager {
       persistRecordingSession(session, slug, "completed", savedFiles);
       this.onEvent({ slug, status: "stopped", filePath: savedPath, isVod: false,
         message: decision.message });
+      if (session.recoverVodAfterLive) this.onChaseComplete?.({slug,startedAt:session.streamStartedAt,outputDirectory:session.outputDirectory});
       return;
     }
 

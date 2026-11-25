@@ -269,7 +269,9 @@ declare global {
       checkForUpdates: () => Promise<KickRecorderUpdateStatus>;
       installUpdate: () => Promise<{ ok: boolean }>;
       onUpdateStatus: (callback: (status: KickRecorderUpdateStatus) => void) => () => void;
-      startRecording: (slug: string, sourceUrl?: string, chaseFromEarliest?: boolean) => Promise<{ ok: true; outputDirectory: string }>;
+      listChaseVodRecovery: () => Promise<Array<{id:string;slug:string;startedAt:string|null;state:string;attempt:number;message:string}>>;
+      cancelChaseVodRecovery: (id:string) => Promise<{ok:boolean}>;
+      startRecording: (slug: string, sourceUrl?: string, chaseFromEarliest?: boolean, recoverVodAfterLive?: boolean) => Promise<{ ok: true; outputDirectory: string }>;
       stopRecording: (slug: string, isVod?: boolean) => Promise<{ ok: true }>;
       enqueueVodDownloads: (urls: string[]) => Promise<KickRecorderVodDownloadJob[]>;
       listVodDownloads: () => Promise<KickRecorderVodDownloadJob[]>;

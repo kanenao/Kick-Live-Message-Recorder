@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createVodChatAssHeader, VodChatAssComposer } from "./vod-chat-ass";
 import { broadcastFileStem } from "./recording-filenames";
+import { findMatchingChaseVod, sameBroadcastStart } from "./chase-vod-recovery";
 
 const execFileAsync = promisify(execFile);
 type JsonRecord = Record<string, unknown>;
@@ -125,7 +126,7 @@ function parseVodUrl(value: unknown): VodIdentity {
 async function requestJson(
   url: string,
   signal: AbortSignal
-): Promise<{ status: number; payload: JsonRecord }> {
+): Promise<{ status: number; payload: JsonRecord; rawPayload: unknown }> {
   const args = [
     "--silent",
     "--show-error",
@@ -169,9 +170,11 @@ async function requestJson(
     throw new Error("Kickが自動アクセスを制限したか、Cloudflareの確認画面を返しました。時間をおいて再試行してください。");
   }
   let payload: JsonRecord = {};
+  let rawPayload: unknown = null;
   if (responseText) {
     try {
-      payload = asRecord(JSON.parse(responseText) as unknown);
+      rawPayload = JSON.parse(responseText) as unknown;
+      payload = asRecord(rawPayload);
     } catch {
       if (status >= 200 && status < 300) {
         throw new Error("KickからJSON形式ではない応答が返されました。");
@@ -185,7 +188,7 @@ async function requestJson(
     if (status === 404) throw new KickHttpError(status, "指定したVODまたはチャンネルが見つかりません（HTTP 404）。");
     throw new KickHttpError(status, detail ? "Kick APIエラー（HTTP " + status + "）：" + detail : "Kick APIエラー（HTTP " + status + "）。");
   }
-  return { status, payload };
+  return { status, payload, rawPayload };
 }
 
 async function requestJsonWithRetry(url: string, signal: AbortSignal): Promise<JsonRecord> {
@@ -298,6 +301,17 @@ export async function getVodBroadcastDetails(url: string, signal: AbortSignal = 
   const identity = parseVodUrl(url);
   const metadata = await fetchVodMetadata(identity, signal);
   return { startedAt: metadata.startAt.toISOString(), displayName: metadata.displayName };
+}
+
+/** Public web list is only a candidate source; verify the selected VOD metadata. */
+export async function findChaseRecoveryVod(slug:string, startedAt:string|null, signal:AbortSignal):Promise<string|null> {
+  if(!startedAt || !/^[a-z0-9_-]{1,40}$/.test(slug)) return null;
+  const bounded=AbortSignal.any([signal,AbortSignal.timeout(20000)]);
+  const result=await requestJson("https://kick.com/api/v2/channels/"+encodeURIComponent(slug)+"/videos",bounded);
+  const url=findMatchingChaseVod(result.rawPayload,slug,startedAt);
+  if(!url) return null;
+  const metadata=await getVodBroadcastDetails(url,bounded);
+  return sameBroadcastStart(metadata.startedAt,startedAt) ? url : null;
 }
 
 function formatOffset(seconds: number): string {

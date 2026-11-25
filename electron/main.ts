@@ -20,7 +20,8 @@ import { autoUpdater } from "electron-updater";
 import { fetchEditionReleases, type KickEdition } from "./edition-releases";
 import { registerBetaHistory } from "./beta-history";
 import { KickChatReceiver } from "./chat";
-import { KickVodChatDownloader, getVodBroadcastDetails } from "./vod-chat";
+import { KickVodChatDownloader, getVodBroadcastDetails, findChaseRecoveryVod } from "./vod-chat";
+import { ChaseVodRecovery } from "./chase-vod-recovery";
 import { regenerateSavedVodAss } from "./vod-ass-reexport";
 import { KickVodDownloadManager } from "./vod-download-queue";
 import { listLibrarySessions } from "./library-sessions";
@@ -728,7 +729,7 @@ const recordingManager = new KickRecordingManager(event => {
   if (!event.isVod && event.filePath && event.status === "stopped" && existsSync(event.filePath)) {
     liveArticleManager.attachRecording(event.slug, event.filePath);
   }
-}, resolveCurrentKickLive);
+}, resolveCurrentKickLive, undefined, request => chaseVodRecovery.schedule(request));
 
 const commentVideoGenerator = new KickCommentVideoGenerator(event => {
   mainWindow?.webContents.send("comment-video:status", event);
@@ -751,6 +752,15 @@ const vodChatDownloader = new KickVodChatDownloader(event => {
 const vodDownloadManager = new KickVodDownloadManager(job => {
   mainWindow?.webContents.send("vod-download:status", job);
 }, undefined, getVodBroadcastDetails);
+
+const chaseVodRecovery = new ChaseVodRecovery(
+  (request,signal)=>findChaseRecoveryVod(request.slug,request.startedAt,signal),
+  (url,request)=>{
+    const existing=vodDownloadManager.list().find(job=>job.url===url &&
+      (job.status==="queued" || job.status==="downloading" || (job.status==="completed" && job.filePath && existsSync(job.filePath))));
+    if(!existing) vodDownloadManager.enqueue([url],request.outputDirectory);
+  }
+);
 
 type ArticleLiveMetadata = {
   slug: string;
@@ -1678,10 +1688,15 @@ function registerIpcHandlers(): void {
     return vodDownloadManager.cancel(id);
   });
 
-  ipcMain.handle("recording:start", async (event, slug: unknown, sourceUrl?: unknown, chaseFromEarliest?: unknown) => {
+  ipcMain.handle("chase-vod:list", event => { assertTrustedSender(event); return chaseVodRecovery.list(); });
+  ipcMain.handle("chase-vod:cancel", (event,id:unknown) => { assertTrustedSender(event); chaseVodRecovery.cancel(id); return {ok:true}; });
+
+  ipcMain.handle("recording:start", async (event, slug: unknown, sourceUrl?: unknown, chaseFromEarliest?: unknown, recoverVodAfterLive?: unknown) => {
     assertTrustedSender(event);
     if (chaseFromEarliest !== undefined && typeof chaseFromEarliest !== "boolean") throw new Error("録画モードが不正です。");
     if (sourceUrl !== undefined && chaseFromEarliest === true) throw new Error("追っかけ録画はLIVE専用です。");
+    if (recoverVodAfterLive !== undefined && typeof recoverVodAfterLive !== "boolean") throw new Error("VOD補完設定が不正です。");
+    if (recoverVodAfterLive === true && (sourceUrl !== undefined || chaseFromEarliest !== true)) throw new Error("自動VOD補完は追っかけ録画専用です。");
     const settings = readState().settings;
     const requestedSlug = typeof slug === "string" ? slug.toLowerCase() : "";
     const monitored = backgroundMonitorStatus.results.find(item => item.slug === requestedSlug);
@@ -1720,7 +1735,8 @@ function registerIpcHandlers(): void {
       streamStartedAt: startedAt,
       filenameStartedAt: filenameStartedAt ?? undefined,
       displayName,
-      chaseFromEarliest: chaseFromEarliest === true
+      chaseFromEarliest: chaseFromEarliest === true,
+      recoverVodAfterLive: recoverVodAfterLive === true
     }, sourceUrl);
     if (sourceUrl === undefined && typeof slug === "string") {
       manuallyStoppedLiveBroadcasts.delete(requestedSlug);
@@ -2196,6 +2212,7 @@ app.on("before-quit", () => {
   updateSleepBlocker(false);
   tray?.destroy();
   tray = null;
+  chaseVodRecovery.stopAll();
   recordingManager.stopAll();
   for (const capture of liveArticleFrameCaptures.values()) capture.stop();
   liveArticleFrameCaptures.clear();
