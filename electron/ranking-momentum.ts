@@ -1,11 +1,11 @@
 import type {RankingEntry} from "./kick-ranking";
-export type MomentumChat={slug:string;messages:number;state:string};
+export type MomentumChat={slug:string;messages:number;state:string;observedSeconds?:number;ratePerMinute?:number|null};
 export type MomentumScore={slug:string;score:number;complete:boolean;growthKnown:boolean;chatKnown:boolean;rank:number|null};
 /** Scope-wide log normalization, not dependent on search, category, page, or sort.
  * Missing observations are not interpreted as zero. Partial scores are explicitly
  * labelled and never ranked against three-metric scores. */
 export function momentumScores(rows:readonly RankingEntry[],chat:readonly MomentumChat[]):MomentumScore[]{
-  const observed=new Map(chat.filter(c=>c.state==="connected"&&Number.isFinite(c.messages)&&c.messages>=0).map(c=>[c.slug,c.messages]));
+  const observed=new Map(chat.filter(c=>c.state==="connected"&&(c.observedSeconds??0)>=60&&typeof c.ratePerMinute==="number"&&Number.isFinite(c.ratePerMinute)&&c.ratePerMinute>=0).map(c=>[c.slug,c.ratePerMinute!]));
   const positive=(n:number)=>Number.isFinite(n)?Math.max(0,n):0;
   const maxView=Math.max(0,...rows.map(r=>positive(r.viewers)));
   const maxGrowth=Math.max(0,...rows.map(r=>positive(r.viewerChange??0)));

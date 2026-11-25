@@ -1,0 +1,10 @@
+import assert from "node:assert/strict";
+import {RankingChatActivity} from "../electron/ranking-chat-activity.ts";
+const a=new RankingChatActivity(),now=600000,start=new Date(0).toISOString();
+a.add("room",now-70000,"old");a.add("room",now-55000,"a");a.add("room",now-30000,"b");a.add("room",now-30000,"b");
+assert.deepEqual(a.measured("room",now-60000,start,now),{observedSeconds:60,ratePerMinute:2});
+assert.deepEqual(a.measured("room",now-30000,start,now),{observedSeconds:30,ratePerMinute:null});
+assert.equal(a.measured("room",now-60000,new Date(now-20000).toISOString(),now).ratePerMinute,null);
+assert.equal(a.measured("quiet",now-60000,start,now).ratePerMinute,0);
+assert.equal(a.measured("room",null,start,now).ratePerMinute,null);
+console.log("コメント勢い：連続観測、毎分件数、番組時刻、未観測と0件の区別");

@@ -160,6 +160,7 @@ export class KickChatReceiver {
   private socket: WebSocket | null = null;
   private desiredSlugs: string[] = [];
   private connectedSlugs: string[] = [];
+  private connectedAt=0;
   private channelByFeed = new Map<string, string>();
   private reconnectTimer: NodeJS.Timeout | null = null;
   private tokenRefreshTimer: NodeJS.Timeout | null = null;
@@ -193,6 +194,7 @@ export class KickChatReceiver {
   }
 
   getConnectedSlugs(): string[] {return this.socket?.readyState===WebSocket.OPEN?[...this.connectedSlugs]:[];}
+  getConnectedSince(slug:string):number|null{return this.getConnectedSlugs().includes(slug)&&this.connectedAt>0?this.connectedAt:null;}
 
   getDesiredSlugs(): string[] {
     return [...this.desiredSlugs];
@@ -431,6 +433,7 @@ export class KickChatReceiver {
                   return;
                 }
                 this.connectedSlugs = [...accepted];
+                this.connectedAt=Date.now();
                 this.reconnectAttempt = 0;
                 this.publishStatus("コメント受信中（" + this.connectedSlugs.length + "/" + this.desiredSlugs.length + "チャンネル）。");
                 this.tokenRefreshTimer = setTimeout(() => {

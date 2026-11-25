@@ -809,6 +809,11 @@ function stopRankingChat():void{
   if(rankingChatLeaseTimer)clearTimeout(rankingChatLeaseTimer);rankingChatLeaseTimer=null;
   void rankingChatReceiver.stop().catch(()=>undefined);
 }
+function rankingChatMeasurement(snapshot:RankingSnapshot|null,slug:string){
+  const row=[...(snapshot?.entries??[]),...(snapshot?.trackedEntries??[])].find(r=>r.slug===slug);
+  const since=[chatReceiver.getConnectedSince(slug),rankingChatReceiver.getConnectedSince(slug)].filter((n):n is number=>n!==null);
+  return rankingChatActivity.measured(slug,since.length?Math.min(...since):null,row?.startedAt??null);
+}
 function renewRankingChat(scope:RankingScope,selected:string|null):void{
   rankingChatLeaseUntil=Date.now()+35000;
   if(rankingChatLeaseTimer)clearTimeout(rankingChatLeaseTimer);
@@ -816,14 +821,16 @@ function renewRankingChat(scope:RankingScope,selected:string|null):void{
   const snapshot=rankingCache.get(scope);
   if(!snapshot||Date.now()-Date.parse(snapshot.fetchedAt)>90000){rankingChatWanted=[];if(rankingChatReceiver.getDesiredSlugs().length)void rankingChatReceiver.stop().catch(()=>undefined);return;}
   const currentConnected=[...chatReceiver.getConnectedSlugs(),...rankingChatReceiver.getConnectedSlugs()];
-  const observed=rankingChatActivity.observed(currentConnected,[]);
+  const observed=rankingChatActivity.observed(currentConnected,[]).map(row=>({...row,...rankingChatMeasurement(snapshot,row.slug)}));
   const slugs=rankingChatTargets(snapshot,selected,chatReceiver.getConnectedSlugs(),undefined,observed);
   rankingChatWanted=slugs;
   const signature=slugs.join("|");
   const matching=signature===rankingChatSignature&&rankingChatReceiver.getDesiredSlugs().join("|")===signature;
   if(matching&&(!rankingChatReceiver.getStatus().running||rankingChatReceiver.getConnectedSlugs().length===slugs.length||Date.now()-rankingChatLastStart<120000))return;
   if(!slugs.length){rankingChatSignature="";if(rankingChatReceiver.getDesiredSlugs().length)void rankingChatReceiver.stop().catch(()=>undefined);return;}
-  if(rankingChatStarting||Date.now()-rankingChatLastStart<60000)return;
+  const topMissing=snapshot.entries.slice(0,10).some(row=>slugs.includes(row.slug)&&!rankingChatReceiver.getDesiredSlugs().includes(row.slug));
+  const retryMissing=matching&&rankingChatReceiver.getConnectedSlugs().length<slugs.length;
+  if(rankingChatStarting||Date.now()-rankingChatLastStart<(topMissing||retryMissing?60000:180000))return;
   rankingChatLastStart=Date.now();rankingChatSignature=signature;rankingChatStarting=true;
   void rankingChatReceiver.start(slugs).catch(()=>{if(rankingChatSignature===signature)rankingChatSignature="";}).finally(()=>{rankingChatStarting=false;});
 }
@@ -1722,7 +1729,7 @@ function registerIpcHandlers(): void {
     const rows=rankingChatActivity.observed(connected,[...normal,...rankingChatWanted,...desired]);
     const online=new Set(connected),normalWanted=new Set(normal),rankWanted=new Set(rankingChatWanted),rankDesired=new Set(desired);
     const status=rankingChatReceiver.getStatus();
-    return {rows:rows.map(row=>({...row,state:online.has(row.slug)?"connected":normalWanted.has(row.slug)?row.state:rankWanted.has(row.slug)?(rankingChatStarting||(!rankDesired.has(row.slug)&&Date.now()-rankingChatLastStart<60000&&status.running)?"connecting":rankDesired.has(row.slug)&&!status.running?"connecting":"unavailable"):row.messages>0?"recent":"unavailable"})),message:status.message,targets:rankingChatWanted.length,connected:rankingChatWanted.filter(s=>online.has(s)).length};
+    return {rows:rows.map(row=>({...row,...rankingChatMeasurement(rankingCache.get(scope)??null,row.slug),state:online.has(row.slug)?"connected":normalWanted.has(row.slug)?row.state:rankWanted.has(row.slug)?(rankingChatStarting||(!rankDesired.has(row.slug)&&Date.now()-rankingChatLastStart<60000&&status.running)?"connecting":rankDesired.has(row.slug)&&!status.running?"connecting":"unavailable"):row.messages>0?"recent":"unavailable"})),message:status.message,targets:rankingChatWanted.length,connected:rankingChatWanted.filter(s=>online.has(s)).length};
   });
   ipcMain.handle("kick:ranking-history",(event,scope:unknown,hours:unknown,slug:unknown)=>{
     assertTrustedSender(event);

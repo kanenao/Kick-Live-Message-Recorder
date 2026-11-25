@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {momentumScores,refreshedRankingThumbnail} from "../electron/ranking-momentum.ts";
 const rows=[{slug:"a",rank:1,viewers:100,viewerChange:10},{slug:"b",rank:2,viewers:90,viewerChange:100},{slug:"c",rank:3,viewers:80,viewerChange:null},{slug:"d",rank:4,viewers:50,viewerChange:-10}];
-const chat=[{slug:"a",messages:0,state:"connected"},{slug:"b",messages:100,state:"connected"},{slug:"c",messages:99,state:"recent"}];
+const chat=[{slug:"a",messages:0,state:"connected",observedSeconds:60,ratePerMinute:0},{slug:"b",messages:100,state:"connected",observedSeconds:120,ratePerMinute:50},{slug:"c",messages:99,state:"recent",observedSeconds:60,ratePerMinute:99}];
 const scores=momentumScores(rows,chat);
 assert.equal(scores[0].slug,"b");assert.equal(scores[0].rank,1);
 assert.equal(scores[1].slug,"a");assert.equal(scores[1].chatKnown,true);
