@@ -1,0 +1,14 @@
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+const app=readFileSync(new URL("../src/ui/App.tsx",import.meta.url),"utf8");
+const rank=readFileSync(new URL("../src/ui/KickRanking.tsx",import.meta.url),"utf8");
+assert.ok(!app.includes("setChaseRecording"));
+assert.ok(rank.includes("record(slug,false,false)"));
+assert.ok(rank.includes("record(slug,false,true)"));
+assert.ok(rank.includes("record(slug,true)"));
+assert.ok(app.includes("toggleRecording(channel.name,false,true)"));
+assert.ok(app.includes("toggleRecording(c.name,false,true)"));
+assert.ok(app.includes("toggleRecordingWithChat(channel.name,false,true)"));
+assert.ok(app.includes("chaseRecording && chaseRecoverVod && chaseRecoverChat"));
+assert.ok(app.includes("manualRecordingLocks.current.has(key)"));
+console.log("追っかけ録画：独立ボタンと補完オプション・重複操作ガードのソース検証成功");

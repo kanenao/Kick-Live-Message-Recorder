@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from "react";
 import type {RankingScope,RankingSnapshot} from "../../electron/kick-ranking";
 import type {RankingHistory} from "../../electron/kick-ranking-history";
 import type {RankingBackgroundStatus} from "../../electron/ranking-background";
-export function KickRanking({configured,desktop,onSettings,registered,canRegister,onRegister,chaseRecording,recoverVod,recoverChat}:{configured:boolean;desktop:boolean;onSettings:()=>void;registered:string[];canRegister:boolean;onRegister:(slug:string)=>boolean;chaseRecording:boolean;recoverVod:boolean;recoverChat:boolean}){
+export function KickRanking({configured,desktop,onSettings,registered,canRegister,onRegister,recoverVod,recoverChat}:{configured:boolean;desktop:boolean;onSettings:()=>void;registered:string[];canRegister:boolean;onRegister:(slug:string)=>boolean;recoverVod:boolean;recoverChat:boolean}){
   const [scope,setScope]=useState<RankingScope>("ja");
   const [snapshots,setSnapshots]=useState<Partial<Record<RankingScope,RankingSnapshot>>>({});
   const [search,setSearch]=useState("");
@@ -74,7 +74,7 @@ export function KickRanking({configured,desktop,onSettings,registered,canRegiste
     const timer=window.setInterval(reload,5000);
     return()=>{mounted=false;window.clearInterval(timer);unsubscribe();};
   },[desktop]);
-  async function record(slug:string,stop:boolean){
+  async function record(slug:string,stop:boolean,chaseRecording=false){
     const api=window.kickRecorder;if(!api||locks.current.has(slug))return;
     locks.current.add(slug);setPending([...locks.current]);setMessage("");
     try{
@@ -113,7 +113,7 @@ export function KickRanking({configured,desktop,onSettings,registered,canRegiste
   const stale=!snapshot||now-Date.parse(snapshot.fetchedAt)>180000;
   useEffect(()=>{setPage(0);},[search,category,sort]);
   const elapsed=(date:string|null)=>{if(!date)return "不明";const m=Math.max(0,Math.floor((now-Date.parse(date))/60000));return Math.floor(m/60)+"時間"+(m%60)+"分";};
-  const action=(slug:string)=><button className={active.includes(slug)?"small-action":"primary-small"} disabled={!desktop||pending.includes(slug)||(!active.includes(slug)&&stale)} onClick={()=>void record(slug,active.includes(slug))}>{pending.includes(slug)?"処理中…":active.includes(slug)?"■ 録画停止":chaseRecording?"● 追っかけ録画":"● 録画"}</button>;
+  const action=(slug:string)=>{const recording=active.includes(slug),working=pending.includes(slug),disabled=!desktop||working||(!recording&&stale);return <div className="ranking-record-buttons">{recording?<button className="small-action" disabled={disabled} onClick={()=>void record(slug,true)}>■ 録画停止</button>:<><button className="primary-small" disabled={disabled} onClick={()=>void record(slug,false,false)}>{working?"処理中…":"● 通常録画"}</button><button className="small-action chase-recording-button" disabled={disabled} onClick={()=>void record(slug,false,true)} title="取得可能な最古の映像から録画を試行">↶ 追っかけ録画</button></>}</div>;};
   return <section className="panel kick-ranking">
     <div className="panel-heading"><div><h2>リアルタイム同接ランキング</h2><p>Kick公式APIから独自集計。登録していない配信者も直接録画できます。</p></div><span className="count-pill">{snapshot? snapshot.total.toLocaleString()+" 配信取得":"未取得"}</span></div>
     {!configured&&<div className="notice">ランキングにはKick APIの設定が必要です。<button className="small-action" onClick={onSettings}>設定を開く</button></div>}

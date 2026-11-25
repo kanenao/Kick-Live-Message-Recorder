@@ -249,7 +249,7 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
-  { version: "1.1.1-beta.98", title: "リアルタイム順位・コメント受信の安定化", changes: ["20秒間隔の順位取得、登録配信者の日本語・全世界順位", "コメント0件・接続状態の表示、上位10配信の限定受信", "更新競合・部分購読失敗への対策"] },
+  { version: "1.1.1-beta.98", title: "リアルタイム順位・コメント受信の安定化", changes: ["20秒間隔の順位取得、登録配信者の日本語・全世界順位", "コメント0件・接続状態の表示、上位10配信の限定受信", "更新競合・部分購読失敗への対策", "通常録画・追っかけ録画を独立ボタンに変更"] },
   { version: "1.1.0-beta.97", title: "Kickランキング・追っかけ録画（実験機能）", changes: ["日本語・全世界の同接ランキング、受信コメント勢い、30日間の観測履歴", "ランキングから直接録画、監視登録、任意のVOD・過去コメント補完", "カテゴリ絞り込み、ページ切替、古い取得結果からの録画防止"] },
   { version: "1.0.1-beta.96", title: "β版・製品版の不具合情報／機能要望の受付を改善", changes: ["β版のメニューから不具合情報・機能要望の各GitHubフォームを開けるようにした", "投稿後は対象版・種類タグとAI判定待ちを付けて整理", "製品版向けの報告も同じ受付経路に分離し、録画・記事データは変更しない"] },
   { version: "1.0.1-beta.95", title: "製品版1.0.1に合わせβ版の基本番号を統一", changes: ["製品版1.0.1に合わせ基本番号を1.0.1へ更新、beta.95は連番を維持", "今後は軽微な開発でbeta.Nを進め、段階的な改善はpatch、機能追加はminor、大きな互換性変更はmajorで判断", "β版と製品版の更新先・アプリIDを引き続き分離し、配信AI新聞はβ版専用"] },
@@ -1330,7 +1330,7 @@ export default function App() {
   const [deletingRecordingPath, setDeletingRecordingPath] = useState<string | null>(null);
   const [deletingCommentLogPath, setDeletingCommentLogPath] = useState<string | null>(null);
   const [recordingMessage, setRecordingMessage] = useState("");
-  const [chaseRecording,setChaseRecording] = useState(false);
+  const manualRecordingLocks = useRef(new Set<string>());
   const [chaseRecoverVod,setChaseRecoverVod] = useState(false);
   const [chaseRecoverChat,setChaseRecoverChat] = useState(false);
   const [chaseChatJobs,setChaseChatJobs] = useState<Array<{url:string;slug:string;videoId:string;state:string;message:string}>>([]);
@@ -2191,12 +2191,13 @@ export default function App() {
   }
 
 
-  async function toggleRecording(slug: string, isRecording: boolean) {
+  async function toggleRecording(slug: string, isRecording: boolean, chaseRecording = false) {
     if (!window.kickRecorder) {
       setRecordingMessage("録画はWindowsデスクトップ版で利用できます。");
       return;
     }
-    setRecordingRequests(previous => ({ ...previous, [slug.toLowerCase()]: true }));
+    const key=slug.toLowerCase();if(manualRecordingLocks.current.has(key))return;manualRecordingLocks.current.add(key);
+    setRecordingRequests(previous => ({ ...previous, [key]: true }));
     setRecordingMessage("");
     try {
       if (isRecording) {
@@ -2206,18 +2207,18 @@ export default function App() {
         setRecordingMessage(`${chaseRecording ? "追っかけ録画を試行します（配信開始からの保存は保証されません）。" : "録画要求を送信しました。"} 保存先：${result.outputDirectory}`);
       }
     } catch (error) {
-      setRecordingRequests(previous => ({ ...previous, [slug.toLowerCase()]: false }));
       setRecordingMessage(error instanceof Error ? error.message : "録画操作に失敗しました。");
-    }
+    } finally {manualRecordingLocks.current.delete(key);setRecordingRequests(previous=>({...previous,[key]:false}));}
   }
 
-  async function toggleRecordingWithChat(slug: string, isRecording: boolean) {
+  async function toggleRecordingWithChat(slug: string, isRecording: boolean, chaseRecording = false) {
     if (!window.kickRecorder) {
       setRecordingMessage("録画とコメント取得はWindowsデスクトップ版で利用できます。");
       return;
     }
 
     const key = slug.toLowerCase();
+    if(manualRecordingLocks.current.has(key))return;manualRecordingLocks.current.add(key);
     setRecordingRequests(previous => ({ ...previous, [key]: true }));
     setRecordingMessage("");
     try {
@@ -2231,7 +2232,7 @@ export default function App() {
       setSettings(previous => ({ ...previous, autoReceiveChatForRecordingOnly: true }));
 
       let chatWarning = "";
-      if (settings.autoReceiveChatForRecordingOnly && !chatStatus.running && !isStartingChat) {
+      if (!chatStatus.running && !isStartingChat) {
         const chatTargets = [
           ...(settings.autoReceiveChat ? channels : []),
           ...recordingOnlyChannels
@@ -2260,6 +2261,7 @@ export default function App() {
     } catch (error) {
       setRecordingMessage(error instanceof Error ? error.message : "録画・コメント取得の開始に失敗しました。");
     } finally {
+      manualRecordingLocks.current.delete(key);
       setRecordingRequests(previous => ({ ...previous, [key]: false }));
     }
   }
@@ -2703,8 +2705,8 @@ export default function App() {
 
       {storageError && <div className="storage-error" role="alert">{storageError}</div>}
 
-      {tab === "ranking" && <><div className="notice"><label><input type="checkbox" checked={chaseRecording} onChange={e=>setChaseRecording(e.target.checked)}/> 追っかけ録画（実験機能）</label><div>手動LIVE録画を、サーバーに残っている最古のHLS映像から試行します。配信開始からの取得・過去コメント・コメント同期は保証されません。再接続は通常録画になります。</div><label><input type="checkbox" disabled={!chaseRecording} checked={chaseRecording && chaseRecoverVod} onChange={e=>setChaseRecoverVod(e.target.checked)}/> 放送終了後、同じ公開VODを自動取得（別ファイル・追加の通信量）</label><label><input type="checkbox" disabled={!chaseRecording || !chaseRecoverVod} checked={chaseRecording && chaseRecoverVod && chaseRecoverChat} onChange={e=>setChaseRecoverChat(e.target.checked)}/> 同じVODの過去コメントも自動取得（JSONL・TXT・ASS）</label>{chaseChatJobs.map(job=><div key={job.url}><strong>{job.slug}</strong>：{job.message}{job.state==="waiting" && <button className="small-action" onClick={()=>{void window.kickRecorder?.cancelChaseChatRecovery(job.url).catch(()=>undefined);}}>コメント取得待ちを取消</button>}</div>)}<div>放送終了を確認した場合だけ最大6回検索します。自動補完を有効にして録画を開始してください。元の動画は保持します。</div>{chaseRecoveryJobs.map(job=><div key={job.id}><strong>{job.slug}</strong>：{job.message}（{job.attempt}/6）{["waiting","checking"].includes(job.state) && <button className="small-action" onClick={()=>{void window.kickRecorder?.cancelChaseVodRecovery(job.id).then(()=>window.kickRecorder?.listChaseVodRecovery()).then(jobs=>{if(jobs)setChaseRecoveryJobs(jobs);}).catch(()=>undefined);}}>検索停止</button>}</div>)}</div>
-<KickRanking chaseRecording={chaseRecording} recoverVod={chaseRecoverVod} recoverChat={chaseRecoverChat} configured={kickCredentialsConfigured} desktop={isDesktop} onSettings={()=>setTab("settings")} registered={[...channels,...recordingOnlyChannels].map(c=>c.name.toLowerCase())} canRegister={isReady} onRegister={slug=>{if(!/^[a-z0-9_]{1,25}$/.test(slug)||[...channels,...recordingOnlyChannels].some(c=>c.name.toLowerCase()===slug)||channels.length>=200)return false;setChannels(prev=>prev.some(c=>c.name.toLowerCase()===slug)?prev:[...prev,{id:Date.now(),name:slug,url:"https://kick.com/"+slug,mode:"auto",status:"待機中",recording:false}]);return true;}}/></>}
+      {tab === "ranking" && <><div className="notice"><strong>追っかけ録画の補完設定（実験機能）</strong><div>手動LIVE録画を、サーバーに残っている最古のHLS映像から試行します。配信開始からの取得・過去コメント・コメント同期は保証されません。再接続は通常録画になります。</div><label><input type="checkbox" checked={chaseRecoverVod} onChange={e=>setChaseRecoverVod(e.target.checked)}/> 放送終了後、同じ公開VODを自動取得（別ファイル・追加の通信量）</label><label><input type="checkbox" disabled={!chaseRecoverVod} checked={chaseRecoverVod && chaseRecoverChat} onChange={e=>setChaseRecoverChat(e.target.checked)}/> 同じVODの過去コメントも自動取得（JSONL・TXT・ASS）</label>{chaseChatJobs.map(job=><div key={job.url}><strong>{job.slug}</strong>：{job.message}{job.state==="waiting" && <button className="small-action" onClick={()=>{void window.kickRecorder?.cancelChaseChatRecovery(job.url).catch(()=>undefined);}}>コメント取得待ちを取消</button>}</div>)}<div>放送終了を確認した場合だけ最大6回検索します。自動補完を有効にして録画を開始してください。元の動画は保持します。</div>{chaseRecoveryJobs.map(job=><div key={job.id}><strong>{job.slug}</strong>：{job.message}（{job.attempt}/6）{["waiting","checking"].includes(job.state) && <button className="small-action" onClick={()=>{void window.kickRecorder?.cancelChaseVodRecovery(job.id).then(()=>window.kickRecorder?.listChaseVodRecovery()).then(jobs=>{if(jobs)setChaseRecoveryJobs(jobs);}).catch(()=>undefined);}}>検索停止</button>}</div>)}</div>
+<KickRanking recoverVod={chaseRecoverVod} recoverChat={chaseRecoverChat} configured={kickCredentialsConfigured} desktop={isDesktop} onSettings={()=>setTab("settings")} registered={[...channels,...recordingOnlyChannels].map(c=>c.name.toLowerCase())} canRegister={isReady} onRegister={slug=>{if(!/^[a-z0-9_]{1,25}$/.test(slug)||[...channels,...recordingOnlyChannels].some(c=>c.name.toLowerCase()===slug)||channels.length>=200)return false;setChannels(prev=>prev.some(c=>c.name.toLowerCase()===slug)?prev:[...prev,{id:Date.now(),name:slug,url:"https://kick.com/"+slug,mode:"auto",status:"待機中",recording:false}]);return true;}}/></>}
 
       {tab === "dashboard" && <>
         <section className="stats">
@@ -2719,7 +2721,7 @@ export default function App() {
             <div><h2>LIVE中の配信者</h2><p>配信情報を自動更新し、各カードから手動で録画を開始・停止できます</p></div>
             <span className="live-status live">LIVE · {liveChannelCards.length}件</span>
           </div>
-          <div className="notice"><label><input type="checkbox" checked={chaseRecording} onChange={e=>setChaseRecording(e.target.checked)}/> 追っかけ録画（実験機能）</label><div>手動LIVE録画を、サーバーに残っている最古のHLS映像から試行します。配信開始からの取得・過去コメント・コメント同期は保証されません。再接続は通常録画になります。</div><label><input type="checkbox" disabled={!chaseRecording} checked={chaseRecording && chaseRecoverVod} onChange={e=>setChaseRecoverVod(e.target.checked)}/> 放送終了後、同じ公開VODを自動取得（別ファイル・追加の通信量）</label><label><input type="checkbox" disabled={!chaseRecording || !chaseRecoverVod} checked={chaseRecording && chaseRecoverVod && chaseRecoverChat} onChange={e=>setChaseRecoverChat(e.target.checked)}/> 同じVODの過去コメントも自動取得（JSONL・TXT・ASS）</label>{chaseChatJobs.map(job=><div key={job.url}><strong>{job.slug}</strong>：{job.message}{job.state==="waiting" && <button className="small-action" onClick={()=>{void window.kickRecorder?.cancelChaseChatRecovery(job.url).catch(()=>undefined);}}>コメント取得待ちを取消</button>}</div>)}<div>放送終了を確認した場合だけ最大6回検索します。自動補完を有効にして録画を開始してください。元の動画は保持します。</div>{chaseRecoveryJobs.map(job=><div key={job.id}><strong>{job.slug}</strong>：{job.message}（{job.attempt}/6）{["waiting","checking"].includes(job.state) && <button className="small-action" onClick={()=>{void window.kickRecorder?.cancelChaseVodRecovery(job.id).then(()=>window.kickRecorder?.listChaseVodRecovery()).then(jobs=>{if(jobs)setChaseRecoveryJobs(jobs);}).catch(()=>undefined);}}>検索停止</button>}</div>)}</div>
+          <div className="notice"><strong>追っかけ録画の補完設定（実験機能）</strong><div>手動LIVE録画を、サーバーに残っている最古のHLS映像から試行します。配信開始からの取得・過去コメント・コメント同期は保証されません。再接続は通常録画になります。</div><label><input type="checkbox" checked={chaseRecoverVod} onChange={e=>setChaseRecoverVod(e.target.checked)}/> 放送終了後、同じ公開VODを自動取得（別ファイル・追加の通信量）</label><label><input type="checkbox" disabled={!chaseRecoverVod} checked={chaseRecoverVod && chaseRecoverChat} onChange={e=>setChaseRecoverChat(e.target.checked)}/> 同じVODの過去コメントも自動取得（JSONL・TXT・ASS）</label>{chaseChatJobs.map(job=><div key={job.url}><strong>{job.slug}</strong>：{job.message}{job.state==="waiting" && <button className="small-action" onClick={()=>{void window.kickRecorder?.cancelChaseChatRecovery(job.url).catch(()=>undefined);}}>コメント取得待ちを取消</button>}</div>)}<div>放送終了を確認した場合だけ最大6回検索します。自動補完を有効にして録画を開始してください。元の動画は保持します。</div>{chaseRecoveryJobs.map(job=><div key={job.id}><strong>{job.slug}</strong>：{job.message}（{job.attempt}/6）{["waiting","checking"].includes(job.state) && <button className="small-action" onClick={()=>{void window.kickRecorder?.cancelChaseVodRecovery(job.id).then(()=>window.kickRecorder?.listChaseVodRecovery()).then(jobs=>{if(jobs)setChaseRecoveryJobs(jobs);}).catch(()=>undefined);}}>検索停止</button>}</div>)}</div>
           {!kickCredentialsConfigured
             ? <div className="empty-inline">配信者のLIVE情報を表示するには、設定画面でKick APIのClient IDとClient Secretを登録してください。</div>
             : !settings.autoMonitorEnabled
@@ -2756,8 +2758,9 @@ export default function App() {
                         >
                           {recordingRequests[channel.name.toLowerCase()]
                             ? "処理中..."
-                            : channel.recording ? "録画停止" : "手動で録画開始"}
+                            : channel.recording ? "録画停止" : "通常録画"}
                         </button>
+                        {!channel.recording&&<button className="live-recording-button chase-recording-button" disabled={!isDesktop||Boolean(recordingRequests[channel.name.toLowerCase()])} onClick={()=>void toggleRecording(channel.name,false,true)} title="取得可能な最古の映像から録画を試行">追っかけ録画</button>}
                       </div>
                       <div className="live-stream-footer"><span>https://kick.com/{channel.name}</span><span>{isRecordingOnly ? "録画専用・監視中" : "監視中"}</span></div>
                     </article>)}
@@ -2826,8 +2829,9 @@ export default function App() {
               </span>
               <button className="small-action" onClick={() => setChannels(prev => prev.map(x => x.id === c.id ? {...x, mode: x.mode === "auto" ? "manual" : "auto"} : x))}>方式：{c.mode === "auto" ? "自動" : "手動"}</button>
               <button className="primary-small recording-action" onClick={() => void toggleRecording(c.name, c.recording)} disabled={!isDesktop || Boolean(recordingRequests[c.name.toLowerCase()])}>
-                {recordingRequests[c.name.toLowerCase()] ? "処理中..." : c.recording ? "録画停止" : "録画開始"}
+                {recordingRequests[c.name.toLowerCase()] ? "処理中..." : c.recording ? "録画停止" : "通常録画"}
               </button>
+              {!c.recording&&<button className="small-action chase-recording-button" disabled={!isDesktop||Boolean(recordingRequests[c.name.toLowerCase()])} onClick={()=>void toggleRecording(c.name,false,true)}>追っかけ録画</button>}
               <button className="remove" aria-label={`${c.name}を削除`} onClick={() => setChannels(prev => prev.filter(x => x.id !== c.id))}>×</button>
             </div>)}
           </div>
@@ -2860,7 +2864,7 @@ export default function App() {
           <div><h2>録画専用チャンネル</h2><p>配信監視・自動録画は行わず、必要なときに録画を開始するチャンネルを登録します</p></div>
           <span className="count-pill">登録数：{recordingOnlyChannels.length}件</span>
         </div>
-        <div className="notice"><label><input type="checkbox" checked={chaseRecording} onChange={e=>setChaseRecording(e.target.checked)}/> 追っかけ録画（実験機能）</label><div>手動LIVE録画を、サーバーに残っている最古のHLS映像から試行します。配信開始からの取得・過去コメント・コメント同期は保証されません。再接続は通常録画になります。</div><label><input type="checkbox" disabled={!chaseRecording} checked={chaseRecording && chaseRecoverVod} onChange={e=>setChaseRecoverVod(e.target.checked)}/> 放送終了後、同じ公開VODを自動取得（別ファイル・追加の通信量）</label><label><input type="checkbox" disabled={!chaseRecording || !chaseRecoverVod} checked={chaseRecording && chaseRecoverVod && chaseRecoverChat} onChange={e=>setChaseRecoverChat(e.target.checked)}/> 同じVODの過去コメントも自動取得（JSONL・TXT・ASS）</label>{chaseChatJobs.map(job=><div key={job.url}><strong>{job.slug}</strong>：{job.message}{job.state==="waiting" && <button className="small-action" onClick={()=>{void window.kickRecorder?.cancelChaseChatRecovery(job.url).catch(()=>undefined);}}>コメント取得待ちを取消</button>}</div>)}<div>放送終了を確認した場合だけ最大6回検索します。自動補完を有効にして録画を開始してください。元の動画は保持します。</div>{chaseRecoveryJobs.map(job=><div key={job.id}><strong>{job.slug}</strong>：{job.message}（{job.attempt}/6）{["waiting","checking"].includes(job.state) && <button className="small-action" onClick={()=>{void window.kickRecorder?.cancelChaseVodRecovery(job.id).then(()=>window.kickRecorder?.listChaseVodRecovery()).then(jobs=>{if(jobs)setChaseRecoveryJobs(jobs);}).catch(()=>undefined);}}>検索停止</button>}</div>)}</div>
+        <div className="notice"><strong>追っかけ録画の補完設定（実験機能）</strong><div>手動LIVE録画を、サーバーに残っている最古のHLS映像から試行します。配信開始からの取得・過去コメント・コメント同期は保証されません。再接続は通常録画になります。</div><label><input type="checkbox" checked={chaseRecoverVod} onChange={e=>setChaseRecoverVod(e.target.checked)}/> 放送終了後、同じ公開VODを自動取得（別ファイル・追加の通信量）</label><label><input type="checkbox" disabled={!chaseRecoverVod} checked={chaseRecoverVod && chaseRecoverChat} onChange={e=>setChaseRecoverChat(e.target.checked)}/> 同じVODの過去コメントも自動取得（JSONL・TXT・ASS）</label>{chaseChatJobs.map(job=><div key={job.url}><strong>{job.slug}</strong>：{job.message}{job.state==="waiting" && <button className="small-action" onClick={()=>{void window.kickRecorder?.cancelChaseChatRecovery(job.url).catch(()=>undefined);}}>コメント取得待ちを取消</button>}</div>)}<div>放送終了を確認した場合だけ最大6回検索します。自動補完を有効にして録画を開始してください。元の動画は保持します。</div>{chaseRecoveryJobs.map(job=><div key={job.id}><strong>{job.slug}</strong>：{job.message}（{job.attempt}/6）{["waiting","checking"].includes(job.state) && <button className="small-action" onClick={()=>{void window.kickRecorder?.cancelChaseVodRecovery(job.id).then(()=>window.kickRecorder?.listChaseVodRecovery()).then(jobs=>{if(jobs)setChaseRecoveryJobs(jobs);}).catch(()=>undefined);}}>検索停止</button>}</div>)}</div>
         {activeRecordingChannels.length > 0 && <section className="panel live-preview-panel">
           <div className="panel-heading">
             <div><h2>録画中の映像プレビュー</h2><p>Kick公式プレーヤーで現在録画している配信を表示します</p></div>
@@ -3001,11 +3005,12 @@ export default function App() {
             <button className="primary-small recording-action combined-recording-action" onClick={() => void toggleRecordingWithChat(channel.name, channel.recording)} disabled={!isDesktop || Boolean(recordingRequests[channel.name.toLowerCase()])}>
               {recordingRequests[channel.name.toLowerCase()] ? "処理中..." : channel.recording ? "録画停止" : "録画＋コメント取得"}
             </button>
+            {!channel.recording&&<button className="small-action chase-recording-button" disabled={!isDesktop||Boolean(recordingRequests[channel.name.toLowerCase()])} onClick={()=>void toggleRecordingWithChat(channel.name,false,true)}>追っかけ録画＋コメント取得</button>}
             <button className="remove" aria-label={`${channel.name}を録画専用一覧から削除`} onClick={() => setRecordingOnlyChannels(previous => previous.filter(item => item.id !== channel.id))}>×</button>
           </div>)}
         </div>
         {recordingMessage && <div className="api-message" role="status">{recordingMessage}</div>}
-        <div className="notice">この一覧は手動開始専用です。各チャンネルの「録画＋コメント取得」を押すと映像録画とコメント受信を同時に開始し、コメント自動接続も有効になります。録画停止後もコメント取得は設定に従って継続します。</div>
+        <div className="notice">この一覧は手動開始専用です。「録画＋コメント取得」または「追っかけ録画＋コメント取得」を押すと映像録画とコメント受信を同時に開始し、コメント自動接続も有効になります。録画停止後もコメント取得は設定に従って継続します。</div>
         <div className="chat-preview">
           <div className="chat-preview-heading"><strong>録画専用チャンネルの最近のコメント</strong><span>{recordingOnlyMessages.length}件</span></div>
           {recordingOnlyMessages.length === 0
