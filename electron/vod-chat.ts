@@ -225,7 +225,7 @@ function toDurationSeconds(value: unknown, unit: "milliseconds" | "seconds"): nu
   return seconds;
 }
 
-async function fetchVodMetadata(identity: VodIdentity, signal: AbortSignal): Promise<VodMetadata> {
+async function fetchVodMetadata(identity: VodIdentity, signal: AbortSignal, requireVerifiedPublic = false): Promise<VodMetadata> {
   let legacy: JsonRecord | null = null;
   try {
     legacy = await requestJsonWithRetry(
@@ -247,6 +247,11 @@ async function fetchVodMetadata(identity: VodIdentity, signal: AbortSignal): Pro
     if (returnedSlug && returnedSlug.toLowerCase() !== identity.slug) {
       throw new Error("URLのチャンネル名とVODの配信者が一致しません。");
     }
+    if(requireVerifiedPublic && ((typeof legacy.status==="string" && legacy.status!=="public") || legacy.is_live===true || livestream.is_live===true)) throw new Error("非公開・配信中のVODは自動補完できません。");
+    const verified=returnedId?.toLowerCase()===identity.videoId && returnedSlug?.toLowerCase()===identity.slug && legacy.status==="public" && (legacy.is_live??livestream.is_live)===false;
+    // Older metadata sometimes omits visibility fields. For auto recovery,
+    // fall through to the newer API rather than treating omission as proof.
+    if(!requireVerifiedPublic || verified) {
     const channelId = readPositiveId(channel.id);
     if (!channelId) throw new Error("VODのチャンネルIDを取得できませんでした。");
     return {
@@ -256,6 +261,7 @@ async function fetchVodMetadata(identity: VodIdentity, signal: AbortSignal): Pro
       startAt: parseDate(livestream.start_time),
       durationSeconds: toDurationSeconds(livestream.duration, "milliseconds")
     };
+    }
   }
 
   // Kickの新しいWebサイト用メタデータAPI。旧APIが404の場合だけ使用する。
@@ -310,8 +316,8 @@ export async function findChaseRecoveryVod(slug:string, startedAt:string|null, s
   const result=await requestJson("https://kick.com/api/v2/channels/"+encodeURIComponent(slug)+"/videos",bounded);
   const url=findMatchingChaseVod(result.rawPayload,slug,startedAt);
   if(!url) return null;
-  const metadata=await getVodBroadcastDetails(url,bounded);
-  return sameBroadcastStart(metadata.startedAt,startedAt) ? url : null;
+  const metadata=await fetchVodMetadata(parseVodUrl(url),bounded,true);
+  return sameBroadcastStart(metadata.startAt.toISOString(),startedAt) ? url : null;
 }
 
 function formatOffset(seconds: number): string {

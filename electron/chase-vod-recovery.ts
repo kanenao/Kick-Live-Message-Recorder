@@ -32,7 +32,8 @@ export function findMatchingChaseVod(payload: unknown, slug: string, startedAt: 
 
 export type ChaseRecoveryRequest = {slug:string;startedAt:string|null;outputDirectory:string;recoverVodChat?:boolean};
 export type ChaseRecoveryStatus = {id:string;slug:string;startedAt:string|null;state:"waiting"|"checking"|"queued"|"unavailable"|"cancelled";attempt:number;message:string};
-type Task = {status:ChaseRecoveryStatus;request:ChaseRecoveryRequest;controller:AbortController;timer:ReturnType<typeof setTimeout>|null};
+export type PendingChaseRecovery = {request:ChaseRecoveryRequest;attempt:number;createdAt:number};
+type Task = {status:ChaseRecoveryStatus;request:ChaseRecoveryRequest;createdAt:number;controller:AbortController;timer:ReturnType<typeof setTimeout>|null};
 export class ChaseVodRecovery {
   private readonly tasks=new Map<string,Task>();
   private closed=false;
@@ -41,17 +42,20 @@ export class ChaseVodRecovery {
     private readonly notify:(status:ChaseRecoveryStatus)=>void=()=>{},
     private readonly delayMs=60_000, private readonly maxAttempts=6) {}
   list():ChaseRecoveryStatus[] {return [...this.tasks.values()].map(x=>({...x.status})).reverse();}
-  schedule(request:ChaseRecoveryRequest):void {
+  pending():PendingChaseRecovery[] {return [...this.tasks.values()].filter(x=>["waiting","checking"].includes(x.status.state)).map(x=>({request:{...x.request},attempt:x.status.attempt,createdAt:x.createdAt}));}
+  restore(entries:PendingChaseRecovery[]):void {for(const entry of entries.slice(0,5))this.schedule(entry.request,entry.attempt,entry.createdAt);}
+  schedule(request:ChaseRecoveryRequest,attempt=0,createdAt=Date.now()):void {
     if(this.closed) return;
     const id=request.slug+"|"+(request.startedAt??"unknown");
     if(this.tasks.has(id)) return;
     for(const [key,task] of this.tasks) if(this.tasks.size>=50 && !["waiting","checking"].includes(task.status.state)) this.tasks.delete(key);
     if(this.tasks.size>=50) return;
-    const task:Task={status:{id,slug:request.slug,startedAt:request.startedAt,state:"waiting",attempt:0,message:"VOD公開を待っています。"},request,controller:new AbortController(),timer:null};
+    const task:Task={status:{id,slug:request.slug,startedAt:request.startedAt,state:"waiting",attempt,message:"VOD公開を待っています。"},request,createdAt,controller:new AbortController(),timer:null};
     this.tasks.set(id,task);
     if(!request.startedAt || !Number.isFinite(time(request.startedAt))) {this.set(task,"unavailable","配信開始時刻が不明のため自動補完しません。VOD URLから手動で取得できます。");return;}
     if([...this.tasks.values()].filter(x=>["waiting","checking"].includes(x.status.state)).length>5) {this.set(task,"unavailable","自動補完待ちが上限です。VOD URLから手動で取得してください。");return;}
-    this.set(task,"waiting","VOD公開を待っています（最大6回確認）。");
+    if(attempt>=this.maxAttempts || Date.now()-createdAt>86400000){this.set(task,"unavailable","VOD公開待ちの期限または確認回数を超えました。手動取得をご利用ください。");return;}
+    this.set(task,"waiting",attempt>0?"VOD公開待ちを再開しました。":"VOD公開を待っています（最大6回確認）。");
     this.wait(task);
   }
   cancel(id:unknown):void {
@@ -63,6 +67,8 @@ export class ChaseVodRecovery {
     this.set(task,"cancelled","VODの自動検索を取り消しました。元の録画は保持します。");
   }
   stopAll():void {this.closed=true;for(const id of this.tasks.keys()) this.cancel(id);}
+  /** Shutdown without changing pending states into user cancellations. */
+  suspend():void {this.closed=true;for(const task of this.tasks.values()){if(task.timer)clearTimeout(task.timer);task.timer=null;task.controller.abort();}}
   private set(task:Task,state:ChaseRecoveryStatus["state"],message:string):void {
     task.status={...task.status,state,message};this.notify({...task.status});
   }
@@ -71,12 +77,16 @@ export class ChaseVodRecovery {
   }
   private async check(task:Task):Promise<void> {
     if(this.closed||task.controller.signal.aborted) return;
+    if(Date.now()-task.createdAt>86400000||task.status.attempt>=this.maxAttempts){this.set(task,"unavailable","VOD公開待ちの期限または確認回数を超えました。");return;}
     task.status.attempt++;this.set(task,"checking","同じ配信の公開VODを確認中です。");
     try {
       const url=await this.find(task.request,task.controller.signal);
       if(this.closed||task.controller.signal.aborted) return;
       if(url) {
-        this.enqueue(url,task.request);
+        // Remove from the persistent search journal before dispatch: a crash
+        // during handoff must not silently enqueue a second download on restart.
+        this.set(task,"queued","同じ配信のVODを取得一覧に渡しています。");
+        try{this.enqueue(url,task.request);}catch{this.set(task,"unavailable","VOD取得一覧への登録に失敗しました。録画専用の一覧を確認し、必要なら手動取得してください。");return;}
         this.set(task,"queued","同じ配信のVODを取得一覧に登録しました。録画専用のVOD一覧で結果を確認してください。");
         return;
       }
