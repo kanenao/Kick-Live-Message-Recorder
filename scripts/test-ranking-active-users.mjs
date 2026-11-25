@@ -1,0 +1,18 @@
+import assert from "node:assert/strict";
+import {RankingActiveUsers} from "../electron/ranking-active-users.ts";
+import {RankingChatActivity} from "../electron/ranking-chat-activity.ts";
+const t=600000,start=new Date(0).toISOString(),a=new RankingActiveUsers();
+a.add("room",1,t-10000);a.add("room",1,t-9000);a.add("room",2,t-8000);a.add("other",1,t-1000);
+assert.deepEqual(a.measure("room",t-300000,start,t),{activeUsers:2,activeSeconds:300,activeComplete:true});
+assert.equal(a.measure("room",t-8500,start,t).activeUsers,1);
+assert.equal(a.measure("room",t-1000,start,t).activeComplete,false);
+assert.equal(a.measure("room",null,start,t).activeUsers,null);
+assert.equal(a.measure("room",t-300000,new Date(t-8500).toISOString(),t).activeUsers,1);
+assert.equal(a.measure("room",t-300000,start,t+300000).activeUsers,0);
+const capped=new RankingActiveUsers(1,1);capped.add("room",1,t);capped.add("room",2,t);
+assert.equal(capped.measure("room",t-300000,start,t).activeComplete,false);
+const missing=new RankingActiveUsers();missing.add("room",null,t);
+assert.equal(missing.measure("room",t-300000,start,t).activeComplete,false);
+const activity=new RankingChatActivity();activity.add("room",t,"e",1);activity.add("room",t,"e",2);activity.add("room",t,"f",1);
+assert.equal(activity.active("room",t-300000,start,t).activeUsers,1);
+console.log("アクティブ人数：ユニーク集計、イベント重複、期限、放送・接続範囲、上限、識別不能");

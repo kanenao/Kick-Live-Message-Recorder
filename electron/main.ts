@@ -789,7 +789,7 @@ const chatReceiver = new KickChatReceiver(
   getRecordingOutputDirectory,
   () => readState().settings.saveChat,
   message => {
-    rankingChatActivity.add(message.channelSlug.toLowerCase(),Date.now(),message.eventId);
+    rankingChatActivity.add(message.channelSlug.toLowerCase(),Date.now(),message.eventId,message.senderUserId);
     liveArticleManager.onChatMessage(message);
     mainWindow?.webContents.send("chat:message", message);
   },
@@ -798,7 +798,7 @@ const chatReceiver = new KickChatReceiver(
 
 // Independent, bounded ranking chat observation. Never changes recording chat subscriptions or writes logs.
 const rankingChatReceiver = new KickChatReceiver(getRecordingOutputDirectory,()=>false,message=>{
-  rankingChatActivity.add(message.channelSlug.toLowerCase(),Date.now(),message.eventId);
+  rankingChatActivity.add(message.channelSlug.toLowerCase(),Date.now(),message.eventId,message.senderUserId);
 },()=>{},true);
 let rankingChatLeaseUntil=0,rankingChatLastStart=0,rankingChatSignature="";
 let rankingChatWanted:string[]=[];
@@ -812,7 +812,8 @@ function stopRankingChat():void{
 function rankingChatMeasurement(snapshot:RankingSnapshot|null,slug:string){
   const row=[...(snapshot?.entries??[]),...(snapshot?.trackedEntries??[])].find(r=>r.slug===slug);
   const since=[chatReceiver.getConnectedSince(slug),rankingChatReceiver.getConnectedSince(slug)].filter((n):n is number=>n!==null);
-  return rankingChatActivity.measured(slug,since.length?Math.min(...since):null,row?.startedAt??null);
+  const connectedSince=since.length?Math.min(...since):null, startedAt=row?.startedAt??null, now=Date.now();
+  return {...rankingChatActivity.measured(slug,connectedSince,startedAt,now),...rankingChatActivity.active(slug,connectedSince,startedAt,now)};
 }
 function renewRankingChat(scope:RankingScope,selected:string|null):void{
   rankingChatLeaseUntil=Date.now()+35000;

@@ -1,14 +1,17 @@
+import {RankingActiveUsers} from "./ranking-active-users";
 /** Received message counts only. No extra subscriptions, identities or message bodies. */
 export class RankingChatActivity {
   private readonly channels=new Map<string,Map<number,number>>();
   private readonly events=new Map<string,number>();
+  private readonly activeUsers=new RankingActiveUsers();
   private lastPruneMinute:number|null=null;
   constructor(private readonly maxChannels=400){}
-  add(slug:string,now=Date.now(),eventId?:string):void{
+  add(slug:string,now=Date.now(),eventId?:string,senderUserId?:number|null):void{
     if(!/^[a-z0-9_-]{1,40}$/.test(slug)||!Number.isFinite(now))return;
     const minute=Math.floor(now/5000);
     this.prune(minute);
     if(eventId){const id=slug+"|"+eventId;if(this.events.has(id))return;this.events.set(id,minute);if(this.events.size>30000){const first=this.events.keys().next().value;if(first!==undefined)this.events.delete(first);}}
+    this.activeUsers.add(slug,senderUserId,now);
     let buckets=this.channels.get(slug);
     if(!buckets){if(this.channels.size>=this.maxChannels)return;buckets=new Map();this.channels.set(slug,buckets);}
     buckets.set(minute,(buckets.get(minute)??0)+1);
@@ -30,6 +33,7 @@ export class RankingChatActivity {
     let count=0;for(const [bucket,n] of this.channels.get(slug)??[])if(bucket>=begin&&bucket<end)count+=n;
     return {observedSeconds,ratePerMinute:Math.round(count*600/observedSeconds)/10};
   }
+  active(slug:string,connectedSince:number|null,startedAt:string|null,now=Date.now()){return this.activeUsers.measure(slug,connectedSince,startedAt,now);}
   private prune(minute:number):void{
     if(this.lastPruneMinute===minute)return;this.lastPruneMinute=minute;
     for(const [id,at] of this.events)if(at<minute-60||at>minute)this.events.delete(id);
