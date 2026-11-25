@@ -3,7 +3,7 @@ import {momentumScores,type MomentumChat} from "./ranking-momentum";
 export type RankingMode="viewers"|"growth"|"chat"|"active"|"momentum";
 export type RankFrame={scope:RankingScope;at:string;full:boolean;complete:boolean;starts:Map<string,string|null>;orders:Record<RankingMode,string[]>;ranks:Record<RankingMode,Map<string,number>>};
 const finite=(v:unknown):v is number=>typeof v==="number"&&Number.isFinite(v);
-export function rankingFrame(snapshot:RankingSnapshot,chat:readonly MomentumChat[]):RankFrame{
+export function rankingFrame(snapshot:RankingSnapshot,chat:readonly MomentumChat[]=[]):RankFrame{
  const rows=snapshot.entries,byChat=new Map(chat.map(c=>[c.slug,c]));
  const measures=(mode:RankingMode,row:RankingEntry):number|null=>{
   const c=byChat.get(row.slug);
@@ -41,10 +41,10 @@ export function rankMovement(current:RankFrame,previous:RankFrame|null|undefined
  const rank=current.ranks[mode].get(row.slug),start=second(row.startedAt);
  if(rank===undefined||!Number.isFinite(start))return unknown;
  // Viewer-rank changes are supplied by the backend, including ranks outside the display limit.
- if(mode==="viewers"&&current.complete&&finite(row.rankChange)){
+ if(mode==="viewers"&&current.complete&&finite(row.rankChange)&&Number.isSafeInteger(row.rankChange)&&rank+row.rankChange>0){
   const d=row.rankChange;return {kind:d>0?"up":d<0?"down":"keep",delta:Math.abs(d),previous:rank+d};
  }
- if(!previous||previous.scope!==current.scope||Date.parse(previous.at)>=Date.parse(current.at))return unknown;
+ if(!previous||previous.scope!==current.scope||!Number.isFinite(Date.parse(previous.at))||!Number.isFinite(Date.parse(current.at))||Date.parse(previous.at)>=Date.parse(current.at))return unknown;
  if(mode==="viewers"&&(!current.complete||!previous.complete))return unknown;
  const before=previous.starts.get(row.slug),old=previous.ranks[mode].get(row.slug);
  if(!previous.starts.has(row.slug))return previous.full?{kind:"new",delta:0,previous:null}:unknown;

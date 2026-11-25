@@ -19,3 +19,11 @@ assert.equal(rankMovement(current,partial,"viewers",nextRows[2]).kind,"unknown")
 assert.equal(rankMovement(current,previous,"viewers",{...nextRows[0],rankChange:3}).previous,4);
 assert.equal(rankMovement(current,previous,"growth",{...nextRows[0],startedAt:"2026-11-25T00:01:00Z"}).kind,"new");
 console.log("順位変動：指標別UP/DOWN、NEW、観測不足、前回順位、範囲制限");
+
+assert.equal(partial.ranks.chat.size,0);
+assert.equal(partial.ranks.active.size,0);
+assert.equal(rankMovement(current,previous,"active",nextRows[2]).kind,"unknown");
+const equal=rankingFrame(snap(nextRows,"2026-11-25T00:07:00Z"),[chat("a",30),chat("b",10)]);
+assert.deepEqual(rankMovement(equal,current,"growth",nextRows[1]),{kind:"keep",delta:0,previous:1});
+const otherScope=rankingFrame(snap(nextRows,"2026-11-25T00:07:00Z",true,3,"all"));
+assert.equal(rankMovement(otherScope,current,"viewers",nextRows[0]).kind,"unknown");
