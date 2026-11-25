@@ -53,3 +53,13 @@ export function rankMovement(current:RankFrame,previous:RankFrame|null|undefined
  if(old===undefined)return unknown;
  const d=old-rank;return {kind:d>0?"up":d<0?"down":"keep",delta:Math.abs(d),previous:old};
 }
+
+/** A chat poll is an independent observation. Never promote a duplicate tick,
+ * and never compare ranks across an extended observation gap or scope change. */
+export type RankFrameHistory={current:RankFrame;previous:RankFrame|null};
+export function advanceRankFrame(history:RankFrameHistory|undefined,next:RankFrame,maxGapMs=30000):RankFrameHistory{
+ const at=Date.parse(next.at),before=Date.parse(history?.current.at??"");
+ if(!history||history.current.scope!==next.scope||!Number.isFinite(at)||!Number.isFinite(before))return {current:next,previous:null};
+ if(at<=before)return history;
+ return {current:next,previous:at-before<=maxGapMs?history.current:null};
+}
