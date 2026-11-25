@@ -27,6 +27,9 @@ export type RecordingOptions = {
   streamStartedAt?: string | null;
   displayName?: string;
   filenameStartedAt?: string;
+  chaseFromEarliest?: boolean;
+  recoverVodAfterLive?: boolean;
+  recoverVodChat?: boolean;
 };
 
 type ActiveRecording = {
@@ -45,6 +48,9 @@ type ActiveRecording = {
   retryTimer: NodeJS.Timeout | null;
   sourceUrl: string;
   isVod: boolean;
+  chaseFromEarliest: boolean;
+  recoverVodAfterLive: boolean;
+  recoverVodChat: boolean;
   streamStartedAt: string | null;
   watchdogTimer: NodeJS.Timeout | null;
   terminationTimer: NodeJS.Timeout | null;
@@ -105,6 +111,7 @@ function saveLiveRecordingTimelineMetadata(
 ): void {
   if (session.isVod) return;
   const startedAt = new Date();
+  const chasing = session.chaseFromEarliest && session.attempt === 1;
   const metadataDirectory = join(session.outputDirectory, "RecordingMetadata");
   const metadataPath = join(metadataDirectory, basename(filePrefix) + ".json");
   const temporaryPath = metadataPath + ".tmp";
@@ -115,9 +122,9 @@ function saveLiveRecordingTimelineMetadata(
       channelSlug: slug,
       recordingKind: "LIVE",
       filePrefix: basename(filePrefix),
-      recordingStartedAt: startedAt.toISOString(),
-      recordingStartedAtEpochMs: startedAt.getTime(),
-      timestampSource: "yt-dlp-process-spawn"
+      recordingStartedAt: chasing ? null : startedAt.toISOString(),
+      recordingStartedAtEpochMs: chasing ? null : startedAt.getTime(),
+      timestampSource: chasing ? "hls-earliest-unknown" : "yt-dlp-process-spawn"
     }, null, 2), { encoding: "utf8", mode: 0o600 });
     renameSync(temporaryPath, metadataPath);
   } catch {
@@ -197,7 +204,8 @@ export class KickRecordingManager {
   constructor(
     private readonly onEvent: (event: RecordingEvent) => void,
     private readonly probeLive: (slug: string) => Promise<LiveProbeResult> = async () => null,
-    private readonly spawnProcess: typeof spawn = spawn
+    private readonly spawnProcess: typeof spawn = spawn,
+    private readonly onChaseComplete?: (request: {slug:string;startedAt:string|null;outputDirectory:string;recoverVodChat?:boolean}) => void
   ) {}
 
   private sessionKey(slug: string, isVod: boolean): string {
@@ -237,6 +245,8 @@ export class KickRecordingManager {
     const slug = validateSlug(inputSlug);
     const sourceUrl = inputSourceUrl === undefined ? `https://kick.com/${slug}` : validateVodUrl(inputSourceUrl, slug);
     const isVod = inputSourceUrl !== undefined;
+    if (isVod && options.chaseFromEarliest) throw new Error("追っかけ録画はLIVE専用です。");
+    const chaseFromEarliest = !isVod && options.chaseFromEarliest === true;
     const sessionId = this.sessionKey(slug, isVod);
     if (this.active.has(sessionId)) {
       throw new Error(isVod
@@ -259,14 +269,15 @@ export class KickRecordingManager {
       startedAt: options.streamStartedAt ?? options.filenameStartedAt ?? (isVod ? null : new Date().toISOString()),
       kind: isVod ? "VOD" : "LIVE", videoId
     });
-    let prefix = stem;
+    const recordingStem = chaseFromEarliest ? stem + "_chase" : stem;
+    let prefix = recordingStem;
     let take = 2;
     // Never overwrite an existing broadcast when manually recording it again.
     while (readdirSync(videoDirectory).some(name => name === prefix + ".mp4" ||
       name === prefix + ".mkv" || name === prefix + ".ts" ||
       name.startsWith(prefix + "_retry")) ||
       existsSync(join(outputDirectory, "RecordingSessions", prefix + ".json"))) {
-      prefix = stem + "_take" + take++;
+      prefix = recordingStem + "_take" + take++;
     }
     const basePrefix = join(videoDirectory, prefix);
     const session: ActiveRecording = {
@@ -285,6 +296,9 @@ export class KickRecordingManager {
       retryTimer: null,
       sourceUrl,
       isVod,
+      chaseFromEarliest,
+      recoverVodAfterLive: chaseFromEarliest && options.recoverVodAfterLive === true,
+      recoverVodChat: chaseFromEarliest && options.recoverVodAfterLive === true && options.recoverVodChat === true,
       streamStartedAt: typeof options.streamStartedAt === "string" ? options.streamStartedAt : null,
       watchdogTimer: null,
       terminationTimer: null,
@@ -296,7 +310,7 @@ export class KickRecordingManager {
 
     this.active.set(sessionId, session);
     persistRecordingSession(session, slug, "recording");
-    this.onEvent({ slug, status: "starting", filePath: basePrefix, message: isVod ? "過去配信のダウンロードを開始しています。" : "録画プロセスを起動しています。", isVod });
+    this.onEvent({ slug, status: "starting", filePath: basePrefix, message: isVod ? "過去配信のダウンロードを開始しています。" : chaseFromEarliest ? "追っかけ録画：取得可能な最古のHLS映像から開始を試行しています。" : "録画プロセスを起動しています。", isVod });
     this.launch(sessionId, slug, session);
 
     return { ok: true, outputDirectory };
@@ -341,6 +355,7 @@ export class KickRecordingManager {
     session.attemptPrefix = prefix;
 
     const ffmpegPath = findFfmpeg();
+    const chasing = session.chaseFromEarliest && session.attempt === 1;
     const args = [
       "--no-warnings",
       "--no-color",
@@ -354,6 +369,10 @@ export class KickRecordingManager {
       "--fragment-retries", "10",
       "--retry-sleep", "linear=1::5",
       "--format", "best",
+      // Kick is not a supported yt-dlp --live-from-start site. Only request
+      // the first segment still advertised by the HLS playlist. Retries use
+      // ordinary live recording so already saved fragments are not replayed.
+      ...(chasing ? ["--downloader", "m3u8:ffmpeg", "--downloader-args", "ffmpeg_i:-live_start_index 0"] : []),
       "--output", `${prefix}.%(ext)s`,
       "--print", "after_move:filepath",
       ...(ffmpegPath ? ["--ffmpeg-location", ffmpegPath] : []),
@@ -423,7 +442,7 @@ export class KickRecordingManager {
         filePath: prefix,
         isVod: session.isVod,
         message: session.attempt === 1
-          ? "録画を開始しました。"
+          ? chasing ? "追っかけ録画を試行中（取得できる最古の映像。配信開始からの保存は未確認）。" : "録画を開始しました。"
           : `再接続に成功しました（${session.attempt - 1}/${session.maxRetries}回目）。`
       });
     });
@@ -521,6 +540,7 @@ export class KickRecordingManager {
       persistRecordingSession(session, slug, "completed", savedFiles);
       this.onEvent({ slug, status: "stopped", filePath: savedPath, isVod: false,
         message: decision.message });
+      if (session.recoverVodAfterLive) this.onChaseComplete?.({slug,startedAt:session.streamStartedAt,outputDirectory:session.outputDirectory,recoverVodChat:session.recoverVodChat});
       return;
     }
 
@@ -529,7 +549,7 @@ export class KickRecordingManager {
       persistRecordingSession(session, slug, "recording", savedFiles);
       const delaySeconds = Math.ceil(session.retryDelayMs / 1000);
       this.onEvent({ slug, status: "starting", filePath: savedPath, isVod: false,
-        message: `${decision.message} ${delaySeconds}秒後に再接続（連続失敗 ${session.retriesUsed}/${session.maxRetries}）。` });
+        message: `${decision.message} ${delaySeconds}秒後に再接続（連続失敗 ${session.retriesUsed}/${session.maxRetries}）。${session.chaseFromEarliest && session.attempt === 1 ? " 再接続は通常LIVE録画に切り替えます。" : ""}` });
       session.retryTimer = setTimeout(() => {
         session.retryTimer = null;
         if (!session.stopRequested && this.active.get(sessionId) === session) this.launch(sessionId, slug, session);

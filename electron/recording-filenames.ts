@@ -44,7 +44,7 @@ export function broadcastFileStem(identity: BroadcastFileIdentity): string {
     broadcastFileDate(identity.startedAt) + "__" + identity.kind + vod;
 }
 
-const NEW_FILE = /^(.{1,48})__([a-z0-9_-]{1,40})__(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}|date-unknown)__(LIVE|VOD(?:_[a-f0-9-]{20,40})?)(?:_take\d+)?(?:_retry\d+)?(?:_comments(?:_\d+)?)?$/i;
+const NEW_FILE = /^(.{1,48})__([a-z0-9_-]{1,40})__(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}|date-unknown)__(LIVE|VOD(?:_[a-f0-9-]{20,40})?)(?:_chase)?(?:_take\d+)?(?:_retry\d+)?(?:_comments(?:_\d+)?)?$/i;
 
 export function parseBroadcastFileStem(filename: string): {
   slug: string; kind: "LIVE" | "VOD"; startedAt: string | null; videoId?: string; displayName: string

@@ -1,0 +1,12 @@
+import assert from "node:assert/strict";
+import {commentOffsetForVideo} from "../electron/comment-video-sync.ts";
+const id="11111111-1111-4111-8111-111111111111";
+const start=Date.parse("2026-11-25T00:10:00Z");
+const raw={videoId:id,timeInSeconds:660,createdAt:"2026-11-25T00:11:00Z"};
+const base="sample__sample__2026-11-25_00-00-00__";
+assert.equal(commentOffsetForVideo(raw,base+"VOD_"+id+".mp4",start),660);
+assert.equal(commentOffsetForVideo(raw,base+"LIVE_chase.mp4",start),60);
+assert.ok(Number.isNaN(commentOffsetForVideo(raw,base+"VOD_22222222-2222-4222-8222-222222222222.mp4",start)));
+assert.equal(commentOffsetForVideo({timeInSeconds:12},"legacy.mp4",start),12);
+assert.ok(Number.isNaN(commentOffsetForVideo({videoId:id,timeInSeconds:12},base+"LIVE_chase.mp4",start)));
+console.log("VOD/LIVEのコメント時刻同期テスト成功");

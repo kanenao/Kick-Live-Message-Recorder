@@ -245,7 +245,7 @@ declare global {
       getRankingBackground: () => Promise<import("../../electron/ranking-background").RankingBackgroundStatus>;
       setRankingBackground: (enabled:boolean,scope:"ja"|"all") => Promise<import("../../electron/ranking-background").RankingBackgroundStatus>;
       getRankingChatActivity: () => Promise<Array<{slug:string;messages:number}>>;
-      getKickRankingHistory: (scope:"ja"|"all",hours:24|168,slug:string|null) => Promise<import("../../electron/kick-ranking-history").RankingHistory>;
+      getKickRankingHistory: (scope:"ja"|"all",hours:24|168|720,slug:string|null) => Promise<import("../../electron/kick-ranking-history").RankingHistory>;
       getKickRanking: (scope: "ja" | "all") => Promise<import("../../electron/kick-ranking").RankingSnapshot>;
       listActiveLiveRecordings: () => Promise<string[]>;
       checkKickChannels: (slugs: string[]) => Promise<KickRecorderChannelCheck[]>;
@@ -275,7 +275,11 @@ declare global {
       checkForUpdates: () => Promise<KickRecorderUpdateStatus>;
       installUpdate: () => Promise<{ ok: boolean }>;
       onUpdateStatus: (callback: (status: KickRecorderUpdateStatus) => void) => () => void;
-      startRecording: (slug: string, sourceUrl?: string) => Promise<{ ok: true; outputDirectory: string }>;
+      listChaseChatRecovery: () => Promise<Array<{url:string;slug:string;videoId:string;state:string;message:string}>>;
+      cancelChaseChatRecovery: (url:string) => Promise<{ok:boolean}>;
+      listChaseVodRecovery: () => Promise<Array<{id:string;slug:string;startedAt:string|null;state:string;attempt:number;message:string}>>;
+      cancelChaseVodRecovery: (id:string) => Promise<{ok:boolean}>;
+      startRecording: (slug: string, sourceUrl?: string, chaseFromEarliest?: boolean, recoverVodAfterLive?: boolean, recoverVodChat?: boolean) => Promise<{ ok: true; outputDirectory: string }>;
       stopRecording: (slug: string, isVod?: boolean) => Promise<{ ok: true }>;
       enqueueVodDownloads: (urls: string[]) => Promise<KickRecorderVodDownloadJob[]>;
       listVodDownloads: () => Promise<KickRecorderVodDownloadJob[]>;

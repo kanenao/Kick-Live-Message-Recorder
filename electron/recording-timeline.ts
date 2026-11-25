@@ -54,6 +54,7 @@ export function resolveVideoTimelineAnchor(
           metadata.recordingKind === "LIVE" &&
           metadata.filePrefix === videoBase &&
           channelMatches &&
+          metadata.timestampSource !== "hls-earliest-unknown" &&
           Number.isFinite(metadataStartMs)
         ) {
           return { startMs: metadataStartMs, source: "recording-metadata" };
@@ -64,6 +65,9 @@ export function resolveVideoTimelineAnchor(
     // 古い・破損したメタデータは無視し、従来の時刻推定へフォールバックする。
   }
 
+  // Chase recording never uses process spawn or the broadcast start as an
+  // exact media timestamp. A file-end estimate remains only an estimate.
+  if (/_chase(?:_take\d+)?$/i.test(videoBase)) return { startMs: videoModifiedAtMs - durationSeconds * 1000, source: "file-mtime" };
   const filenameStartMs = parseFilenameStartMs(videoBase);
   if (Number.isFinite(filenameStartMs)) {
     return { startMs: filenameStartMs, source: "filename" };

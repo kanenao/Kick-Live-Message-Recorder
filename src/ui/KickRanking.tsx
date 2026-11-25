@@ -2,11 +2,11 @@ import {useEffect,useRef,useState} from "react";
 import type {RankingScope,RankingSnapshot} from "../../electron/kick-ranking";
 import type {RankingHistory} from "../../electron/kick-ranking-history";
 import type {RankingBackgroundStatus} from "../../electron/ranking-background";
-export function KickRanking({configured,desktop,onSettings,registered,canRegister,onRegister}:{configured:boolean;desktop:boolean;onSettings:()=>void;registered:string[];canRegister:boolean;onRegister:(slug:string)=>boolean}){
+export function KickRanking({configured,desktop,onSettings,registered,canRegister,onRegister,chaseRecording,recoverVod,recoverChat}:{configured:boolean;desktop:boolean;onSettings:()=>void;registered:string[];canRegister:boolean;onRegister:(slug:string)=>boolean;chaseRecording:boolean;recoverVod:boolean;recoverChat:boolean}){
   const [scope,setScope]=useState<RankingScope>("ja");
   const [snapshots,setSnapshots]=useState<Partial<Record<RankingScope,RankingSnapshot>>>({});
   const [search,setSearch]=useState("");
-  const [historyHours,setHistoryHours]=useState<24|168>(24);
+  const [historyHours,setHistoryHours]=useState<24|168|720>(24);
   const [historySlug,setHistorySlug]=useState<string|null>(null);
   const [history,setHistory]=useState<RankingHistory|null>(null);
   const [historyError,setHistoryError]=useState("");
@@ -71,7 +71,7 @@ export function KickRanking({configured,desktop,onSettings,registered,canRegiste
     try{
       const actual=await api.listActiveLiveRecordings();
       if(actual.includes(slug))await api.stopRecording(slug);
-      else {await api.startRecording(slug);setMessage(slug+"：録画開始を要求しました。");}
+      else {await api.startRecording(slug,undefined,chaseRecording,chaseRecording&&recoverVod,chaseRecording&&recoverVod&&recoverChat);setMessage(slug+"："+(chaseRecording?"追っかけ録画を試行します。":"録画開始を要求しました。"));}
       setActive(await api.listActiveLiveRecordings());
     }catch(e){setMessage(e instanceof Error?e.message:String(e));}
     finally{locks.current.delete(slug);setPending([...locks.current]);}
@@ -98,7 +98,7 @@ export function KickRanking({configured,desktop,onSettings,registered,canRegiste
   const counts=new Map(chatActivity.map(row=>[row.slug,row.messages]));
   const visible=(sort==="chat"?entries.filter(row=>counts.has(row.slug)).sort((a,b)=>(counts.get(b.slug)??0)-(counts.get(a.slug)??0)||a.rank-b.rank):entries).slice(0,200);
   const elapsed=(date:string|null)=>{if(!date)return "不明";const m=Math.max(0,Math.floor((Date.now()-Date.parse(date))/60000));return Math.floor(m/60)+"時間"+(m%60)+"分";};
-  const action=(slug:string)=><button className={active.includes(slug)?"small-action":"primary-small"} disabled={!desktop||pending.includes(slug)} onClick={()=>void record(slug)}>{pending.includes(slug)?"処理中…":active.includes(slug)?"■ 録画停止":"● 録画"}</button>;
+  const action=(slug:string)=><button className={active.includes(slug)?"small-action":"primary-small"} disabled={!desktop||pending.includes(slug)} onClick={()=>void record(slug)}>{pending.includes(slug)?"処理中…":active.includes(slug)?"■ 録画停止":chaseRecording?"● 追っかけ録画":"● 録画"}</button>;
   return <section className="panel kick-ranking">
     <div className="panel-heading"><div><h2>リアルタイム同接ランキング</h2><p>Kick公式APIから独自集計。登録していない配信者も直接録画できます。</p></div><span className="count-pill">{snapshot? snapshot.total.toLocaleString()+" 配信取得":"未取得"}</span></div>
     {!configured&&<div className="notice">ランキングにはKick APIの設定が必要です。<button className="small-action" onClick={onSettings}>設定を開く</button></div>}
@@ -114,13 +114,13 @@ export function KickRanking({configured,desktop,onSettings,registered,canRegiste
     <div className="ranking-scroll"><table className="ranking-table"><thead><tr><th>順位</th><th>配信画面</th><th>配信者・番組情報</th><th>同時視聴者</th><th>受信コメント</th><th>配信時間</th><th>録画操作</th></tr></thead><tbody>{visible.map(row=><tr key={row.slug}><td><strong className="ranking-rank">{row.rank}</strong><small>{row.rankChange===null?"—":row.rankChange>0?"↑"+row.rankChange:row.rankChange<0?"↓"+Math.abs(row.rankChange):"→"}</small></td><td><button className="ranking-thumb" onClick={()=>void window.kickRecorder?.openKickProfile(row.slug).catch(e=>setMessage(String(e)))} aria-label={row.name+"の配信ページ"}>{row.thumbnail?<img src={row.thumbnail} alt="" loading="lazy" referrerPolicy="no-referrer"/>:<span>LIVE</span>}</button></td><td><button className="ranking-name" onClick={()=>void window.kickRecorder?.openKickProfile(row.slug).catch(e=>setMessage(String(e)))}>{row.avatar&&<img src={row.avatar} alt="" loading="lazy" referrerPolicy="no-referrer"/>}{row.name}</button><div className="ranking-title">{row.title}</div><small>{row.category} ・ {row.language||"言語不明"}</small></td><td><strong className="ranking-viewers">{row.viewers.toLocaleString("ja-JP")}</strong><small>{row.viewerChange===null?"比較なし":(row.viewerChange>0?"+":"")+row.viewerChange.toLocaleString("ja-JP")}</small></td><td>{counts.has(row.slug)?counts.get(row.slug)?.toLocaleString("ja-JP"):"未観測"}</td><td>{elapsed(row.startedAt)}</td><td>{action(row.slug)}<div className="ranking-row-actions"><button className="small-action" onClick={()=>{setShowHistory(true);setHistorySlug(row.slug);}}>推移</button><button className="small-action" disabled={!canRegister||registered.includes(row.slug)||!/^[a-z0-9_]{1,25}$/.test(row.slug)} onClick={()=>register(row.slug)}>{registered.includes(row.slug)?"登録済":"監視・録画登録"}</button></div></td></tr>)}</tbody></table></div>
     <div className="ranking-history-panel">
       <div className="panel-heading"><div><h2>ランキング履歴・視聴者数推移</h2><p>PC内で観測した上位100件を5分単位で保存。未取得時間の数値は補完しません。</p></div><button className="small-action" onClick={()=>setShowHistory(v=>!v)}>{showHistory?"閉じる":"履歴を見る"}</button></div>
-      {showHistory&&<><div className="ranking-toolbar"><select aria-label="集計期間" value={historyHours} onChange={e=>setHistoryHours(e.target.value==="168"?168:24)}><option value={24}>過去24時間</option><option value={168}>過去7日間</option></select><span>最高同接順（観測値）</span></div>
+      {showHistory&&<><div className="ranking-toolbar"><select aria-label="集計期間" value={historyHours} onChange={e=>setHistoryHours(e.target.value==="720"?720:e.target.value==="168"?168:24)}><option value={24}>過去24時間</option><option value={168}>過去7日間</option><option value={720}>過去30日間</option></select><span>最高同接順（観測値）</span></div>
       {historyError&&<p role="alert">{historyError}</p>}
       {history&&<><p className="ranking-caption">取得回数：{history.samples}回 ／ {history.firstAt?new Date(history.firstAt).toLocaleString("ja-JP"):"記録なし"} 〜 {history.lastAt?new Date(history.lastAt).toLocaleString("ja-JP"):"記録なし"}</p>
       {historySlug&&<div className="ranking-graph"><strong>{historySlug} の視聴者数推移</strong>{points.length?<><svg viewBox="0 0 600 152" role="img" aria-label={historySlug+"の観測視聴者数"}><path d="M20 20V130H580" stroke="#63756a" fill="none"/>{points.map(p=><circle key={p.at} cx={x(p.at)} cy={y(p.viewers)} r="2.5" fill="#75e2a1"><title>{new Date(p.at).toLocaleString("ja-JP")+"："+p.viewers+"人"}</title></circle>)}</svg><p className="ranking-caption">観測最高 {max.toLocaleString("ja-JP")} 人 ／ {points.length}点（点のない時間は不明）</p></>:<p>この期間の観測記録がありません。</p>}</div>}
       <div className="ranking-scroll"><table className="ranking-table"><thead><tr><th>順</th><th>配信者</th><th>観測最高同接</th><th>最高順位</th><th>観測回数</th></tr></thead><tbody>{history.leaders.map((r,i)=><tr key={r.slug}><td>{i+1}</td><td><button className="ranking-name" onClick={()=>setHistorySlug(r.slug)}>{r.name}　推移</button></td><td>{r.peakViewers.toLocaleString("ja-JP")}</td><td>{r.bestRank??"不明"}</td><td>{r.samples}</td></tr>)}</tbody></table></div></>}
       </>}
     </div>
-    <p className="ranking-caption">視聴者増加数は前回取得からの増減です。チャット投稿数や全期間の記録ではありません。録画は通常LIVE録画で、コメント取得は既存の設定に従います。</p>
+    <p className="ranking-caption">視聴者増加数は前回取得からの増減です。チャット投稿数や全期間の記録ではありません。通常・追っかけ録画を選択可能です。追っかけ録画はサーバーに残る映像のみ取得を試行します。</p>
   </section>;
 }

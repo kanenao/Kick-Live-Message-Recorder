@@ -24,7 +24,9 @@ import { collectRanking, type RankingScope, type RankingSnapshot } from "./kick-
 import { KickRankingHistory } from "./kick-ranking-history";
 import { RankingBackground } from "./ranking-background";
 import { RankingChatActivity } from "./ranking-chat-activity";
-import { KickVodChatDownloader, getVodBroadcastDetails } from "./vod-chat";
+import { KickVodChatDownloader, getVodBroadcastDetails, findChaseRecoveryVod } from "./vod-chat";
+import { ChaseVodRecovery } from "./chase-vod-recovery";
+import { ChaseChatQueue } from "./chase-chat-queue";
 import { regenerateSavedVodAss } from "./vod-ass-reexport";
 import { KickVodDownloadManager } from "./vod-download-queue";
 import { listLibrarySessions } from "./library-sessions";
@@ -776,7 +778,7 @@ const recordingManager = new KickRecordingManager(event => {
   if (!event.isVod && event.filePath && event.status === "stopped" && existsSync(event.filePath)) {
     liveArticleManager.attachRecording(event.slug, event.filePath);
   }
-}, resolveCurrentKickLive);
+}, resolveCurrentKickLive, undefined, request => chaseVodRecovery.schedule(request));
 
 const commentVideoGenerator = new KickCommentVideoGenerator(event => {
   mainWindow?.webContents.send("comment-video:status", event);
@@ -793,13 +795,33 @@ const chatReceiver = new KickChatReceiver(
   status => mainWindow?.webContents.send("chat:status", status)
 );
 
+let savedVodAssBusy = false;
 const vodChatDownloader = new KickVodChatDownloader(event => {
   mainWindow?.webContents.send("vod-chat:status", event);
+  chaseChatQueue.onEvent(event);
+});
+const chaseChatQueue = new ChaseChatQueue(()=>vodChatDownloader.isRunning()||savedVodAssBusy,job=>{
+  const settings=readState().settings;
+  vodChatDownloader.start(job.url,job.directory,settings.removeEmotesFromAss,{
+    crossingSeconds:settings.vodAssCrossingSeconds,speedPercent:settings.vodAssSpeedPercent,
+    entryOffsetPx:settings.vodAssEntryOffsetPx,rowLimit:settings.vodAssRowLimit,
+    collisionGap:settings.vodAssCollisionGap,delaySeconds:settings.vodAssDelaySeconds,autoFlow:settings.assAutoFlow
+  });
 });
 
 const vodDownloadManager = new KickVodDownloadManager(job => {
   mainWindow?.webContents.send("vod-download:status", job);
 }, undefined, getVodBroadcastDetails);
+
+const chaseVodRecovery = new ChaseVodRecovery(
+  (request,signal)=>findChaseRecoveryVod(request.slug,request.startedAt,signal),
+  (url,request)=>{
+    const existing=vodDownloadManager.list().find(job=>job.url===url &&
+      (job.status==="queued" || job.status==="downloading" || (job.status==="completed" && job.filePath && existsSync(job.filePath))));
+    if(!existing) vodDownloadManager.enqueue([url],request.outputDirectory);
+    if(request.recoverVodChat) chaseChatQueue.enqueue(url,request.outputDirectory);
+  }
+);
 
 type ArticleLiveMetadata = {
   slug: string;
@@ -1640,7 +1662,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle("kick:ranking-chat-activity",event=>{assertTrustedSender(event);return rankingChatActivity.list();});
   ipcMain.handle("kick:ranking-history",(event,scope:unknown,hours:unknown,slug:unknown)=>{
     assertTrustedSender(event);
-    if((scope!=="ja"&&scope!=="all")||(hours!==24&&hours!==168)||(slug!==null&&(typeof slug!=="string"||!/^[a-z0-9_-]{1,40}$/.test(slug))))throw Error("履歴の検索条件が不正です。");
+    if((scope!=="ja"&&scope!=="all")||(hours!==24&&hours!==168&&hours!==720)||(slug!==null&&(typeof slug!=="string"||!/^[a-z0-9_-]{1,40}$/.test(slug))))throw Error("履歴の検索条件が不正です。");
     return rankingHistory().query(scope,hours,slug);
   });
   ipcMain.handle("kick:ranking", async (event, scope: unknown) => {
@@ -1698,6 +1720,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("vod-chat:start", (event, url: unknown, removeEmotes: unknown, assOptions: unknown) => {
     assertTrustedSender(event);
+    if(savedVodAssBusy) throw new Error("ASS再生成中です。完了後に取得してください。");
     return vodChatDownloader.start(url, getRecordingOutputDirectory(), removeEmotes !== false, assOptions);
   });
 
@@ -1706,7 +1729,6 @@ function registerIpcHandlers(): void {
     return vodChatDownloader.stop();
   });
 
-  let savedVodAssBusy = false;
   ipcMain.handle("vod-chat:regenerate-ass", async (event, jsonlPath: unknown, removeEmotes: unknown, assOptions: unknown) => {
     assertTrustedSender(event);
     if (savedVodAssBusy || vodChatDownloader.isRunning()) {
@@ -1744,8 +1766,19 @@ function registerIpcHandlers(): void {
     return vodDownloadManager.cancel(id);
   });
 
-  ipcMain.handle("recording:start", async (event, slug: unknown, sourceUrl?: unknown) => {
+  ipcMain.handle("chase-chat:list",event=>{assertTrustedSender(event);return chaseChatQueue.list().map(({directory,...job})=>job);});
+  ipcMain.handle("chase-chat:cancel",(event,url:unknown)=>{assertTrustedSender(event);chaseChatQueue.cancel(url);return {ok:true};});
+  ipcMain.handle("chase-vod:list", event => { assertTrustedSender(event); return chaseVodRecovery.list(); });
+  ipcMain.handle("chase-vod:cancel", (event,id:unknown) => { assertTrustedSender(event); chaseVodRecovery.cancel(id); return {ok:true}; });
+
+  ipcMain.handle("recording:start", async (event, slug: unknown, sourceUrl?: unknown, chaseFromEarliest?: unknown, recoverVodAfterLive?: unknown, recoverVodChat?: unknown) => {
     assertTrustedSender(event);
+    if (chaseFromEarliest !== undefined && typeof chaseFromEarliest !== "boolean") throw new Error("録画モードが不正です。");
+    if (sourceUrl !== undefined && chaseFromEarliest === true) throw new Error("追っかけ録画はLIVE専用です。");
+    if(recoverVodChat!==undefined && typeof recoverVodChat!=="boolean") throw new Error("過去コメント設定が不正です。");
+    if(recoverVodChat===true && (recoverVodAfterLive!==true || chaseFromEarliest!==true || sourceUrl!==undefined)) throw new Error("過去コメント補完はVOD自動補完専用です。");
+    if (recoverVodAfterLive !== undefined && typeof recoverVodAfterLive !== "boolean") throw new Error("VOD補完設定が不正です。");
+    if (recoverVodAfterLive === true && (sourceUrl !== undefined || chaseFromEarliest !== true)) throw new Error("自動VOD補完は追っかけ録画専用です。");
     const settings = readState().settings;
     const requestedSlug = typeof slug === "string" ? slug.toLowerCase() : "";
     const monitored = backgroundMonitorStatus.results.find(item => item.slug === requestedSlug);
@@ -1783,7 +1816,10 @@ function registerIpcHandlers(): void {
       retryDelaySeconds: settings.recordingRetryDelaySeconds,
       streamStartedAt: startedAt,
       filenameStartedAt: filenameStartedAt ?? undefined,
-      displayName
+      displayName,
+      chaseFromEarliest: chaseFromEarliest === true,
+      recoverVodAfterLive: recoverVodAfterLive === true,
+      recoverVodChat: recoverVodChat === true
     }, sourceUrl);
     if (sourceUrl === undefined && typeof slug === "string") {
       manuallyStoppedLiveBroadcasts.delete(requestedSlug);
@@ -2261,6 +2297,8 @@ app.on("before-quit", () => {
   updateSleepBlocker(false);
   tray?.destroy();
   tray = null;
+  chaseVodRecovery.stopAll();
+  chaseChatQueue.stopAll();
   recordingManager.stopAll();
   for (const capture of liveArticleFrameCaptures.values()) capture.stop();
   liveArticleFrameCaptures.clear();

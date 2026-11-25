@@ -1,0 +1,10 @@
+import assert from "node:assert/strict";
+import {ChaseChatQueue} from "../electron/chase-chat-queue.ts";
+const id="11111111-1111-4111-8111-111111111111",url="https://kick.com/sample/videos/"+id;
+let busy=true,started=[];
+const queue=new ChaseChatQueue(()=>busy,job=>started.push(job),2);
+queue.enqueue(url,"test");queue.enqueue(url,"test");assert.equal(queue.list().length,1);assert.equal(started.length,0);
+busy=false;for(let i=0;i<100&&!started.length;i++)await new Promise(r=>setTimeout(r,5));
+assert.equal(started.length,1);queue.onEvent({slug:"other",videoId:id,status:"completed",message:"wrong"});assert.equal(queue.list()[0].state,"downloading");
+queue.onEvent({slug:"sample",videoId:id,status:"completed",message:"done"});assert.equal(queue.list()[0].state,"completed");queue.stopAll();
+console.log("追っかけコメント補完・直列取得テスト成功");

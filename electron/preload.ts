@@ -246,7 +246,7 @@ const api = {
   getRankingBackground: ():Promise<import("./ranking-background").RankingBackgroundStatus> => ipcRenderer.invoke("kick:ranking-background:get"),
   setRankingBackground: (enabled:boolean,scope:"ja"|"all"):Promise<import("./ranking-background").RankingBackgroundStatus> => ipcRenderer.invoke("kick:ranking-background:set",enabled,scope),
   getRankingChatActivity: ():Promise<Array<{slug:string;messages:number}>> => ipcRenderer.invoke("kick:ranking-chat-activity"),
-  getKickRankingHistory: (scope:"ja"|"all",hours:24|168,slug:string|null):Promise<import("./kick-ranking-history").RankingHistory> => ipcRenderer.invoke("kick:ranking-history",scope,hours,slug),
+  getKickRankingHistory: (scope:"ja"|"all",hours:24|168|720,slug:string|null):Promise<import("./kick-ranking-history").RankingHistory> => ipcRenderer.invoke("kick:ranking-history",scope,hours,slug),
   getKickRanking: (scope: "ja" | "all"): Promise<import("./kick-ranking").RankingSnapshot> => ipcRenderer.invoke("kick:ranking",scope),
   listActiveLiveRecordings: (): Promise<string[]> => ipcRenderer.invoke("recording:active-live"),
   checkKickChannels: (slugs: string[]): Promise<KickChannelCheck[]> => ipcRenderer.invoke("kick:check-channels", slugs),
@@ -299,8 +299,12 @@ const api = {
     ipcRenderer.on("updater:status", listener);
     return () => ipcRenderer.removeListener("updater:status", listener);
   },
-  startRecording: (slug: string, sourceUrl?: string): Promise<{ ok: true; outputDirectory: string }> =>
-    ipcRenderer.invoke("recording:start", slug, sourceUrl),
+  listChaseChatRecovery: ():Promise<Array<{url:string;slug:string;videoId:string;state:string;message:string}>> => ipcRenderer.invoke("chase-chat:list"),
+  cancelChaseChatRecovery: (url:string):Promise<{ok:boolean}> => ipcRenderer.invoke("chase-chat:cancel",url),
+  listChaseVodRecovery: (): Promise<Array<{id:string;slug:string;startedAt:string|null;state:string;attempt:number;message:string}>> => ipcRenderer.invoke("chase-vod:list"),
+  cancelChaseVodRecovery: (id:string):Promise<{ok:boolean}> => ipcRenderer.invoke("chase-vod:cancel",id),
+  startRecording: (slug: string, sourceUrl?: string, chaseFromEarliest = false, recoverVodAfterLive = false, recoverVodChat = false): Promise<{ ok: true; outputDirectory: string }> =>
+    ipcRenderer.invoke("recording:start", slug, sourceUrl, chaseFromEarliest, recoverVodAfterLive, recoverVodChat),
   stopRecording: (slug: string, isVod = false): Promise<{ ok: true }> =>
     ipcRenderer.invoke("recording:stop", slug, isVod),
   enqueueVodDownloads: (urls: string[]): Promise<VodDownloadJob[]> => ipcRenderer.invoke("vod-download:enqueue", urls),
