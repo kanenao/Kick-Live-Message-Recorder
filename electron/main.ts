@@ -22,6 +22,8 @@ import { registerBetaHistory } from "./beta-history";
 import { KickChatReceiver } from "./chat";
 import { collectRanking, type RankingScope, type RankingSnapshot } from "./kick-ranking";
 import { KickRankingHistory } from "./kick-ranking-history";
+import { RankingBackground } from "./ranking-background";
+import { RankingChatActivity } from "./ranking-chat-activity";
 import { KickVodChatDownloader, getVodBroadcastDetails } from "./vod-chat";
 import { regenerateSavedVodAss } from "./vod-ass-reexport";
 import { KickVodDownloadManager } from "./vod-download-queue";
@@ -386,6 +388,20 @@ async function getKickRanking(scope:RankingScope):Promise<RankingSnapshot>{
   })();
   rankingInflight.set(scope,work);
   try{return await work;}finally{rankingInflight.delete(scope);}
+}
+
+const rankingBackground = new RankingBackground(getKickRanking);
+const rankingChatActivity = new RankingChatActivity();
+function rankingBackgroundPath():string{return join(app.getPath("userData"),"ranking-background.json");}
+function loadRankingBackground():void{
+  try{const raw=JSON.parse(readFileSync(rankingBackgroundPath(),"utf8")) as {enabled?:unknown;scope?:unknown};rankingBackground.configure(raw.enabled===true,raw.scope==="all"?"all":"ja");}
+  catch{/* default off */}
+}
+function saveRankingBackground(enabled:boolean,scope:RankingScope):void{
+  const path=rankingBackgroundPath(),temp=path+".tmp";mkdirSync(app.getPath("userData"),{recursive:true});
+  try{writeFileSync(temp,JSON.stringify({enabled,scope}),{encoding:"utf8",mode:0o600});renameSync(temp,path);}
+  finally{if(existsSync(temp))unlinkSync(temp);}
+  rankingBackground.configure(enabled,scope);
 }
 
 async function checkKickChannels(input: unknown, includeProfiles = true): Promise<KickChannelCheck[]> {
@@ -770,6 +786,7 @@ const chatReceiver = new KickChatReceiver(
   getRecordingOutputDirectory,
   () => readState().settings.saveChat,
   message => {
+    rankingChatActivity.add(message.channelSlug.toLowerCase());
     liveArticleManager.onChatMessage(message);
     mainWindow?.webContents.send("chat:message", message);
   },
@@ -1615,6 +1632,12 @@ function registerIpcHandlers(): void {
     return result;
   });
 
+  ipcMain.handle("kick:ranking-background:get",event=>{assertTrustedSender(event);return rankingBackground.getStatus();});
+  ipcMain.handle("kick:ranking-background:set",(event,enabled:unknown,scope:unknown)=>{
+    assertTrustedSender(event);if(typeof enabled!=="boolean"||(scope!=="ja"&&scope!=="all"))throw Error("ランキング収集設定が不正です。");
+    saveRankingBackground(enabled,scope);return rankingBackground.getStatus();
+  });
+  ipcMain.handle("kick:ranking-chat-activity",event=>{assertTrustedSender(event);return rankingChatActivity.list();});
   ipcMain.handle("kick:ranking-history",(event,scope:unknown,hours:unknown,slug:unknown)=>{
     assertTrustedSender(event);
     if((scope!=="ja"&&scope!=="all")||(hours!==24&&hours!==168)||(slug!==null&&(typeof slug!=="string"||!/^[a-z0-9_-]{1,40}$/.test(slug))))throw Error("履歴の検索条件が不正です。");
@@ -2216,6 +2239,7 @@ if (!hasSingleInstanceLock) {
       console.warn("β版の利用履歴を登録できませんでした。製品版からのβ版復帰が利用できない可能性があります。");
     }
     registerIpcHandlers();
+    loadRankingBackground();
     app.setAppUserModelId("jp.kanenao.kickrecorder");
     createJapaneseApplicationMenu();
     createTray();
@@ -2230,6 +2254,7 @@ if (!hasSingleInstanceLock) {
 
 app.on("before-quit", () => {
   isQuitting = true;
+  rankingBackground.stop();
   if (backgroundMonitorTimer) clearTimeout(backgroundMonitorTimer);
   backgroundMonitorTimer = null;
   clearBackgroundChatRetry();

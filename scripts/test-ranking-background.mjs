@@ -1,0 +1,15 @@
+import assert from "node:assert/strict";
+import {RankingBackground} from "../electron/ranking-background.ts";
+import {RankingChatActivity} from "../electron/ranking-chat-activity.ts";
+const wait=async fn=>{for(let i=0;i<100;i++){if(fn())return;await new Promise(r=>setTimeout(r,5));}throw Error("timeout");};
+let calls=[],release;
+const manager=new RankingBackground(async scope=>{calls.push(scope);if(calls.length===1)await new Promise(r=>release=r);},15);
+assert.equal(manager.getStatus().enabled,false);manager.configure(true,"ja");
+await wait(()=>calls.length===1);manager.configure(true,"all");assert.equal(calls.length,1);release();
+await wait(()=>calls.length>=2);assert.equal(calls[1],"all");
+manager.configure(false,"all");const n=calls.length;await new Promise(r=>setTimeout(r,45));assert.equal(calls.length,n);manager.stop();
+const a=new RankingChatActivity(),now=600000;
+a.add("sample",now);a.add("sample",now+1000);a.add("other",now);
+assert.deepEqual(a.list(now+2000),[{slug:"sample",messages:2},{slug:"other",messages:1}]);
+assert.equal(a.list(now+300000).length,0);
+console.log("ランキング常時収集：停止・範囲変更・重複防止、受信コメントの時間枠集計成功");
