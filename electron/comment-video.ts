@@ -20,6 +20,7 @@ import { isPathInsideDirectory } from "./recording";
 import { formatKickEmoteTokens } from "./vod-chat-ass";
 import { computeNicoAssProfile, reserveNicoAssLane, updateNicoAssActivity } from "./nico-ass-auto";
 import { resolveVideoTimelineAnchor, type VideoTimelineSyncSource } from "./recording-timeline";
+import { commentOffsetForVideo } from "./comment-video-sync";
 
 const execFileAsync = promisify(execFile);
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mkv", ".ts", ".webm", ".m4v", ".mov"]);
@@ -468,15 +469,7 @@ export async function previewCommentVideo(
 
     const content = readString(raw.content) ?? readString(raw.message) ?? "";
     if (!content) continue;
-    let seconds: number;
-    if (typeof raw.timeInSeconds === "number" && Number.isFinite(raw.timeInSeconds)) {
-      seconds = raw.timeInSeconds;
-    } else {
-      const createdAt = readString(raw.createdAt) ?? readString(raw.created_at);
-      const createdMs = createdAt ? Date.parse(createdAt) : Number.NaN;
-      if (!Number.isFinite(createdMs)) continue;
-      seconds = (createdMs - estimatedVideoStartMs) / 1000;
-    }
+    let seconds = commentOffsetForVideo(raw, basename(videoPath), estimatedVideoStartMs);
 
     seconds += delaySeconds;
     if (!Number.isFinite(seconds) || seconds < 0 || seconds > info.duration) {
@@ -686,15 +679,7 @@ export class KickCommentVideoGenerator {
 
         const content = readString(raw.content) ?? readString(raw.message) ?? "";
         if (!content) continue;
-        let seconds: number;
-        if (typeof raw.timeInSeconds === "number" && Number.isFinite(raw.timeInSeconds)) {
-          seconds = raw.timeInSeconds;
-        } else {
-          const createdAt = readString(raw.createdAt) ?? readString(raw.created_at);
-          const createdMs = createdAt ? Date.parse(createdAt) : NaN;
-          if (!Number.isFinite(createdMs)) continue;
-          seconds = (createdMs - estimatedVideoStartMs) / 1000;
-        }
+        let seconds = commentOffsetForVideo(raw, basename(options.videoPath), estimatedVideoStartMs);
 
         seconds += options.delaySeconds;
         if (!Number.isFinite(seconds) || seconds < 0 || seconds > info.duration) continue;
