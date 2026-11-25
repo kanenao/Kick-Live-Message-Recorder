@@ -17,3 +17,12 @@ assert.deepEqual(rankTrendPoints(h.viewers,"viewers","a","2026-11-26T01:00:00Z")
 for(let i=4;i<100;i++)h=appendTrendFrame(h,frame(i*10000,1),["viewers"]);
 assert.equal(h.viewers.length,60);
 console.log("rank trend: duplicate, session, missing data, gap, direction and bounded history OK");
+
+const missing={...frame(10000,1),starts:new Map(),ranks:{viewers:new Map()}};
+const gapped=rankTrendPoints([frame(0,1),missing,frame(20000,2)],"viewers","a",start);
+assert.deepEqual(gapped.map(p=>p.rank),[1,null,2]);
+assert.deepEqual(rankTrendSegments(gapped),[]);
+const restarted=rankTrendPoints([frame(0,1),frame(10000,2,"2026-11-26T00:00:10Z")],"viewers","a",start);
+assert.deepEqual(restarted.map(p=>p.rank),[1,null]);
+assert.deepEqual(rankTrendPoints([missing,frame(20000,2)],"viewers","a",start).map(p=>p.rank),[2]);
+console.log("rank trend: missing row and session changes remain explicit gaps");
