@@ -225,7 +225,7 @@ function toDurationSeconds(value: unknown, unit: "milliseconds" | "seconds"): nu
   return seconds;
 }
 
-async function fetchVodMetadata(identity: VodIdentity, signal: AbortSignal): Promise<VodMetadata> {
+async function fetchVodMetadata(identity: VodIdentity, signal: AbortSignal, requireVerifiedPublic = false): Promise<VodMetadata> {
   let legacy: JsonRecord | null = null;
   try {
     legacy = await requestJsonWithRetry(
@@ -241,6 +241,9 @@ async function fetchVodMetadata(identity: VodIdentity, signal: AbortSignal): Pro
     const channel = asRecord(livestream.channel);
     const returnedId = readString(legacy.uuid);
     const returnedSlug = readString(channel.slug);
+    if(requireVerifiedPublic && (returnedId?.toLowerCase()!==identity.videoId || returnedSlug?.toLowerCase()!==identity.slug || legacy.status!=="public" || (legacy.is_live??livestream.is_live)!==false)) {
+      throw new Error("自動補完には配信者・動画ID・公開済み状態の明示確認が必要です。");
+    }
     if (returnedId && returnedId.toLowerCase() !== identity.videoId) {
       throw new Error("Kickから別のVOD情報が返されたため、安全のため中止しました。");
     }
@@ -310,8 +313,8 @@ export async function findChaseRecoveryVod(slug:string, startedAt:string|null, s
   const result=await requestJson("https://kick.com/api/v2/channels/"+encodeURIComponent(slug)+"/videos",bounded);
   const url=findMatchingChaseVod(result.rawPayload,slug,startedAt);
   if(!url) return null;
-  const metadata=await getVodBroadcastDetails(url,bounded);
-  return sameBroadcastStart(metadata.startedAt,startedAt) ? url : null;
+  const metadata=await fetchVodMetadata(parseVodUrl(url),bounded,true);
+  return sameBroadcastStart(metadata.startAt.toISOString(),startedAt) ? url : null;
 }
 
 function formatOffset(seconds: number): string {

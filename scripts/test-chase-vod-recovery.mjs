@@ -25,3 +25,13 @@ const noDate=new ChaseVodRecovery(async()=>null,()=>{},()=>{},1,1);
 noDate.schedule({...request,startedAt:null});assert.equal(noDate.list()[0].state,"unavailable");
 noDate.schedule(request);await wait(()=>noDate.list().find(x=>x.startedAt===start)?.state==="unavailable");noDate.stopAll();
 console.log("追っかけ録画VOD補完：番組一致・曖昧候補拒否・再試行・重複防止・停止テスト成功");
+
+const resumedCalls=[];
+const suspended=new ChaseVodRecovery(async()=>null,()=>{},()=>{},1000);
+suspended.schedule(request);
+const pending=suspended.pending();assert.equal(pending.length,1);suspended.suspend();
+assert.equal(suspended.pending().length,1);
+const resumed=new ChaseVodRecovery(async()=>expected,(url,r)=>resumedCalls.push([url,r]),()=>{},1);
+resumed.restore(pending);await wait(()=>resumed.list()[0]?.state==="queued");assert.equal(resumedCalls.length,1);assert.equal(resumed.pending().length,0);resumed.stopAll();
+const dispatchError=new ChaseVodRecovery(async()=>expected,()=>{throw Error("queue error");},()=>{},1);
+dispatchError.schedule(request);await wait(()=>dispatchError.list()[0]?.state==="unavailable");assert.equal(dispatchError.pending().length,0);dispatchError.stopAll();

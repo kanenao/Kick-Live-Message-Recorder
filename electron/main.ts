@@ -26,6 +26,7 @@ import { RankingBackground } from "./ranking-background";
 import { RankingChatActivity } from "./ranking-chat-activity";
 import { KickVodChatDownloader, getVodBroadcastDetails, findChaseRecoveryVod } from "./vod-chat";
 import { ChaseVodRecovery } from "./chase-vod-recovery";
+import { readChaseJournal, writeChaseJournal } from "./chase-recovery-journal";
 import { ChaseChatQueue } from "./chase-chat-queue";
 import { regenerateSavedVodAss } from "./vod-ass-reexport";
 import { KickVodDownloadManager } from "./vod-download-queue";
@@ -813,6 +814,9 @@ const vodDownloadManager = new KickVodDownloadManager(job => {
   mainWindow?.webContents.send("vod-download:status", job);
 }, undefined, getVodBroadcastDetails);
 
+let restoringChaseJournal=false;
+function chaseJournalPath():string{return join(app.getPath("userData"),"chase-pending.json");}
+function persistChaseJournal():void{if(restoringChaseJournal)return;try{writeChaseJournal(chaseJournalPath(),chaseVodRecovery.pending());}catch(error){console.warn("追っかけ補完待ちを保存できませんでした:",error);}}
 const chaseVodRecovery = new ChaseVodRecovery(
   (request,signal)=>findChaseRecoveryVod(request.slug,request.startedAt,signal),
   (url,request)=>{
@@ -820,8 +824,15 @@ const chaseVodRecovery = new ChaseVodRecovery(
       (job.status==="queued" || job.status==="downloading" || (job.status==="completed" && job.filePath && existsSync(job.filePath))));
     if(!existing) vodDownloadManager.enqueue([url],request.outputDirectory);
     if(request.recoverVodChat) chaseChatQueue.enqueue(url,request.outputDirectory);
-  }
+  },
+  ()=>persistChaseJournal()
 );
+function restoreChaseJournal():void{
+  restoringChaseJournal=true;
+  try{chaseVodRecovery.restore(readChaseJournal(chaseJournalPath()));}catch(error){console.warn("追っかけ補完待ちを復元できませんでした:",error);}
+  finally{restoringChaseJournal=false;}
+  persistChaseJournal();
+}
 
 type ArticleLiveMetadata = {
   slug: string;
@@ -2276,6 +2287,7 @@ if (!hasSingleInstanceLock) {
     }
     registerIpcHandlers();
     loadRankingBackground();
+    restoreChaseJournal();
     app.setAppUserModelId("jp.kanenao.kickrecorder");
     createJapaneseApplicationMenu();
     createTray();
@@ -2297,7 +2309,8 @@ app.on("before-quit", () => {
   updateSleepBlocker(false);
   tray?.destroy();
   tray = null;
-  chaseVodRecovery.stopAll();
+  persistChaseJournal();
+  chaseVodRecovery.suspend();
   chaseChatQueue.stopAll();
   recordingManager.stopAll();
   for (const capture of liveArticleFrameCaptures.values()) capture.stop();
