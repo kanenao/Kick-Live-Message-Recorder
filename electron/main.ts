@@ -830,8 +830,8 @@ function renewRankingChat(scope:RankingScope,selected:string|null):void{
   if(matching&&(!rankingChatReceiver.getStatus().running||rankingChatReceiver.getConnectedSlugs().length===slugs.length||Date.now()-rankingChatLastStart<120000))return;
   if(!slugs.length){rankingChatSignature="";if(rankingChatReceiver.getDesiredSlugs().length)void rankingChatReceiver.stop().catch(()=>undefined);return;}
   const topMissing=snapshot.entries.slice(0,10).some(row=>slugs.includes(row.slug)&&!rankingChatReceiver.getDesiredSlugs().includes(row.slug));
-  const retryMissing=matching&&rankingChatReceiver.getConnectedSlugs().length<slugs.length;
-  if(rankingChatStarting||Date.now()-rankingChatLastStart<(topMissing||retryMissing?60000:180000))return;
+  // Ordinary churn/partial retries must allow five minutes of active-user observation.
+  if(rankingChatStarting||Date.now()-rankingChatLastStart<(topMissing?60000:360000))return;
   rankingChatLastStart=Date.now();rankingChatSignature=signature;rankingChatStarting=true;
   void rankingChatReceiver.start(slugs).catch(()=>{if(rankingChatSignature===signature)rankingChatSignature="";}).finally(()=>{rankingChatStarting=false;});
 }
