@@ -1,0 +1,15 @@
+import assert from "node:assert/strict";
+import {momentumScores,refreshedRankingThumbnail} from "../electron/ranking-momentum.ts";
+const rows=[{slug:"a",rank:1,viewers:100,viewerChange:10},{slug:"b",rank:2,viewers:90,viewerChange:100},{slug:"c",rank:3,viewers:80,viewerChange:null},{slug:"d",rank:4,viewers:50,viewerChange:-10}];
+const chat=[{slug:"a",messages:0,state:"connected"},{slug:"b",messages:100,state:"connected"},{slug:"c",messages:99,state:"recent"}];
+const scores=momentumScores(rows,chat);
+assert.equal(scores[0].slug,"b");assert.equal(scores[0].rank,1);
+assert.equal(scores[1].slug,"a");assert.equal(scores[1].chatKnown,true);
+assert.equal(scores.find(r=>r.slug==="c").rank,null);assert.equal(scores.find(r=>r.slug==="d").chatKnown,false);
+assert.ok(scores.every(r=>r.score>=0&&r.score<=100));
+assert.equal(momentumScores(rows,[]).every(r=>r.rank===null),true);
+const time="2026-11-25T00:00:00Z",url="https://images.kick.com/frame.jpg?width=320";
+const next=refreshedRankingThumbnail(url,time);assert.equal(new URL(next).searchParams.get("width"),"320");assert.equal(new URL(next).searchParams.get("_klmr_frame"),String(Date.parse(time)));
+assert.equal(refreshedRankingThumbnail("https://images.kick.com/frame.jpg?X-Amz-Signature=abc",time),"https://images.kick.com/frame.jpg?X-Amz-Signature=abc");
+assert.equal(refreshedRankingThumbnail("https://evil.example/frame.jpg",time),null);
+console.log("総合勢い：重み・観測不足・0件の区別・サムネイル再取得・署名保護");

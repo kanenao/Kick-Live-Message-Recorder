@@ -815,7 +815,9 @@ function renewRankingChat(scope:RankingScope,selected:string|null):void{
   rankingChatLeaseTimer=setTimeout(()=>{if(Date.now()>=rankingChatLeaseUntil)stopRankingChat();},36000);
   const snapshot=rankingCache.get(scope);
   if(!snapshot||Date.now()-Date.parse(snapshot.fetchedAt)>90000){rankingChatWanted=[];if(rankingChatReceiver.getDesiredSlugs().length)void rankingChatReceiver.stop().catch(()=>undefined);return;}
-  const slugs=rankingChatTargets(snapshot,selected,chatReceiver.getDesiredSlugs());
+  const currentConnected=[...chatReceiver.getConnectedSlugs(),...rankingChatReceiver.getConnectedSlugs()];
+  const observed=rankingChatActivity.observed(currentConnected,[]);
+  const slugs=rankingChatTargets(snapshot,selected,chatReceiver.getConnectedSlugs(),undefined,observed);
   rankingChatWanted=slugs;
   const signature=slugs.join("|");
   const matching=signature===rankingChatSignature&&rankingChatReceiver.getDesiredSlugs().join("|")===signature;

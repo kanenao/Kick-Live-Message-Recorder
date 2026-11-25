@@ -686,3 +686,5 @@
 .live-rank-detail{display:block;color:#8cbca3;font-size:10px;line-height:1.5;margin-top:3px;white-space:normal;overflow-wrap:anywhere}
 
 .ranking-thumb-player{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;pointer-events:none}.ranking-thumb-toggle{position:absolute;inset:0;width:100%;height:100%;background:transparent;border:0;padding:0;cursor:pointer;z-index:2}.ranking-thumb-toggle:focus-visible{outline:2px solid #53fc18;outline-offset:-3px}.ranking-thumb-live{position:absolute;top:3px;left:3px;padding:2px 4px;border-radius:3px;background:#09150bd9;color:#92e4ae;font-size:9px;line-height:1}.ranking-thumb:hover{outline:1px solid #53fc18}
+
+.ranking-momentum{color:#92e4ae;font-variant-numeric:tabular-nums;font-size:13px}.ranking-table th{white-space:nowrap}
