@@ -1678,8 +1678,10 @@ function registerIpcHandlers(): void {
     return vodDownloadManager.cancel(id);
   });
 
-  ipcMain.handle("recording:start", async (event, slug: unknown, sourceUrl?: unknown) => {
+  ipcMain.handle("recording:start", async (event, slug: unknown, sourceUrl?: unknown, chaseFromEarliest?: unknown) => {
     assertTrustedSender(event);
+    if (chaseFromEarliest !== undefined && typeof chaseFromEarliest !== "boolean") throw new Error("録画モードが不正です。");
+    if (sourceUrl !== undefined && chaseFromEarliest === true) throw new Error("追っかけ録画はLIVE専用です。");
     const settings = readState().settings;
     const requestedSlug = typeof slug === "string" ? slug.toLowerCase() : "";
     const monitored = backgroundMonitorStatus.results.find(item => item.slug === requestedSlug);
@@ -1717,7 +1719,8 @@ function registerIpcHandlers(): void {
       retryDelaySeconds: settings.recordingRetryDelaySeconds,
       streamStartedAt: startedAt,
       filenameStartedAt: filenameStartedAt ?? undefined,
-      displayName
+      displayName,
+      chaseFromEarliest: chaseFromEarliest === true
     }, sourceUrl);
     if (sourceUrl === undefined && typeof slug === "string") {
       manuallyStoppedLiveBroadcasts.delete(requestedSlug);

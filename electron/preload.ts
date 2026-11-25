@@ -293,8 +293,8 @@ const api = {
     ipcRenderer.on("updater:status", listener);
     return () => ipcRenderer.removeListener("updater:status", listener);
   },
-  startRecording: (slug: string, sourceUrl?: string): Promise<{ ok: true; outputDirectory: string }> =>
-    ipcRenderer.invoke("recording:start", slug, sourceUrl),
+  startRecording: (slug: string, sourceUrl?: string, chaseFromEarliest = false): Promise<{ ok: true; outputDirectory: string }> =>
+    ipcRenderer.invoke("recording:start", slug, sourceUrl, chaseFromEarliest),
   stopRecording: (slug: string, isVod = false): Promise<{ ok: true }> =>
     ipcRenderer.invoke("recording:stop", slug, isVod),
   enqueueVodDownloads: (urls: string[]): Promise<VodDownloadJob[]> => ipcRenderer.invoke("vod-download:enqueue", urls),

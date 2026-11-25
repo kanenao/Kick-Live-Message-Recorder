@@ -51,6 +51,7 @@ const fakeSpawn = (_binary, args) => {
   process.stdin = new PassThrough();
   process.stdout = new PassThrough();
   process.stderr = new PassThrough();
+  process.args = args;
   process.outputPath = args[args.indexOf("--output") + 1].replace("%(ext)s", "mp4");
   process.kill = () => { queueMicrotask(() => process.emit("close", null, "SIGINT")); return true; };
   processes.push(process);
@@ -79,6 +80,15 @@ try {
   assert.equal(events.at(-1).status, "stopped");
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(processes.length, 1, "intentional stop cancels queued reconnect");
+  assert.ok(!processes[0].args.includes("ffmpeg_i:-live_start_index 0"), "normal LIVE unchanged");
+  manager.start("chasesample", directory, {chaseFromEarliest:true,streamStartedAt:expectedStreamStartedAt});
+  assert.ok(processes[1].args.includes("ffmpeg_i:-live_start_index 0"));
+  assert.ok(processes[1].args.includes("m3u8:ffmpeg"));
+  assert.ok(processes[1].outputPath.includes("_chase."));
+  processes[1].emit("spawn");
+  manager.stop("chasesample");
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.throws(()=>manager.start("sample",directory,{chaseFromEarliest:true},"https://kick.com/sample/videos/11111111-1111-4111-8111-111111111111"),/LIVE専用/);
 } finally {
   rmSync(directory, { recursive: true, force: true });
 }

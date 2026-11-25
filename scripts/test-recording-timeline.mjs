@@ -127,6 +127,9 @@ try {
   assert.equal(corruptResult.startMs, modifiedAt - 30_000);
   assert.equal(corruptResult.source, "file-mtime", "corrupt metadata must not break preview or generation");
 
+  const chaseBase = "samplechannel_20261114_030400_chase";
+  writeMetadata(chaseBase, makeMetadata(chaseBase, {timestampSource:"hls-earliest-unknown"}));
+  assert.deepEqual(resolveVideoTimelineAnchor(join(root,chaseBase+".mp4"),root,modifiedAt,180,"samplechannel"),{startMs:modifiedAt-180000,source:"file-mtime"});
   console.log("録画タイムライン同期テスト成功（メタデータ優先・チャンネル照合・旧動画フォールバック）");
 } finally {
   rmSync(root, { recursive: true, force: true });

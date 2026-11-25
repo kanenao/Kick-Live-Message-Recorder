@@ -1324,6 +1324,7 @@ export default function App() {
   const [deletingRecordingPath, setDeletingRecordingPath] = useState<string | null>(null);
   const [deletingCommentLogPath, setDeletingCommentLogPath] = useState<string | null>(null);
   const [recordingMessage, setRecordingMessage] = useState("");
+  const [chaseRecording,setChaseRecording] = useState(false);
   const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
   const libraryLoadedOnceRef = useRef(false);
   const [librarySearch, setLibrarySearch] = useState("");
@@ -2184,8 +2185,8 @@ export default function App() {
       if (isRecording) {
         await window.kickRecorder.stopRecording(slug);
       } else {
-        const result = await window.kickRecorder.startRecording(slug);
-        setRecordingMessage(`録画要求を送信しました。保存先：${result.outputDirectory}`);
+        const result = await window.kickRecorder.startRecording(slug, undefined, chaseRecording);
+        setRecordingMessage(`${chaseRecording ? "追っかけ録画を試行します（配信開始からの保存は保証されません）。" : "録画要求を送信しました。"} 保存先：${result.outputDirectory}`);
       }
     } catch (error) {
       setRecordingRequests(previous => ({ ...previous, [slug.toLowerCase()]: false }));
@@ -2234,9 +2235,9 @@ export default function App() {
         }
       }
 
-      const result = await window.kickRecorder.startRecording(slug);
+      const result = await window.kickRecorder.startRecording(slug, undefined, chaseRecording);
       setRecordingMessage(
-        `${slug} の映像録画を開始しました。録画専用チャンネルのコメント自動取得も有効です。保存先：${result.outputDirectory}` +
+        `${slug} の${chaseRecording ? "追っかけ録画を試行中です（取得可能な映像のみ）" : "映像録画を開始しました"}。コメントは受信開始後から取得します。保存先：${result.outputDirectory}` +
         (chatWarning ? " コメント接続エラー：" + chatWarning : "")
       );
     } catch (error) {
@@ -2697,6 +2698,7 @@ export default function App() {
             <div><h2>LIVE中の配信者</h2><p>配信情報を自動更新し、各カードから手動で録画を開始・停止できます</p></div>
             <span className="live-status live">LIVE · {liveChannelCards.length}件</span>
           </div>
+          <div className="notice"><label><input type="checkbox" checked={chaseRecording} onChange={e=>setChaseRecording(e.target.checked)}/> 追っかけ録画（実験機能）</label><div>手動LIVE録画を、サーバーに残っている最古のHLS映像から試行します。配信開始からの取得・過去コメント・コメント同期は保証されません。再接続は通常録画になります。自動録画・VODは変更しません。</div></div>
           {!kickCredentialsConfigured
             ? <div className="empty-inline">配信者のLIVE情報を表示するには、設定画面でKick APIのClient IDとClient Secretを登録してください。</div>
             : !settings.autoMonitorEnabled
@@ -2837,6 +2839,7 @@ export default function App() {
           <div><h2>録画専用チャンネル</h2><p>配信監視・自動録画は行わず、必要なときに録画を開始するチャンネルを登録します</p></div>
           <span className="count-pill">登録数：{recordingOnlyChannels.length}件</span>
         </div>
+        <div className="notice"><label><input type="checkbox" checked={chaseRecording} onChange={e=>setChaseRecording(e.target.checked)}/> 追っかけ録画（実験機能）</label><div>手動LIVE録画を、サーバーに残っている最古のHLS映像から試行します。配信開始からの取得・過去コメント・コメント同期は保証されません。再接続は通常録画になります。自動録画・VODは変更しません。</div></div>
         {activeRecordingChannels.length > 0 && <section className="panel live-preview-panel">
           <div className="panel-heading">
             <div><h2>録画中の映像プレビュー</h2><p>Kick公式プレーヤーで現在録画している配信を表示します</p></div>
