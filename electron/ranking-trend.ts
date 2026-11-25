@@ -15,8 +15,11 @@ export function appendTrendFrame(old:RankTrendFrames,frame:RankFrame,modes:reado
 export function rankTrendPoints(frames:readonly RankFrame[],mode:RankingMode,slug:string,start:string|null):RankTrendPoint[]{
  if(!start||!Number.isFinite(Date.parse(start)))return [];
  const session=Math.floor(Date.parse(start)/1000);
- return frames.filter(f=>Math.floor(Date.parse(f.starts.get(slug)??"")/1000)===session)
-  .map(f=>({at:Date.parse(f.at),rank:mode==="viewers"&&!f.complete?null:f.ranks[mode].get(slug)??null,start}))
+ const same=(f:RankFrame)=>Math.floor(Date.parse(f.starts.get(slug)??"")/1000)===session;
+ const first=frames.findIndex(same);
+ if(first<0)return [];
+ // Keep absent observations as explicit gaps rather than bridging a disappeared row.
+ return frames.slice(first).map(f=>({at:Date.parse(f.at),rank:!same(f)||(mode==="viewers"&&!f.complete)?null:f.ranks[mode].get(slug)??null,start}))
   .filter(p=>Number.isFinite(p.at));
 }
 /** Higher positions are drawn higher; break lines for missing or widely separated observations. */
