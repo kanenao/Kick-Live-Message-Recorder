@@ -258,7 +258,7 @@ export class KickChatReceiver {
       if (generation !== this.operationGeneration) return this.getStatus();
       this.stopping = true;
       this.desiredSlugs = [];
-      this.clearTimers();
+      this.clearActiveConnection();
       const detail = error instanceof Error ? error.message : String(error);
       this.publishStatus("コメント受信を開始できませんでした：" + detail);
       throw error;
@@ -281,8 +281,8 @@ export class KickChatReceiver {
     const socket = this.socket;
     this.socket = null;
     if (socket && socket.readyState !== WebSocket.CLOSED) {
-      socket.removeAllListeners();
-      socket.close(1000, "Application stopped");
+      // Keep the error/close handlers so an in-flight handshake settles safely.
+      // A superseded socket must never publish status for the new connection.
       socket.terminate();
     }
   }
@@ -358,6 +358,7 @@ export class KickChatReceiver {
         settled = true;
         clearTimeout(commandTimeout);
         reject(error);
+        if(socket.readyState!==WebSocket.CLOSED)socket.terminate();
       };
 
       socket.on("open", () => {
@@ -368,6 +369,7 @@ export class KickChatReceiver {
       });
 
       socket.on("message", (raw: WebSocket.RawData) => {
+        if(this.socket!==socket||generation!==this.operationGeneration||this.stopping)return;
         const frame = raw.toString();
         for (const line of frame.split(/\r?\n/)) {
           if (!line.trim()) {
@@ -445,12 +447,12 @@ export class KickChatReceiver {
 
       socket.on("error", error => {
         if (!settled) fail(new Error("Kickのチャットサーバーへ接続できませんでした：" + error.message));
-        else this.publishStatus("チャット接続エラー：" + error.message);
+        else if(this.socket===socket&&generation===this.operationGeneration&&!this.stopping)this.publishStatus("チャット接続エラー：" + error.message);
       });
 
       socket.once("close", (code, reason) => {
         clearTimeout(commandTimeout);
-        if (this.socket !== socket || generation !== this.operationGeneration) return;
+        if (this.socket !== socket || generation !== this.operationGeneration) {if(!settled)fail(new Error("チャット接続が切り替わりました。"));return;}
         this.socket = null;
         this.connectedSlugs = [];
         if (!settled) {

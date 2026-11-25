@@ -245,7 +245,7 @@ declare global {
       getRankingBackground: () => Promise<import("../../electron/ranking-background").RankingBackgroundStatus>;
       setRankingBackground: (enabled:boolean,scope:"ja"|"all") => Promise<import("../../electron/ranking-background").RankingBackgroundStatus>;
       getRegisteredRanks: () => Promise<Record<"ja"|"all",import("../../electron/kick-ranking").RankingSnapshot|null>>;
-      getRankingChatActivity: (scope:"ja"|"all",enabled:boolean) => Promise<{rows:Array<{slug:string;messages:number;state:"connected"|"connecting"|"recent"}>;message:string}>;
+      getRankingChatActivity: (scope:"ja"|"all",enabled:boolean,selected?:string|null) => Promise<{rows:Array<{slug:string;messages:number;state:"connected"|"connecting"|"recent"|"unavailable"}>;message:string;targets:number;connected:number}>;
       getKickRankingHistory: (scope:"ja"|"all",hours:24|168|720,slug:string|null) => Promise<import("../../electron/kick-ranking-history").RankingHistory>;
       getKickRanking: (scope: "ja" | "all") => Promise<import("../../electron/kick-ranking").RankingSnapshot>;
       listActiveLiveRecordings: () => Promise<string[]>;

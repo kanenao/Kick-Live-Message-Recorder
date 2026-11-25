@@ -220,7 +220,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "1.1.1-beta.98";
+const APP_VERSION = "1.1.2-beta.99";
 const CURRENT_EDITION: "beta" | "stable" = APP_VERSION.includes("-beta.") ? "beta" : "stable";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
@@ -249,6 +249,7 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  { version: "1.1.2-beta.99", title: "ランキングのライブ映像・コメント受信強化", changes: ["最大30配信の限定コメント受信、2秒表示更新・接続数表示", "サムネイルから公式LIVEプレビュー・クリック固定", "登録配信者の番組別最高順位・最高同接・前回比"] },
   { version: "1.1.1-beta.98", title: "リアルタイム順位・コメント受信の安定化", changes: ["20秒間隔の順位取得、登録配信者の日本語・全世界順位", "コメント0件・接続状態の表示、上位10配信の限定受信", "更新競合・部分購読失敗への対策", "通常録画・追っかけ録画を独立ボタンに変更", "VOD公開待ちの再起動復元・同一番組の厳格照合"] },
   { version: "1.1.0-beta.97", title: "Kickランキング・追っかけ録画（実験機能）", changes: ["日本語・全世界の同接ランキング、受信コメント勢い、30日間の観測履歴", "ランキングから直接録画、監視登録、任意のVOD・過去コメント補完", "カテゴリ絞り込み、ページ切替、古い取得結果からの録画防止"] },
   { version: "1.0.1-beta.96", title: "β版・製品版の不具合情報／機能要望の受付を改善", changes: ["β版のメニューから不具合情報・機能要望の各GitHubフォームを開けるようにした", "投稿後は対象版・種類タグとAI判定待ちを付けて整理", "製品版向けの報告も同じ受付経路に分離し、録画・記事データは変更しない"] },
