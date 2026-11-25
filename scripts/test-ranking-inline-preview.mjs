@@ -1,0 +1,14 @@
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+const ui=readFileSync(new URL("../src/ui/KickRanking.tsx",import.meta.url),"utf8");
+const css=readFileSync(new URL("../src/ui/styles.css",import.meta.url),"utf8");
+assert.ok(!ui.includes('className="ranking-live-preview"'));
+assert.ok(ui.includes('preview?.slug===row.slug&&/^[a-z0-9_-]{1,40}$/'));
+assert.ok(ui.includes('onMouseLeave={()=>leavePreview(row.slug)}'));
+assert.ok(ui.includes('className="ranking-thumb-player"'));
+assert.ok(ui.includes('autoplay=true&muted=true'));
+assert.ok(ui.includes('if(!previewVisible)closePreview()'));
+assert.match(css,/\.ranking-thumb\{[^}]*width:112px;height:63px/);
+assert.match(css,/\.ranking-thumb-player\{[^}]*width:100%;height:100%/);
+assert.ok(!css.includes(".ranking-live-preview{"));
+console.log("ランキング：等倍サムネイル内再生、拡大なし、画面外停止のソース検証成功");
