@@ -30,7 +30,7 @@ export function findMatchingChaseVod(payload: unknown, slug: string, startedAt: 
   return "https://kick.com/"+slug+"/videos/"+[...ids][0];
 }
 
-export type ChaseRecoveryRequest = {slug:string;startedAt:string|null;outputDirectory:string};
+export type ChaseRecoveryRequest = {slug:string;startedAt:string|null;outputDirectory:string;recoverVodChat?:boolean};
 export type ChaseRecoveryStatus = {id:string;slug:string;startedAt:string|null;state:"waiting"|"checking"|"queued"|"unavailable"|"cancelled";attempt:number;message:string};
 type Task = {status:ChaseRecoveryStatus;request:ChaseRecoveryRequest;controller:AbortController;timer:ReturnType<typeof setTimeout>|null};
 export class ChaseVodRecovery {

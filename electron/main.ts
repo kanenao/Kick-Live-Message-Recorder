@@ -22,6 +22,7 @@ import { registerBetaHistory } from "./beta-history";
 import { KickChatReceiver } from "./chat";
 import { KickVodChatDownloader, getVodBroadcastDetails, findChaseRecoveryVod } from "./vod-chat";
 import { ChaseVodRecovery } from "./chase-vod-recovery";
+import { ChaseChatQueue } from "./chase-chat-queue";
 import { regenerateSavedVodAss } from "./vod-ass-reexport";
 import { KickVodDownloadManager } from "./vod-download-queue";
 import { listLibrarySessions } from "./library-sessions";
@@ -745,8 +746,18 @@ const chatReceiver = new KickChatReceiver(
   status => mainWindow?.webContents.send("chat:status", status)
 );
 
+let savedVodAssBusy = false;
 const vodChatDownloader = new KickVodChatDownloader(event => {
   mainWindow?.webContents.send("vod-chat:status", event);
+  chaseChatQueue.onEvent(event);
+});
+const chaseChatQueue = new ChaseChatQueue(()=>vodChatDownloader.isRunning()||savedVodAssBusy,job=>{
+  const settings=readState().settings;
+  vodChatDownloader.start(job.url,job.directory,settings.removeEmotesFromAss,{
+    crossingSeconds:settings.vodAssCrossingSeconds,speedPercent:settings.vodAssSpeedPercent,
+    entryOffsetPx:settings.vodAssEntryOffsetPx,rowLimit:settings.vodAssRowLimit,
+    collisionGap:settings.vodAssCollisionGap,delaySeconds:settings.vodAssDelaySeconds,autoFlow:settings.assAutoFlow
+  });
 });
 
 const vodDownloadManager = new KickVodDownloadManager(job => {
@@ -759,6 +770,7 @@ const chaseVodRecovery = new ChaseVodRecovery(
     const existing=vodDownloadManager.list().find(job=>job.url===url &&
       (job.status==="queued" || job.status==="downloading" || (job.status==="completed" && job.filePath && existsSync(job.filePath))));
     if(!existing) vodDownloadManager.enqueue([url],request.outputDirectory);
+    if(request.recoverVodChat) chaseChatQueue.enqueue(url,request.outputDirectory);
   }
 );
 
@@ -1642,6 +1654,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("vod-chat:start", (event, url: unknown, removeEmotes: unknown, assOptions: unknown) => {
     assertTrustedSender(event);
+    if(savedVodAssBusy) throw new Error("ASS再生成中です。完了後に取得してください。");
     return vodChatDownloader.start(url, getRecordingOutputDirectory(), removeEmotes !== false, assOptions);
   });
 
@@ -1650,7 +1663,6 @@ function registerIpcHandlers(): void {
     return vodChatDownloader.stop();
   });
 
-  let savedVodAssBusy = false;
   ipcMain.handle("vod-chat:regenerate-ass", async (event, jsonlPath: unknown, removeEmotes: unknown, assOptions: unknown) => {
     assertTrustedSender(event);
     if (savedVodAssBusy || vodChatDownloader.isRunning()) {
@@ -1688,13 +1700,17 @@ function registerIpcHandlers(): void {
     return vodDownloadManager.cancel(id);
   });
 
+  ipcMain.handle("chase-chat:list",event=>{assertTrustedSender(event);return chaseChatQueue.list().map(({directory,...job})=>job);});
+  ipcMain.handle("chase-chat:cancel",(event,url:unknown)=>{assertTrustedSender(event);chaseChatQueue.cancel(url);return {ok:true};});
   ipcMain.handle("chase-vod:list", event => { assertTrustedSender(event); return chaseVodRecovery.list(); });
   ipcMain.handle("chase-vod:cancel", (event,id:unknown) => { assertTrustedSender(event); chaseVodRecovery.cancel(id); return {ok:true}; });
 
-  ipcMain.handle("recording:start", async (event, slug: unknown, sourceUrl?: unknown, chaseFromEarliest?: unknown, recoverVodAfterLive?: unknown) => {
+  ipcMain.handle("recording:start", async (event, slug: unknown, sourceUrl?: unknown, chaseFromEarliest?: unknown, recoverVodAfterLive?: unknown, recoverVodChat?: unknown) => {
     assertTrustedSender(event);
     if (chaseFromEarliest !== undefined && typeof chaseFromEarliest !== "boolean") throw new Error("録画モードが不正です。");
     if (sourceUrl !== undefined && chaseFromEarliest === true) throw new Error("追っかけ録画はLIVE専用です。");
+    if(recoverVodChat!==undefined && typeof recoverVodChat!=="boolean") throw new Error("過去コメント設定が不正です。");
+    if(recoverVodChat===true && (recoverVodAfterLive!==true || chaseFromEarliest!==true || sourceUrl!==undefined)) throw new Error("過去コメント補完はVOD自動補完専用です。");
     if (recoverVodAfterLive !== undefined && typeof recoverVodAfterLive !== "boolean") throw new Error("VOD補完設定が不正です。");
     if (recoverVodAfterLive === true && (sourceUrl !== undefined || chaseFromEarliest !== true)) throw new Error("自動VOD補完は追っかけ録画専用です。");
     const settings = readState().settings;
@@ -1736,7 +1752,8 @@ function registerIpcHandlers(): void {
       filenameStartedAt: filenameStartedAt ?? undefined,
       displayName,
       chaseFromEarliest: chaseFromEarliest === true,
-      recoverVodAfterLive: recoverVodAfterLive === true
+      recoverVodAfterLive: recoverVodAfterLive === true,
+      recoverVodChat: recoverVodChat === true
     }, sourceUrl);
     if (sourceUrl === undefined && typeof slug === "string") {
       manuallyStoppedLiveBroadcasts.delete(requestedSlug);
@@ -2213,6 +2230,7 @@ app.on("before-quit", () => {
   tray?.destroy();
   tray = null;
   chaseVodRecovery.stopAll();
+  chaseChatQueue.stopAll();
   recordingManager.stopAll();
   for (const capture of liveArticleFrameCaptures.values()) capture.stop();
   liveArticleFrameCaptures.clear();

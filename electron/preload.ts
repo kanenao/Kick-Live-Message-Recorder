@@ -293,10 +293,12 @@ const api = {
     ipcRenderer.on("updater:status", listener);
     return () => ipcRenderer.removeListener("updater:status", listener);
   },
+  listChaseChatRecovery: ():Promise<Array<{url:string;slug:string;videoId:string;state:string;message:string}>> => ipcRenderer.invoke("chase-chat:list"),
+  cancelChaseChatRecovery: (url:string):Promise<{ok:boolean}> => ipcRenderer.invoke("chase-chat:cancel",url),
   listChaseVodRecovery: (): Promise<Array<{id:string;slug:string;startedAt:string|null;state:string;attempt:number;message:string}>> => ipcRenderer.invoke("chase-vod:list"),
   cancelChaseVodRecovery: (id:string):Promise<{ok:boolean}> => ipcRenderer.invoke("chase-vod:cancel",id),
-  startRecording: (slug: string, sourceUrl?: string, chaseFromEarliest = false, recoverVodAfterLive = false): Promise<{ ok: true; outputDirectory: string }> =>
-    ipcRenderer.invoke("recording:start", slug, sourceUrl, chaseFromEarliest, recoverVodAfterLive),
+  startRecording: (slug: string, sourceUrl?: string, chaseFromEarliest = false, recoverVodAfterLive = false, recoverVodChat = false): Promise<{ ok: true; outputDirectory: string }> =>
+    ipcRenderer.invoke("recording:start", slug, sourceUrl, chaseFromEarliest, recoverVodAfterLive, recoverVodChat),
   stopRecording: (slug: string, isVod = false): Promise<{ ok: true }> =>
     ipcRenderer.invoke("recording:stop", slug, isVod),
   enqueueVodDownloads: (urls: string[]): Promise<VodDownloadJob[]> => ipcRenderer.invoke("vod-download:enqueue", urls),

@@ -29,6 +29,7 @@ export type RecordingOptions = {
   filenameStartedAt?: string;
   chaseFromEarliest?: boolean;
   recoverVodAfterLive?: boolean;
+  recoverVodChat?: boolean;
 };
 
 type ActiveRecording = {
@@ -49,6 +50,7 @@ type ActiveRecording = {
   isVod: boolean;
   chaseFromEarliest: boolean;
   recoverVodAfterLive: boolean;
+  recoverVodChat: boolean;
   streamStartedAt: string | null;
   watchdogTimer: NodeJS.Timeout | null;
   terminationTimer: NodeJS.Timeout | null;
@@ -203,7 +205,7 @@ export class KickRecordingManager {
     private readonly onEvent: (event: RecordingEvent) => void,
     private readonly probeLive: (slug: string) => Promise<LiveProbeResult> = async () => null,
     private readonly spawnProcess: typeof spawn = spawn,
-    private readonly onChaseComplete?: (request: {slug:string;startedAt:string|null;outputDirectory:string}) => void
+    private readonly onChaseComplete?: (request: {slug:string;startedAt:string|null;outputDirectory:string;recoverVodChat?:boolean}) => void
   ) {}
 
   private sessionKey(slug: string, isVod: boolean): string {
@@ -294,6 +296,7 @@ export class KickRecordingManager {
       isVod,
       chaseFromEarliest,
       recoverVodAfterLive: chaseFromEarliest && options.recoverVodAfterLive === true,
+      recoverVodChat: chaseFromEarliest && options.recoverVodAfterLive === true && options.recoverVodChat === true,
       streamStartedAt: typeof options.streamStartedAt === "string" ? options.streamStartedAt : null,
       watchdogTimer: null,
       terminationTimer: null,
@@ -535,7 +538,7 @@ export class KickRecordingManager {
       persistRecordingSession(session, slug, "completed", savedFiles);
       this.onEvent({ slug, status: "stopped", filePath: savedPath, isVod: false,
         message: decision.message });
-      if (session.recoverVodAfterLive) this.onChaseComplete?.({slug,startedAt:session.streamStartedAt,outputDirectory:session.outputDirectory});
+      if (session.recoverVodAfterLive) this.onChaseComplete?.({slug,startedAt:session.streamStartedAt,outputDirectory:session.outputDirectory,recoverVodChat:session.recoverVodChat});
       return;
     }
 
