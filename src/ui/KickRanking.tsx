@@ -130,6 +130,8 @@ export function KickRanking({configured,desktop,onSettings,registered,canRegiste
   }
   const points=history?.points??[];
   const max=Math.max(1,...points.map(p=>p.viewers));
+  const savedRanks=points.flatMap(p=>p.rank===null?[]:[p.rank]);
+  const minSavedRank=savedRanks.length?Math.min(...savedRanks):1,maxSavedRank=savedRanks.length?Math.max(...savedRanks):1;
   const x=(at:number)=>20+560*(at-(history?.firstAt??at))/Math.max(1,(history?.lastAt??at)-(history?.firstAt??at));
   const y=(viewers:number)=>130-110*viewers/max;
   const q=search.trim().toLowerCase();
@@ -205,6 +207,7 @@ export function KickRanking({configured,desktop,onSettings,registered,canRegiste
       {historyError&&<p role="alert">{historyError}</p>}
       {historySlug&&<div className="ranking-graph"><strong>{historySlug} の{rankLabels[sort]}推移（直近の実測・最大60点）</strong>{rankTrendSegments(selectedTrend,600,152).length?<svg viewBox="0 0 600 152" role="img" aria-label="直近の順位推移">{rankTrendSegments(selectedTrend,600,152).map((v,i)=><polyline key={i} points={v} fill="none" stroke="#59b6ff" strokeWidth="2"/>)}</svg>:<p>連続した順位観測がまだ2点ありません。</p>}{selectedTrend.length>0&&<p className="ranking-caption">最新観測：{selectedTrend.at(-1)?.rank??"未取得"}{selectedTrend.at(-1)?.rank!=null?"位":""} ／ 上ほど上位。欠測は線で結びません。</p>}</div>}
       {history&&<><p className="ranking-caption">取得回数：{history.samples}回 ／ {history.firstAt?new Date(history.firstAt).toLocaleString("ja-JP"):"記録なし"} 〜 {history.lastAt?new Date(history.lastAt).toLocaleString("ja-JP"):"記録なし"}</p>
+      {historySlug&&<div className="ranking-graph"><strong>{historySlug} の同接順位推移（保存履歴）</strong>{points.some(p=>p.rank!==null)?<><svg viewBox="0 0 600 152" role="img" aria-label={historySlug+"の観測同接順位"}><path d="M20 20V130H580" stroke="#63756a" fill="none"/>{points.filter(p=>p.rank!==null).map(p=>{return <circle key={p.at} cx={x(p.at)} cy={20+110*(p.rank!-minSavedRank)/Math.max(1,maxSavedRank-minSavedRank)} r="2.5" fill="#59b6ff"><title>{new Date(p.at).toLocaleString("ja-JP")+"："+p.rank+"位"}</title></circle>;})}</svg><p className="ranking-caption">上ほど上位。確定した順位の観測点のみ表示。</p></>:<p>この期間の確定順位の記録がありません。</p>}</div>}
       {historySlug&&<div className="ranking-graph"><strong>{historySlug} の視聴者数推移（保存履歴）</strong>{points.length?<><svg viewBox="0 0 600 152" role="img" aria-label={historySlug+"の観測視聴者数"}><path d="M20 20V130H580" stroke="#63756a" fill="none"/>{points.map(p=><circle key={p.at} cx={x(p.at)} cy={y(p.viewers)} r="2.5" fill="#75e2a1"><title>{new Date(p.at).toLocaleString("ja-JP")+"："+p.viewers+"人"}</title></circle>)}</svg><p className="ranking-caption">観測最高 {max.toLocaleString("ja-JP")} 人 ／ {points.length}点（点のない時間は不明）</p></>:<p>この期間の観測記録がありません。</p>}</div>}
       <div className="ranking-scroll"><table className="ranking-table"><thead><tr><th>順</th><th>配信者</th><th>観測最高同接</th><th>最高順位</th><th>観測回数</th></tr></thead><tbody>{history.leaders.map((r,i)=><tr key={r.slug}><td>{i+1}</td><td><button className="ranking-name" type="button" onClick={()=>openHistory(r.slug)}>{r.name}　推移</button></td><td>{r.peakViewers.toLocaleString("ja-JP")}</td><td>{r.bestRank??"不明"}</td><td>{r.samples}</td></tr>)}</tbody></table></div></>}
       </>}
