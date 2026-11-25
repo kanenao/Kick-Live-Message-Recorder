@@ -2686,7 +2686,7 @@ export default function App() {
 
       {storageError && <div className="storage-error" role="alert">{storageError}</div>}
 
-      {tab === "ranking" && <KickRanking configured={kickCredentialsConfigured} desktop={isDesktop} onSettings={()=>setTab("settings")}/>}
+      {tab === "ranking" && <KickRanking configured={kickCredentialsConfigured} desktop={isDesktop} onSettings={()=>setTab("settings")} registered={[...channels,...recordingOnlyChannels].map(c=>c.name.toLowerCase())} canRegister={isReady} onRegister={slug=>{if(!/^[a-z0-9_]{1,25}$/.test(slug)||[...channels,...recordingOnlyChannels].some(c=>c.name.toLowerCase()===slug)||channels.length>=200)return false;setChannels(prev=>prev.some(c=>c.name.toLowerCase()===slug)?prev:[...prev,{id:Date.now(),name:slug,url:"https://kick.com/"+slug,mode:"auto",status:"待機中",recording:false}]);return true;}}/>}
 
       {tab === "dashboard" && <>
         <section className="stats">

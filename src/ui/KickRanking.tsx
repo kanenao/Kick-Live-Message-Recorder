@@ -1,9 +1,15 @@
 import {useEffect,useRef,useState} from "react";
 import type {RankingScope,RankingSnapshot} from "../../electron/kick-ranking";
-export function KickRanking({configured,desktop,onSettings}:{configured:boolean;desktop:boolean;onSettings:()=>void}){
+import type {RankingHistory} from "../../electron/kick-ranking-history";
+export function KickRanking({configured,desktop,onSettings,registered,canRegister,onRegister}:{configured:boolean;desktop:boolean;onSettings:()=>void;registered:string[];canRegister:boolean;onRegister:(slug:string)=>boolean}){
   const [scope,setScope]=useState<RankingScope>("ja");
   const [snapshots,setSnapshots]=useState<Partial<Record<RankingScope,RankingSnapshot>>>({});
   const [search,setSearch]=useState("");
+  const [historyHours,setHistoryHours]=useState<24|168>(24);
+  const [historySlug,setHistorySlug]=useState<string|null>(null);
+  const [history,setHistory]=useState<RankingHistory|null>(null);
+  const [historyError,setHistoryError]=useState("");
+  const [showHistory,setShowHistory]=useState(false);
   const [sort,setSort]=useState<"viewers"|"growth">("viewers");
   const [auto,setAuto]=useState(true);
   const [busy,setBusy]=useState(false);
@@ -50,6 +56,21 @@ export function KickRanking({configured,desktop,onSettings}:{configured:boolean;
     finally{locks.current.delete(slug);setPending([...locks.current]);}
   }
   const snapshot=snapshots[scope];
+  useEffect(()=>{
+    if(!desktop||!showHistory||!window.kickRecorder)return;
+    let live=true;setHistory(null);setHistoryError("");
+    void window.kickRecorder.getKickRankingHistory(scope,historyHours,historySlug).then(value=>{if(live)setHistory(value);}).catch(e=>{if(live)setHistoryError(e instanceof Error?e.message:String(e));});
+    return()=>{live=false;};
+  },[scope,historyHours,historySlug,desktop,showHistory,snapshot?.fetchedAt]);
+  function register(slug:string){
+    if(!canRegister||registered.includes(slug))return;
+    if(!window.confirm(slug+" を自動録画対象として登録しますか？ アプリの監視・自動録画設定が有効な場合、配信中や今後の配信を自動録画します。"))return;
+    setMessage(onRegister(slug)?slug+"：自動監視・録画対象に追加しました。設定に従って動作します。": "登録できません。チャンネル名・登録上限を確認してください。");
+  }
+  const points=history?.points??[];
+  const max=Math.max(1,...points.map(p=>p.viewers));
+  const x=(at:number)=>20+560*(at-(history?.firstAt??at))/Math.max(1,(history?.lastAt??at)-(history?.firstAt??at));
+  const y=(viewers:number)=>130-110*viewers/max;
   const q=search.trim().toLowerCase();
   const entries=(snapshot?.entries??[]).filter(row=>!q||[row.slug,row.name,row.title,row.category].some(value=>value.toLowerCase().includes(q)));
   if(sort==="growth")entries.sort((a,b)=>(b.viewerChange??-Infinity)-(a.viewerChange??-Infinity)||a.rank-b.rank);
@@ -66,7 +87,16 @@ export function KickRanking({configured,desktop,onSettings}:{configured:boolean;
     {!!active.length&&<div className="ranking-active"><strong>現在録画中（ランキング圏外も表示）</strong>{active.map(slug=><div key={slug}><span>{slug}</span>{action(slug)}</div>)}</div>}
     {busy&&!snapshot&&<div className="empty-state">ランキングを取得しています…</div>}
     {!busy&&snapshot&&visible.length===0&&<div className="empty-state">条件に一致する配信がありません。</div>}
-    <div className="ranking-scroll"><table className="ranking-table"><thead><tr><th>順位</th><th>配信画面</th><th>配信者・番組情報</th><th>同時視聴者</th><th>配信時間</th><th>録画操作</th></tr></thead><tbody>{visible.map(row=><tr key={row.slug}><td><strong className="ranking-rank">{row.rank}</strong><small>{row.rankChange===null?"—":row.rankChange>0?"↑"+row.rankChange:row.rankChange<0?"↓"+Math.abs(row.rankChange):"→"}</small></td><td><button className="ranking-thumb" onClick={()=>void window.kickRecorder?.openKickProfile(row.slug).catch(e=>setMessage(String(e)))} aria-label={row.name+"の配信ページ"}>{row.thumbnail?<img src={row.thumbnail} alt="" loading="lazy" referrerPolicy="no-referrer"/>:<span>LIVE</span>}</button></td><td><button className="ranking-name" onClick={()=>void window.kickRecorder?.openKickProfile(row.slug).catch(e=>setMessage(String(e)))}>{row.avatar&&<img src={row.avatar} alt="" loading="lazy" referrerPolicy="no-referrer"/>}{row.name}</button><div className="ranking-title">{row.title}</div><small>{row.category} ・ {row.language||"言語不明"}</small></td><td><strong className="ranking-viewers">{row.viewers.toLocaleString("ja-JP")}</strong><small>{row.viewerChange===null?"比較なし":(row.viewerChange>0?"+":"")+row.viewerChange.toLocaleString("ja-JP")}</small></td><td>{elapsed(row.startedAt)}</td><td>{action(row.slug)}</td></tr>)}</tbody></table></div>
+    <div className="ranking-scroll"><table className="ranking-table"><thead><tr><th>順位</th><th>配信画面</th><th>配信者・番組情報</th><th>同時視聴者</th><th>配信時間</th><th>録画操作</th></tr></thead><tbody>{visible.map(row=><tr key={row.slug}><td><strong className="ranking-rank">{row.rank}</strong><small>{row.rankChange===null?"—":row.rankChange>0?"↑"+row.rankChange:row.rankChange<0?"↓"+Math.abs(row.rankChange):"→"}</small></td><td><button className="ranking-thumb" onClick={()=>void window.kickRecorder?.openKickProfile(row.slug).catch(e=>setMessage(String(e)))} aria-label={row.name+"の配信ページ"}>{row.thumbnail?<img src={row.thumbnail} alt="" loading="lazy" referrerPolicy="no-referrer"/>:<span>LIVE</span>}</button></td><td><button className="ranking-name" onClick={()=>void window.kickRecorder?.openKickProfile(row.slug).catch(e=>setMessage(String(e)))}>{row.avatar&&<img src={row.avatar} alt="" loading="lazy" referrerPolicy="no-referrer"/>}{row.name}</button><div className="ranking-title">{row.title}</div><small>{row.category} ・ {row.language||"言語不明"}</small></td><td><strong className="ranking-viewers">{row.viewers.toLocaleString("ja-JP")}</strong><small>{row.viewerChange===null?"比較なし":(row.viewerChange>0?"+":"")+row.viewerChange.toLocaleString("ja-JP")}</small></td><td>{elapsed(row.startedAt)}</td><td>{action(row.slug)}<div className="ranking-row-actions"><button className="small-action" onClick={()=>{setShowHistory(true);setHistorySlug(row.slug);}}>推移</button><button className="small-action" disabled={!canRegister||registered.includes(row.slug)||!/^[a-z0-9_]{1,25}$/.test(row.slug)} onClick={()=>register(row.slug)}>{registered.includes(row.slug)?"登録済":"監視・録画登録"}</button></div></td></tr>)}</tbody></table></div>
+    <div className="ranking-history-panel">
+      <div className="panel-heading"><div><h2>ランキング履歴・視聴者数推移</h2><p>PC内で観測した上位100件を5分単位で保存。未取得時間の数値は補完しません。</p></div><button className="small-action" onClick={()=>setShowHistory(v=>!v)}>{showHistory?"閉じる":"履歴を見る"}</button></div>
+      {showHistory&&<><div className="ranking-toolbar"><select aria-label="集計期間" value={historyHours} onChange={e=>setHistoryHours(e.target.value==="168"?168:24)}><option value={24}>過去24時間</option><option value={168}>過去7日間</option></select><span>最高同接順（観測値）</span></div>
+      {historyError&&<p role="alert">{historyError}</p>}
+      {history&&<><p className="ranking-caption">取得回数：{history.samples}回 ／ {history.firstAt?new Date(history.firstAt).toLocaleString("ja-JP"):"記録なし"} 〜 {history.lastAt?new Date(history.lastAt).toLocaleString("ja-JP"):"記録なし"}</p>
+      {historySlug&&<div className="ranking-graph"><strong>{historySlug} の視聴者数推移</strong>{points.length?<><svg viewBox="0 0 600 152" role="img" aria-label={historySlug+"の観測視聴者数"}><path d="M20 20V130H580" stroke="#63756a" fill="none"/>{points.map(p=><circle key={p.at} cx={x(p.at)} cy={y(p.viewers)} r="2.5" fill="#75e2a1"><title>{new Date(p.at).toLocaleString("ja-JP")+"："+p.viewers+"人"}</title></circle>)}</svg><p className="ranking-caption">観測最高 {max.toLocaleString("ja-JP")} 人 ／ {points.length}点（点のない時間は不明）</p></>:<p>この期間の観測記録がありません。</p>}</div>}
+      <div className="ranking-scroll"><table className="ranking-table"><thead><tr><th>順</th><th>配信者</th><th>観測最高同接</th><th>最高順位</th><th>観測回数</th></tr></thead><tbody>{history.leaders.map((r,i)=><tr key={r.slug}><td>{i+1}</td><td><button className="ranking-name" onClick={()=>setHistorySlug(r.slug)}>{r.name}　推移</button></td><td>{r.peakViewers.toLocaleString("ja-JP")}</td><td>{r.bestRank??"不明"}</td><td>{r.samples}</td></tr>)}</tbody></table></div></>}
+      </>}
+    </div>
     <p className="ranking-caption">視聴者増加数は前回取得からの増減です。チャット投稿数や全期間の記録ではありません。録画は通常LIVE録画で、コメント取得は既存の設定に従います。</p>
   </section>;
 }

@@ -242,6 +242,7 @@ declare global {
       saveKickCredentials: (credentials: { clientId: string; clientSecret: string }) => Promise<{ ok: boolean; clientId: string }>;
       testKickConnection: () => Promise<{ ok: boolean; message: string }>;
       clearKickCredentials: () => Promise<{ ok: boolean }>;
+      getKickRankingHistory: (scope:"ja"|"all",hours:24|168,slug:string|null) => Promise<import("../../electron/kick-ranking-history").RankingHistory>;
       getKickRanking: (scope: "ja" | "all") => Promise<import("../../electron/kick-ranking").RankingSnapshot>;
       listActiveLiveRecordings: () => Promise<string[]>;
       checkKickChannels: (slugs: string[]) => Promise<KickRecorderChannelCheck[]>;

@@ -21,6 +21,7 @@ import { fetchEditionReleases, type KickEdition } from "./edition-releases";
 import { registerBetaHistory } from "./beta-history";
 import { KickChatReceiver } from "./chat";
 import { collectRanking, type RankingScope, type RankingSnapshot } from "./kick-ranking";
+import { KickRankingHistory } from "./kick-ranking-history";
 import { KickVodChatDownloader, getVodBroadcastDetails } from "./vod-chat";
 import { regenerateSavedVodAss } from "./vod-ass-reexport";
 import { KickVodDownloadManager } from "./vod-download-queue";
@@ -357,6 +358,7 @@ async function getKickAccessToken(): Promise<string> {
   return cachedKickToken.value;
 }
 
+function rankingHistory():KickRankingHistory{return new KickRankingHistory(join(app.getPath("userData"),"RankingHistory"));}
 const rankingCache = new Map<RankingScope,RankingSnapshot>();
 const rankingInflight = new Map<RankingScope,Promise<RankingSnapshot>>();
 let rankingLastRequestAt=0;
@@ -378,7 +380,9 @@ async function getKickRanking(scope:RankingScope):Promise<RankingSnapshot>{
       if(!response.ok)throw Error("ランキングを取得できません（HTTP "+response.status+"）。");
       return response.json();
     },old);
-    rankingCache.set(scope,snapshot);return snapshot;
+    rankingCache.set(scope,snapshot);
+    try{rankingHistory().save(snapshot);}catch(error){console.warn("ランキング履歴を保存できませんでした:",error);}
+    return snapshot;
   })();
   rankingInflight.set(scope,work);
   try{return await work;}finally{rankingInflight.delete(scope);}
@@ -1611,6 +1615,11 @@ function registerIpcHandlers(): void {
     return result;
   });
 
+  ipcMain.handle("kick:ranking-history",(event,scope:unknown,hours:unknown,slug:unknown)=>{
+    assertTrustedSender(event);
+    if((scope!=="ja"&&scope!=="all")||(hours!==24&&hours!==168)||(slug!==null&&(typeof slug!=="string"||!/^[a-z0-9_-]{1,40}$/.test(slug))))throw Error("履歴の検索条件が不正です。");
+    return rankingHistory().query(scope,hours,slug);
+  });
   ipcMain.handle("kick:ranking", async (event, scope: unknown) => {
     assertTrustedSender(event);
     if(scope!=="ja"&&scope!=="all")throw Error("ランキングの範囲が不正です。");
