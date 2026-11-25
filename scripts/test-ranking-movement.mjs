@@ -27,3 +27,13 @@ const equal=rankingFrame(snap(nextRows,"2026-11-25T00:07:00Z"),[chat("a",30),cha
 assert.deepEqual(rankMovement(equal,current,"growth",nextRows[1]),{kind:"keep",delta:0,previous:1});
 const otherScope=rankingFrame(snap(nextRows,"2026-11-25T00:07:00Z",true,3,"all"));
 assert.equal(rankMovement(otherScope,current,"viewers",nextRows[0]).kind,"unknown");
+
+// Chat-only ticks must update rank movement even if Kick API data is unchanged.
+const shared=snap([row("a",1,10),row("b",2,20)],"2026-11-25T00:08:00Z");
+const chatBefore=rankingFrame(shared,[chat("a",10),chat("b",20)],"2026-11-25T00:08:00Z");
+const chatAfter=rankingFrame(shared,[chat("a",30),chat("b",10)],"2026-11-25T00:08:10Z");
+assert.equal(rankMovement(chatAfter,chatBefore,"chat",shared.entries[0]).kind,"up");
+assert.equal(rankMovement(chatAfter,chatBefore,"active",shared.entries[1]).kind,"down");
+assert.equal(rankMovement(chatAfter,chatBefore,"chat",shared.entries[0]).previous,2);
+assert.equal(rankMovement(chatAfter,chatAfter,"chat",shared.entries[0]).kind,"unknown");
+console.log("10秒チャット順位：API更新なしでも順位変動を独立比較");
