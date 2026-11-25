@@ -658,3 +658,21 @@
 .feedback-hint { color: #b1bdcd; font-size: 12px; line-height: 1.75; margin: 14px 0 0; }
 .feedback-message { margin-top: 12px; color: #a5dfb5; font-size: 12px; overflow-wrap: anywhere; }
 @media (max-width: 850px) { .feedback-kinds { grid-template-columns: 1fr; } }
+
+.kick-ranking .ranking-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0}
+.ranking-toolbar select,.ranking-toolbar input:not([type=checkbox]){background:#1a2026;border:1px solid #39434d;color:#e9eff2;padding:8px;border-radius:6px;min-width:100px}
+.ranking-toolbar input:not([type=checkbox]){flex:1;min-width:180px}
+.ranking-caption{font-size:11px;color:#a4aeb9;margin:9px 0;line-height:1.6}
+.ranking-scroll{overflow-x:auto;max-height:70vh;overflow-y:auto}
+.ranking-table{border-collapse:collapse;width:100%;min-width:720px;font-size:12px;text-align:left}
+.ranking-table th{position:sticky;top:0;z-index:1;background:#212a31;color:#aebbc7;padding:10px 8px;white-space:nowrap}
+.ranking-table td{padding:9px 8px;border-bottom:1px solid #334039;vertical-align:middle}
+.ranking-table td small{display:block;color:#a0aeb7;font-size:10px;margin-top:4px}
+.ranking-rank{font-size:20px;color:#87e7ac}.ranking-viewers{font-size:16px;color:#e6f4e9;font-variant-numeric:tabular-nums}
+.ranking-thumb{display:block;width:112px;height:63px;border:1px solid #384a40;background:#1a2620;border-radius:6px;overflow:hidden;padding:0;cursor:pointer;color:#83e2a7}
+.ranking-thumb img{width:100%;height:100%;object-fit:cover}
+.ranking-name{display:flex;align-items:center;gap:6px;background:none;border:0;color:#83e2a7;cursor:pointer;padding:0;font-weight:700;word-break:break-word;text-align:left}
+.ranking-name img{width:24px;height:24px;object-fit:cover;border-radius:50%}
+.ranking-title{font-weight:600;line-height:1.4;margin-top:5px;overflow-wrap:anywhere}
+.ranking-active{padding:12px;background:#192820;border-radius:6px;margin-bottom:12px;color:#c0e9d1}
+.ranking-active>div{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:5px 0}

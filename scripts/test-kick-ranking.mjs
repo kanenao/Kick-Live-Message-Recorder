@@ -1,0 +1,13 @@
+import assert from "node:assert/strict";
+import {collectRanking,parseRankingPage} from "../electron/kick-ranking.ts";
+const make=(slug,viewers,extra={})=>({channel:{slug},broadcaster_user:{username:slug},viewer_count:viewers,title:"test",language_code:"ja",started_at:"2026-11-25T00:00:00Z",...extra});
+let requests=[];
+const snapshot=await collectRanking("ja",async url=>{requests.push(url);return requests.length===1?{data:[make("sample",5),make("top",20)],pagination:{next_cursor:"page2"}}:{data:[make("sample",8),make("other",10)],pagination:{next_cursor:null}}});
+assert.equal(requests.length,2);assert.equal(requests[0].searchParams.get("language_code"),"ja");assert.equal(requests[1].searchParams.get("cursor"),"page2");
+assert.deepEqual(snapshot.entries.map(r=>r.slug),["top","other","sample"]);assert.equal(snapshot.complete,true);
+const next=await collectRanking("ja",async()=>({data:[make("sample",30),make("top",20)],pagination:{}}),snapshot);
+assert.equal(next.entries[0].rankChange,2);assert.equal(next.entries[0].viewerChange,22);
+const capped=await collectRanking("all",async()=>({data:[make("sample",1)],pagination:{next_cursor:"same"}}),undefined,2);assert.equal(capped.complete,false);
+assert.equal(parseRankingPage({data:[make("bad",-1),make("valid",0,{thumbnail:"https://example.com/track"})]}).entries[0].thumbnail,null);
+assert.throws(()=>parseRankingPage({unexpected:[]}));
+console.log("Kickランキング：ページ取得、順位・増減、重複除外、暫定表示、安全なサムネイル検証成功");

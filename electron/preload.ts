@@ -243,6 +243,8 @@ const api = {
     ipcRenderer.invoke("kick:save-credentials", credentials),
   testKickConnection: (): Promise<{ ok: boolean; message: string }> => ipcRenderer.invoke("kick:test-connection"),
   clearKickCredentials: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("kick:clear-credentials"),
+  getKickRanking: (scope: "ja" | "all"): Promise<import("./kick-ranking").RankingSnapshot> => ipcRenderer.invoke("kick:ranking",scope),
+  listActiveLiveRecordings: (): Promise<string[]> => ipcRenderer.invoke("recording:active-live"),
   checkKickChannels: (slugs: string[]): Promise<KickChannelCheck[]> => ipcRenderer.invoke("kick:check-channels", slugs),
   getBackgroundMonitorStatus: (): Promise<BackgroundMonitorStatus> => ipcRenderer.invoke("monitor:get-status"),
   onBackgroundMonitorStatus: (callback: (status: BackgroundMonitorStatus) => void): (() => void) => {

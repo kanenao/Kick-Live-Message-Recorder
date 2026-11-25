@@ -20,6 +20,7 @@ import { autoUpdater } from "electron-updater";
 import { fetchEditionReleases, type KickEdition } from "./edition-releases";
 import { registerBetaHistory } from "./beta-history";
 import { KickChatReceiver } from "./chat";
+import { collectRanking, type RankingScope, type RankingSnapshot } from "./kick-ranking";
 import { KickVodChatDownloader, getVodBroadcastDetails } from "./vod-chat";
 import { regenerateSavedVodAss } from "./vod-ass-reexport";
 import { KickVodDownloadManager } from "./vod-download-queue";
@@ -354,6 +355,33 @@ async function getKickAccessToken(): Promise<string> {
     expiresAt: Date.now() + Math.max(60, expiresIn) * 1000
   };
   return cachedKickToken.value;
+}
+
+const rankingCache = new Map<RankingScope,RankingSnapshot>();
+const rankingInflight = new Map<RankingScope,Promise<RankingSnapshot>>();
+let rankingLastRequestAt=0;
+async function getKickRanking(scope:RankingScope):Promise<RankingSnapshot>{
+  if(!getKickCredentialsStatus().configured)throw Error("設定画面でKick APIのClient IDとClient Secretを登録してください。");
+  const old=rankingCache.get(scope);
+  if(old&&Date.now()-Date.parse(old.fetchedAt)<60000)return old;
+  const pending=rankingInflight.get(scope);if(pending)return pending;
+  if(rankingInflight.size)throw Error("別のランキングを取得中です。少し時間をおいてください。");
+  if(Date.now()<kickChannelRateLimitUntil)throw Error("Kick APIのアクセス制限中です。時間をおいてください。");
+  if(Date.now()-rankingLastRequestAt<15000)throw Error("連続更新を制限しています。15秒ほどお待ちください。");
+  rankingLastRequestAt=Date.now();
+  const work=(async()=>{
+    const token=await getKickAccessToken();
+    const snapshot=await collectRanking(scope,async url=>{
+      if(Date.now()<kickChannelRateLimitUntil)throw Error("Kick APIのアクセス制限中です。");
+      const response=await fetch(url,{headers:{"Authorization":"Bearer "+token,"Accept":"application/json"},signal:AbortSignal.timeout(15000),redirect:"error"});
+      if(response.status===429){kickChannelRateLimitUntil=Date.now()+getKickChannelRateLimitWaitSeconds(response)*1000;throw Error("Kick APIのアクセス制限に達しました。自動更新は待機します。");}
+      if(!response.ok)throw Error("ランキングを取得できません（HTTP "+response.status+"）。");
+      return response.json();
+    },old);
+    rankingCache.set(scope,snapshot);return snapshot;
+  })();
+  rankingInflight.set(scope,work);
+  try{return await work;}finally{rankingInflight.delete(scope);}
 }
 
 async function checkKickChannels(input: unknown, includeProfiles = true): Promise<KickChannelCheck[]> {
@@ -1583,6 +1611,12 @@ function registerIpcHandlers(): void {
     return result;
   });
 
+  ipcMain.handle("kick:ranking", async (event, scope: unknown) => {
+    assertTrustedSender(event);
+    if(scope!=="ja"&&scope!=="all")throw Error("ランキングの範囲が不正です。");
+    return getKickRanking(scope);
+  });
+  ipcMain.handle("recording:active-live",event=>{assertTrustedSender(event);return recordingManager.listActiveLiveSlugs();});
   ipcMain.handle("kick:check-channels", async (event, slugs: unknown) => {
     assertTrustedSender(event);
     return checkKickChannels(slugs);

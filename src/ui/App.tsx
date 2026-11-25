@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { KickRanking } from "./KickRanking";
 import { getRecordingChannelSlug } from "../shared/recording-library";
 import { getAvailableArticleChannels, selectAssociatedArticleLogs } from "../shared/article-sources";
 import { computeNicoAssProfile } from "../../electron/nico-ass-auto";
@@ -1250,7 +1251,7 @@ export default function App() {
     const ticker = window.setInterval(() => setVodClock(Date.now()), 1000);
     return () => window.clearInterval(ticker);
   }, []);
-  const [tab, setTab] = useState<"dashboard" | "recording" | "library" | "comment-video" | "articles" | "updates" | "feedback" | "settings">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "ranking" | "recording" | "library" | "comment-video" | "articles" | "updates" | "feedback" | "settings">("dashboard");
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const openFeedback = async (kind: "bug" | "feature"): Promise<void> => {
     if (!window.kickRecorder) {
@@ -2665,6 +2666,7 @@ export default function App() {
       <div className="brand"><img className="brand-mark brand-icon" src="./app-icon.png" alt="" aria-hidden="true" /><div><strong>Kick Live Message Recorder</strong><small>配信映像・チャット記録</small></div></div>
       <div className="nav-label">メインメニュー</div>
       <button className={tab === "dashboard" ? "nav-item selected" : "nav-item"} onClick={() => setTab("dashboard")}>▦ <span>ダッシュボード</span></button>
+      <button className={tab === "ranking" ? "nav-item selected" : "nav-item"} onClick={() => setTab("ranking")}>▥ <span>Kickランキング</span></button>
       <button className={tab === "recording" ? "nav-item selected" : "nav-item"} onClick={() => setTab("recording")}>● <span>録画専用</span></button>
       <button className={tab === "library" ? "nav-item selected" : "nav-item"} onClick={() => setTab("library")}>▤ <span>録画ライブラリ</span></button>
       <button className={tab === "comment-video" ? "nav-item selected" : "nav-item"} onClick={() => setTab("comment-video")}>✦ <span>コメント付き動画</span></button>
@@ -2678,11 +2680,13 @@ export default function App() {
 
     <main className={tab === "library" ? "main main-library" : "main"}>
       <header className="topbar">
-        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "recording" ? "録画専用" : tab === "library" ? "録画ライブラリ" : tab === "comment-video" ? "コメント付き動画を生成" : tab === "articles" ? "配信記事" : tab === "updates" ? "バージョン更新" : tab === "feedback" ? "不具合情報・機能要望" : "設定"}</h1></div>
+        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "ranking" ? "Kickランキング" : tab === "recording" ? "録画専用" : tab === "library" ? "録画ライブラリ" : tab === "comment-video" ? "コメント付き動画を生成" : tab === "articles" ? "配信記事" : tab === "updates" ? "バージョン更新" : tab === "feedback" ? "不具合情報・機能要望" : "設定"}</h1></div>
         <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="alpha-tag">β版</span><img className="avatar avatar-brand" src="./app-icon.png" alt="Kick Live Message Recorder アイコン" /></div>
       </header>
 
       {storageError && <div className="storage-error" role="alert">{storageError}</div>}
+
+      {tab === "ranking" && <KickRanking configured={kickCredentialsConfigured} desktop={isDesktop} onSettings={()=>setTab("settings")}/>}
 
       {tab === "dashboard" && <>
         <section className="stats">

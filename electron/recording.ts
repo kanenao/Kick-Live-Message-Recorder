@@ -208,6 +208,8 @@ export class KickRecordingManager {
     return this.active.size > 0;
   }
 
+  listActiveLiveSlugs(): string[] { return [...this.active.keys()].filter(key=>key.startsWith("live:")).map(key=>key.slice(5)); }
+
   isRecording(slug: string): boolean {
     return this.active.has(this.sessionKey(slug.toLowerCase(), false));
   }
