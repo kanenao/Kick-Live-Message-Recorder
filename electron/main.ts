@@ -1,3 +1,4 @@
+import {RankingSupportActivity} from "./ranking-support";
 import { RankingAiWeights } from "./ranking-ai";
 import { buildFeedbackIssueUrl } from "./feedback-url";
 import { rankingChatTargets } from "./ranking-chat-targets";
@@ -804,6 +805,18 @@ const chatReceiver = new KickChatReceiver(
 const rankingChatReceiver = new KickChatReceiver(getRecordingOutputDirectory,()=>false,message=>{
   rankingChatActivity.add(message.channelSlug.toLowerCase(),Date.now(),message.eventId,message.senderUserId);
 },()=>{},true);
+const rankingSupport=new RankingSupportActivity();
+const rankingSupportReceiver=new KickChatReceiver(getRecordingOutputDirectory,()=>false,()=>{},()=>{},true,(slug,event)=>rankingSupport.add(slug,event));
+let supportLastStart=0,supportStarting=false;
+function renewRankingSupport(snapshot:RankingSnapshot){
+  const slugs=snapshot.entries.slice(0,10).map(row=>row.slug).filter(slug=>/^[a-z0-9_]{1,25}$/.test(slug)).sort();
+  const current=rankingSupportReceiver.getDesiredSlugs().sort();
+  if(!slugs.length){if(current.length)void rankingSupportReceiver.stop().catch(()=>undefined);return;}
+  const covered=slugs.every(slug=>rankingSupportReceiver.getSupportSince(slug,"kicks")!==null&&rankingSupportReceiver.getSupportSince(slug,"giftSubs")!==null);
+  if(supportStarting||(covered&&slugs.join("|")===current.join("|"))||Date.now()-supportLastStart<120000)return;
+  supportLastStart=Date.now();supportStarting=true;
+  void rankingSupportReceiver.start(slugs).catch(()=>undefined).finally(()=>{supportStarting=false;});
+}
 let rankingChatLeaseUntil=0,rankingChatLastStart=0,rankingChatSignature="";
 let rankingChatWanted:string[]=[];
 let rankingChatScope:RankingScope|null=null;
@@ -813,6 +826,7 @@ function stopRankingChat():void{
   rankingChatLeaseUntil=0;rankingChatSignature="";rankingChatWanted=[];rankingChatLastStart=0;rankingChatScope=null;
   if(rankingChatLeaseTimer)clearTimeout(rankingChatLeaseTimer);rankingChatLeaseTimer=null;
   void rankingChatReceiver.stop().catch(()=>undefined);
+  supportLastStart=0;void rankingSupportReceiver.stop().catch(()=>undefined);
 }
 function rankingChatMeasurement(snapshot:RankingSnapshot|null,slug:string){
   const row=[...(snapshot?.entries??[]),...(snapshot?.trackedEntries??[])].find(r=>r.slug===slug);
@@ -830,6 +844,7 @@ function renewRankingChat(scope:RankingScope,selected:string|null):void{
   // During API outages retain the bounded existing subscriptions for this scope.
   // Do not discover new targets from stale data; the UI lease still stops reception.
   if(!snapshot||Date.now()-Date.parse(snapshot.fetchedAt)>90000)return;
+  renewRankingSupport(snapshot);
   const currentConnected=[...chatReceiver.getConnectedSlugs(),...rankingChatReceiver.getConnectedSlugs()];
   const observed=rankingChatActivity.observed(currentConnected,[]).map(row=>({...row,...rankingChatMeasurement(snapshot,row.slug)}));
   const slugs=rankingChatTargets(snapshot,selected,chatReceiver.getConnectedSlugs(),undefined,observed);
@@ -1733,7 +1748,13 @@ function registerIpcHandlers(): void {
     const rows=rankingChatActivity.observed(connected,[...normal,...rankingChatWanted,...desired]);
     const online=new Set(connected),normalWanted=new Set(normal),rankWanted=new Set(rankingChatWanted),rankDesired=new Set(desired);
     const status=rankingChatReceiver.getStatus();
-    return {rows:rows.map(row=>({...row,...rankingChatMeasurement(rankingCache.get(scope)??null,row.slug),state:online.has(row.slug)?"connected":normalWanted.has(row.slug)?row.state:rankWanted.has(row.slug)?(rankingChatStarting||(!rankDesired.has(row.slug)&&Date.now()-rankingChatLastStart<60000&&status.running)?"connecting":rankDesired.has(row.slug)&&!status.running?"connecting":"unavailable"):row.messages>0?"recent":"unavailable"})),message:status.message+(enabled&&rankingCache.has(scope)&&Date.now()-Date.parse(rankingCache.get(scope)!.fetchedAt)>90000?" ／ API更新待ち・既存チャット監視を継続":""),targets:rankingChatWanted.length,connected:rankingChatWanted.filter(s=>online.has(s)).length};
+    const support=(rankingCache.get(scope)?.entries??[]).flatMap(row=>{
+      if(!enabled)return [];
+      const kicks=rankingSupport.measure(row.slug,"kicks",rankingSupportReceiver.getSupportSince(row.slug,"kicks"),row.startedAt);
+      const subs=rankingSupport.measure(row.slug,"giftSubs",rankingSupportReceiver.getSupportSince(row.slug,"giftSubs"),row.startedAt);
+      return kicks.amount===null&&subs.amount===null?[]:[{slug:row.slug,startedAt:row.startedAt,kicks:kicks.amount,giftSubs:subs.amount,kicksSeconds:kicks.seconds,giftSubsSeconds:subs.seconds}];
+    });
+    return {support,rows:rows.map(row=>({...row,...rankingChatMeasurement(rankingCache.get(scope)??null,row.slug),state:online.has(row.slug)?"connected":normalWanted.has(row.slug)?row.state:rankWanted.has(row.slug)?(rankingChatStarting||(!rankDesired.has(row.slug)&&Date.now()-rankingChatLastStart<60000&&status.running)?"connecting":rankDesired.has(row.slug)&&!status.running?"connecting":"unavailable"):row.messages>0?"recent":"unavailable"})),message:status.message+(enabled&&rankingCache.has(scope)&&Date.now()-Date.parse(rankingCache.get(scope)!.fetchedAt)>90000?" ／ API更新待ち・既存チャット監視を継続":""),targets:rankingChatWanted.length,connected:rankingChatWanted.filter(s=>online.has(s)).length};
   });
   ipcMain.handle("kick:ranking-ai",(event,scope:unknown)=>{
     assertTrustedSender(event);

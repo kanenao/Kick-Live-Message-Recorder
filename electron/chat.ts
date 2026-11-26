@@ -1,3 +1,4 @@
+import {parseSupportEvent,type SupportEvent,type SupportKind} from "./ranking-support";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
@@ -32,7 +33,7 @@ export type ChatReceiverStatus = {
 };
 
 type JsonRecord = Record<string, unknown>;
-type ResolvedChannel = { slug: string; chatroomId: number };
+type ResolvedChannel = { slug: string; chatroomId: number; channelId: number|null };
 type RealtimeConnectionResponse = {
   data?: {
     connections?: Array<{
@@ -119,7 +120,7 @@ async function resolveChatroom(slug: string): Promise<ResolvedChannel> {
   if (!chatroomId) {
     throw new Error(slug + " のチャットルーム情報を取得できませんでした。チャンネル名を確認してください。");
   }
-  return { slug, chatroomId };
+  return { slug, chatroomId, channelId:readPositiveId(payload.id) };
 }
 
 async function createRealtimeConnection(clientId: string): Promise<string> {
@@ -161,6 +162,7 @@ export class KickChatReceiver {
   private desiredSlugs: string[] = [];
   private connectedSlugs: string[] = [];
   private connectedAt=0;
+  private readonly supportSince=new Map<string,number>();
   private channelByFeed = new Map<string, string>();
   private reconnectTimer: NodeJS.Timeout | null = null;
   private tokenRefreshTimer: NodeJS.Timeout | null = null;
@@ -180,7 +182,8 @@ export class KickChatReceiver {
     private readonly shouldSaveMessages: () => boolean,
     private readonly onMessage: (message: KickChatMessage) => void,
     private readonly onStatus: (status: ChatReceiverStatus) => void,
-    private readonly allowPartial = false
+    private readonly allowPartial = false,
+    private readonly onSupport?: (slug:string,event:SupportEvent)=>void
   ) {}
 
   getStatus(): ChatReceiverStatus {
@@ -195,6 +198,8 @@ export class KickChatReceiver {
 
   getConnectedSlugs(): string[] {return this.socket?.readyState===WebSocket.OPEN?[...this.connectedSlugs]:[];}
   getConnectedSince(slug:string):number|null{return this.getConnectedSlugs().includes(slug)&&this.connectedAt>0?this.connectedAt:null;}
+
+  getSupportSince(slug:string,kind:SupportKind):number|null{return this.socket?.readyState===WebSocket.OPEN?this.supportSince.get(slug+"|"+kind)??null:null;}
 
   getDesiredSlugs(): string[] {
     return [...this.desiredSlugs];
@@ -279,6 +284,7 @@ export class KickChatReceiver {
   private clearActiveConnection(): void {
     this.connectedSlugs = [];
     this.channelByFeed.clear();
+    this.supportSince.clear();
     this.clearTimers();
     const socket = this.socket;
     this.socket = null;
@@ -322,7 +328,10 @@ export class KickChatReceiver {
     ]);
     const feedMap = new Map<string, string>();
     for (const channel of resolved) {
-      feedMap.set("chatrooms." + channel.chatroomId + ".v2", channel.slug);
+      if(this.onSupport){
+        feedMap.set("chatroom_"+channel.chatroomId,channel.slug);
+        if(channel.channelId!==null)feedMap.set("channel_"+channel.channelId,channel.slug);
+      }else feedMap.set("chatrooms." + channel.chatroomId + ".v2", channel.slug);
     }
 
     if (generation !== this.operationGeneration || this.stopping) return;
@@ -423,7 +432,7 @@ export class KickChatReceiver {
             }
             if (message.subscribe || (this.allowPartial&&message.error)) {
               const feed=pending.get(commandId)!;pending.delete(commandId);
-              if(message.subscribe&&!message.error){const slug=feedMap.get(feed);if(slug)accepted.add(slug);}
+              if(message.subscribe&&!message.error){const slug=feedMap.get(feed);if(slug){accepted.add(slug);if(this.onSupport)this.supportSince.set(slug+"|"+(feed.startsWith("channel_")?"kicks":"giftSubs"),Date.now());}}
               if (pending.size === 0 && !settled) {
                 if(!accepted.size){fail(new Error("受信可能なチャット購読がありません。"));socket.terminate();return;}
                 settled = true;
@@ -458,6 +467,7 @@ export class KickChatReceiver {
         if (this.socket !== socket || generation !== this.operationGeneration) {if(!settled)fail(new Error("チャット接続が切り替わりました。"));return;}
         this.socket = null;
         this.connectedSlugs = [];
+        this.supportSince.clear();
         if (!settled) {
           fail(new Error("Kickのチャット接続が閉じられました（" + code + "）。" + reason.toString()));
           return;
@@ -495,6 +505,7 @@ export class KickChatReceiver {
     const slug = this.channelByFeed.get(channel);
     if (!slug) return;
 
+    if(this.onSupport&&push.unsubscribe){this.supportSince.delete(slug+"|"+(channel.startsWith("channel_")?"kicks":"giftSubs"));return;}
     const publication = asRecord(push.pub);
     let envelope: JsonRecord;
     const rawEnvelope = publication.data;
@@ -506,7 +517,7 @@ export class KickChatReceiver {
       return;
     }
 
-    if (envelope.event !== "App\\Events\\ChatMessageEvent") return;
+    if (!this.onSupport&&envelope.event !== "App\\Events\\ChatMessageEvent") return;
     let payload: JsonRecord;
     try {
       payload = typeof envelope.data === "string"
@@ -516,6 +527,13 @@ export class KickChatReceiver {
       return;
     }
 
+    if(this.onSupport){
+      const kind:SupportKind=channel.startsWith("channel_")?"kicks":"giftSubs";
+      if(this.getSupportSince(slug,kind)===null)return;
+      const event=parseSupportEvent(envelope.event,payload,kind);
+      if(event)this.onSupport(slug,event);
+      return;
+    }
     const sender = asRecord(payload.sender);
     const identity = asRecord(sender.identity);
     const metadata = asRecord(payload.metadata);
