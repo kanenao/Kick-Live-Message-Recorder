@@ -19,9 +19,13 @@ console.log("ランキング表示：7種類・カード・折り返し・10秒�
 assert.match(ui,/const displayFrame=chatSort\?chatFrame:frame/);
 assert.match(ui,/displayFrame\?\.orders\[sort\]/);
 assert.match(ui,/const rank=displayFrame\?\.ranks\[sort\]/);
-assert.match(ui,/!rankedOnly\|\|displayFrame\?\.ranks\[sort\]\.has\(row.slug\)/);
-assert.match(ui,/Math\.ceil\(sorted\.length\/pageSize\)/);
-assert.match(ui,/sorted\.slice\(currentPage\*pageSize,\(currentPage\+1\)\*pageSize\)/);
 assert.match(ui,/data-density=\{compact\?"compact":"standard"\}/);
 assert.match(css,/\.ranking-list\[data-density=compact\]/);
-assert.match(ui,/goToPage\(currentPage\+1\)/);
+
+assert.match(ui,/const RANKING_DISPLAY_LIMIT=50/);
+assert.ok(ui.includes("rank===undefined||rank<=RANKING_DISPLAY_LIMIT"));
+assert.ok(ui.includes(".slice(0,RANKING_DISPLAY_LIMIT)"));
+assert.ok(ui.includes("const visible=topRows.filter("));
+assert.ok(!ui.includes("setPageSize("));
+assert.ok(!ui.includes('className="ranking-pages"'));
+console.log("ランキング全7種：50位上限、絞り込み前の上限、ページ送り廃止");
