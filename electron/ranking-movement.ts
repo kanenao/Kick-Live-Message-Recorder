@@ -1,9 +1,9 @@
 import type {RankingEntry,RankingSnapshot,RankingScope} from "./kick-ranking";
-import {momentumScores,type MomentumChat} from "./ranking-momentum";
+import {momentumScores,type MomentumChat,type MomentumWeights} from "./ranking-momentum";
 export type RankingMode="viewers"|"growth"|"chat"|"active"|"momentum";
 export type RankFrame={scope:RankingScope;at:string;full:boolean;complete:boolean;starts:Map<string,string|null>;orders:Record<RankingMode,string[]>;ranks:Record<RankingMode,Map<string,number>>};
 const finite=(v:unknown):v is number=>typeof v==="number"&&Number.isFinite(v);
-export function rankingFrame(snapshot:RankingSnapshot,chat:readonly MomentumChat[]=[],observedAt=snapshot.fetchedAt):RankFrame{
+export function rankingFrame(snapshot:RankingSnapshot,chat:readonly MomentumChat[]=[],observedAt=snapshot.fetchedAt,weights?:MomentumWeights):RankFrame{
  const rows=snapshot.entries,byChat=new Map(chat.map(c=>[c.slug,c]));
  const measures=(mode:RankingMode,row:RankingEntry):number|null=>{
   const c=byChat.get(row.slug);
@@ -29,7 +29,7 @@ export function rankingFrame(snapshot:RankingSnapshot,chat:readonly MomentumChat
   });
   assign(mode,sorted,r=>measures(mode,r)!==null);
  }
- const scores=momentumScores(rows,chat),byRow=new Map(rows.map(r=>[r.slug,r]));
+ const scores=momentumScores(rows,chat,weights),byRow=new Map(rows.map(r=>[r.slug,r]));
  orders.momentum=scores.map(s=>s.slug);
  ranks.momentum=new Map(scores.filter(s=>s.rank!==null&&byRow.has(s.slug)).map(s=>[s.slug,s.rank!]));
  return {scope:snapshot.scope,at:observedAt,complete:snapshot.complete,full:snapshot.complete&&snapshot.total<=rows.length,starts:new Map(rows.map(r=>[r.slug,r.startedAt])),orders,ranks};
