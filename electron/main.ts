@@ -1,4 +1,4 @@
-import {RankingSupportActivity} from "./ranking-support";
+import {RankingSupportActivity,supportRetryDelayMs} from "./ranking-support";
 import { RankingAiWeights } from "./ranking-ai";
 import { buildFeedbackIssueUrl } from "./feedback-url";
 import { rankingChatTargets } from "./ranking-chat-targets";
@@ -736,7 +736,8 @@ function renewRankingSupport(snapshot:RankingSnapshot){
   const current=rankingSupportReceiver.getDesiredSlugs().sort();
   if(!slugs.length){if(current.length)void rankingSupportReceiver.stop().catch(()=>undefined);return;}
   const covered=slugs.every(slug=>rankingSupportReceiver.getSupportSince(slug,"kicks")!==null&&rankingSupportReceiver.getSupportSince(slug,"giftSubs")!==null);
-  if(supportStarting||(covered&&slugs.join("|")===current.join("|"))||Date.now()-supportLastStart<120000)return;
+  const hasSubscription=current.some(slug=>rankingSupportReceiver.getSupportSince(slug,"kicks")!==null||rankingSupportReceiver.getSupportSince(slug,"giftSubs")!==null);
+  if(supportStarting||(covered&&slugs.join("|")===current.join("|"))||Date.now()-supportLastStart<supportRetryDelayMs(hasSubscription))return;
   supportLastStart=Date.now();supportStarting=true;
   void rankingSupportReceiver.start(slugs).catch(()=>undefined).finally(()=>{supportStarting=false;});
 }

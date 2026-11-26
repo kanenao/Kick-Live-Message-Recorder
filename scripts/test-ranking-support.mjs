@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {parseSupportEvent,RankingSupportActivity} from "../electron/ranking-support.ts";
+import {parseSupportEvent,RankingSupportActivity,supportRankValue,supportRetryDelayMs,SUPPORT_ZERO_CONFIRM_SECONDS} from "../electron/ranking-support.ts";
 import {rankingFrame} from "../electron/ranking-movement.ts";
 const gift=parseSupportEvent("KicksGifted",{gift_transaction_id:"tx",gift:{amount:500,gift_id:"rage_quit"}},"kicks");
 assert.deepEqual(gift,{kind:"kicks",amount:500,id:"tx"});
@@ -24,7 +24,25 @@ const snapshot={entries:rows,scope:"ja",complete:true,total:2,fetchedAt:new Date
 const observations=[{slug:"a",startedAt:start,kicks:500,giftSubs:3,kicksSeconds:60,giftSubsSeconds:59},{slug:"b",startedAt:start,kicks:0,giftSubs:5,kicksSeconds:60,giftSubsSeconds:60}];
 const frame=rankingFrame(snapshot,[],snapshot.fetchedAt,undefined,observations);
 assert.equal(frame.ranks.kicks.get("a"),1);assert.equal(frame.ranks.kicks.has("b"),false);
-assert.equal(frame.ranks.giftSubs.get("b"),1);assert.equal(frame.ranks.giftSubs.has("a"),false);
+assert.equal(frame.ranks.giftSubs.get("b"),1);assert.equal(frame.ranks.giftSubs.get("a"),2);
 assert.equal(rankingFrame(snapshot,[],snapshot.fetchedAt,undefined,[{...observations[0],startedAt:"other"}]).ranks.kicks.size,0);
 assert.equal(a.measure("a","kicks",now-60000,start,now+61000).amount,0);
 console.log("KICKs and gifted subs: real amounts, chunks, duplicate suppression, disconnected/zero, session, ranking eligibility");
+
+assert.equal(supportRankValue(500,0),500);
+assert.equal(supportRankValue(2,1),2);
+assert.equal(supportRankValue(0,60),null);
+assert.equal(supportRankValue(null,0),null);
+assert.equal(supportRankValue(2,NaN),null);
+assert.equal(supportRankValue(2,-1),null);
+assert.equal(supportRankValue(2,61),null);
+assert.equal(SUPPORT_ZERO_CONFIRM_SECONDS,10);
+assert.equal(supportRetryDelayMs(false),20000);
+assert.equal(supportRetryDelayMs(true),120000);
+const early=new RankingSupportActivity();early.add("a",gift,now-1000);early.add("a",chunk(["u1","u2"]),now-500);
+assert.deepEqual(early.measure("a","kicks",now-2000,start,now),{amount:500,seconds:2});
+assert.deepEqual(early.measure("a","giftSubs",now-2000,start,now),{amount:2,seconds:2});
+const immediate=rankingFrame(snapshot,[],snapshot.fetchedAt,undefined,[{slug:"a",startedAt:start,kicks:500,giftSubs:2,kicksSeconds:2,giftSubsSeconds:2}]);
+assert.equal(immediate.ranks.kicks.get("a"),1);assert.equal(immediate.ranks.giftSubs.get("a"),1);
+assert.equal(early.measure("a","kicks",now-2000,start,now+61000).amount,0);
+console.log("速報ギフト順位：0〜2秒観測から反映、未観測と0の区別、再接続間隔");

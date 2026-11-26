@@ -1,4 +1,4 @@
-import type {SupportObservation} from "./ranking-support";
+import {supportRankValue,type SupportObservation} from "./ranking-support";
 import type {RankingEntry,RankingSnapshot,RankingScope} from "./kick-ranking";
 import {momentumScores,type MomentumChat,type MomentumWeights} from "./ranking-momentum";
 export type RankingMode="viewers"|"growth"|"chat"|"active"|"momentum"|"kicks"|"giftSubs";
@@ -8,7 +8,7 @@ export function rankingFrame(snapshot:RankingSnapshot,chat:readonly MomentumChat
  const rows=snapshot.entries,byChat=new Map(chat.map(c=>[c.slug,c])),bySupport=new Map(support.map(c=>[c.slug,c]));
  const measures=(mode:RankingMode,row:RankingEntry):number|null=>{
   const c=byChat.get(row.slug);
-  if(mode==="kicks"||mode==="giftSubs"){const m=bySupport.get(row.slug);if(!m||!row.startedAt||m.startedAt!==row.startedAt)return null;const v=m[mode],seconds=mode==="kicks"?m.kicksSeconds:m.giftSubsSeconds;return seconds>=60&&finite(v)&&v>0?v:null;}
+  if(mode==="kicks"||mode==="giftSubs"){const m=bySupport.get(row.slug);if(!m||!row.startedAt||m.startedAt!==row.startedAt)return null;const v=m[mode],seconds=mode==="kicks"?m.kicksSeconds:m.giftSubsSeconds;return supportRankValue(v,seconds);}
   if(mode==="growth")return finite(row.viewerChange)?row.viewerChange:null;
   if(mode==="chat")return c?.state==="connected"&&(c.observedSeconds??0)>=60&&finite(c.ratePerMinute)&&c.ratePerMinute>=0?c.ratePerMinute:null;
   if(mode==="active")return c?.state==="connected"&&c.activeComplete===true&&(c.activeSeconds??0)>=300&&finite(c.activeUsers)&&c.activeUsers>=0?c.activeUsers:null;
