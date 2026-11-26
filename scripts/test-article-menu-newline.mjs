@@ -1,19 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-
-const app = readFileSync(new URL("../src/ui/App.tsx", import.meta.url), "utf8");
-const css = readFileSync(new URL("../src/ui/styles.css", import.meta.url), "utf8");
-
-const videoButton = /<button className=\{tab === "comment-video"[^\n]*>✦ <span>コメント付き動画<\/span><\/button>/;
-const articleButton = /<button className=\{tab === "articles"[^\n]*>▤ <span>配信記事<\/span><\/button>/;
-
-assert.match(app, videoButton, "コメント付き動画のメニューを維持すること");
-assert.match(app, articleButton, "配信記事のメニューを維持すること");
-
-// JSXボタンの間に\\nという通常文字が混入すると、画面にもそのまま出てしまう。
-const start = app.search(videoButton) + app.match(videoButton)[0].length;
-const end = app.search(articleButton);
-assert.match(app.slice(start, end), /^\s*$/, "メニュー間に余計なテキストを描画しないこと");
-assert.ok(!css.split(/\r?\n/).some(line => line.trim() === String.raw`\n`), "CSSの不要な改行文字列を除去すること");
-
-console.log("配信記事メニューの不要文字（\\n）回帰テスト成功");
+import {readFileSync} from "node:fs";
+const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
+const ui=read("src/ui/App.tsx"),main=read("electron/main.ts"),preload=read("electron/preload.ts"),library=read("electron/library-sessions.ts");
+assert.ok(!ui.includes('tab === "articles"'));assert.ok(!ui.includes('setTab("articles")'));assert.ok(!ui.includes('getAiArticleStatus()'));assert.ok(!main.includes('ipcMain.handle("articles:'));assert.ok(!main.includes('ipcMain.handle("ai-article:'));assert.ok(!main.includes('new LiveStreamArticleManager'));assert.ok(!preload.includes('ipcRenderer.invoke("articles:'));assert.ok(!library.includes('listStreamArticles'));assert.ok(main.includes('settings.rankingAiModel'));assert.ok(ui.includes('コメント付き動画'));
+console.log("記事機能の廃止、録画とランキングAIの維持");

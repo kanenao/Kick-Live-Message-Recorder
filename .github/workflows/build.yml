@@ -52,7 +52,7 @@ jobs:
         run: node --experimental-strip-types scripts/test-kick-profile-links.mjs
       - name: 動画サムネイル抽出のファイル安全性テスト
         run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-recording-thumbnails.mjs
-      - name: 録画・配信AI新聞の時刻別場面プレビュー自動テスト
+      - name: 録画の時刻別場面プレビュー自動テスト
         run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-recording-storyboard.mjs
       - name: VOD ASS字幕生成テスト
         run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-vod-chat-ass.mjs
@@ -68,46 +68,12 @@ jobs:
         run: node scripts/test-nico-ass-auto-ui.mjs
       - name: 複数VODのダウンロード・経過時間・停止テスト
         run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-vod-download-queue.mjs
-      - name: 配信単位の録画・コメント・AI記事の分類テスト
+      - name: 配信単位の録画・コメントの分類テスト
         run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-library-sessions.mjs
       - name: LIVE録画の途中切断・自動復旧・手動停止テスト
         run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-recording-recovery.mjs
-      - name: AI新聞の放送別ログ選択と未登録配信者テスト
-        run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-article-sources.mjs
-      - name: AI新聞のLIVE少数コメント自動解析スケジュールテスト
-        run: node --experimental-strip-types scripts/test-live-article-schedule.mjs
-      - name: AI新聞のアーカイブ配信時間保持テスト
-        run: node --experimental-strip-types scripts/test-article-timeline.mjs
-      - name: AI記事応答形式テスト
-        run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-ai-response.mjs
-      - name: AI新聞の文章・映像要約・場面一覧の重複防止テスト
-        run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-article-text-dedupe.mjs
-      - name: 配信AI新聞の時刻別根拠・長時間抽出テスト
-        run: node --experimental-strip-types scripts/test-article-evidence.mjs
-      - name: 配信AI新聞の長時間VOD音声サンプリングテスト
-        run: node --experimental-strip-types scripts/test-article-audio-sampling.mjs
-      - name: 配信AI新聞の再生成履歴と上書き防止テスト
-        run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-ai-newspaper-history.mjs
-      - name: Ollama応答復旧・コメント参照の回帰テスト
-        run: node scripts/test-ai-newspaper-resilience.mjs
-      - name: 配信AI新聞の一時障害・再試行ポリシーテスト
-        run: node --experimental-strip-types scripts/test-ai-retry-policy.mjs
-      - name: 配信AI新聞の未解析コメント・音声保持と再解析テスト
-        run: node scripts/test-ai-newspaper-pending-recovery.mjs
-      - name: 配信記事メニューの不要な改行文字の回帰テスト
+      - name: 配信記事機能の廃止・録画維持テスト
         run: node scripts/test-article-menu-newline.mjs
-      - name: 配信AI新聞の放送画面保存テスト
-        run: node --experimental-strip-types scripts/test-article-preview.mjs
-      - name: 配信AI新聞の記事削除テスト
-        run: node --experimental-transform-types --import ./scripts/register-ts-extension-loader.mjs scripts/test-article-delete.mjs
-      - name: LIVE映像の全時間帯サンプリング・代表フレーム上限テスト
-        run: node --experimental-strip-types scripts/test-live-article-frame-sampling.mjs
-      - name: LIVE映像キャプチャの復旧ポリシーテスト
-        run: node --experimental-strip-types scripts/test-live-capture-policy.mjs
-      - name: LIVE音声認識の自動再試行テスト
-        run: node --experimental-strip-types scripts/test-audio-retry-policy.mjs
-      - name: LIVE音声キャプチャの自動再接続テスト
-        run: node --experimental-strip-types scripts/test-live-audio-capture-policy.mjs
       - name: 型チェック
         run: npm run typecheck
       - name: アプリをビルド

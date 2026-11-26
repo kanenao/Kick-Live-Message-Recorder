@@ -21,10 +21,8 @@ assert.match(app, /listCommentFileMessages\(log\.channelSlug, log\.name, 100\)/,
 assert.match(css, /\.recording-channel-avatar\{[^}]*border-radius:50%/,
   "Broadcaster avatars should be round in the Nico-style cards.");
 
-assert.match(app, /<option value="articles">AI記事付きの録画<\/option>/,
-  "Users should be able to filter sessions that have attached AI articles.");
-assert.match(app, /AI記事付きの配信/,
-  "Library dashboard should count sessions with an attached article.");
+assert.ok(!app.includes('<option value="articles">'));
+assert.ok(!app.includes('<span>AI記事付きの配信</span>'));
 
 assert.match(app, /className="recording-session-list" role="region" tabIndex=\{0\}/, "The session list should have a keyboard-accessible scroll region.");
 assert.match(app, /window\.setInterval\(refreshIfVisible, 10_000\)/,

@@ -50,8 +50,7 @@ const css = readFileSync(new URL("../src/ui/styles.css", import.meta.url), "utf8
 assert.match(main, /ipcMain\.handle\("recording:storyboard"/, "安全なIPC経路を追加");
 assert.match(preload, /getRecordingStoryboard:/, "プリロードの許可APIに追加");
 assert.match(app, /<RecordingStoryboardDialog/, "共通の場面一覧モーダルを表示");
-assert.match(app, /onOpenStoryboard=\{\(path, title\)/, "配信記事から場面プレビューを開ける");
 assert.match(app, /onPreview=\{\(\) =>/, "録画ライブラリの動画サムネから開ける");
 assert.match(app, /className="storyboard-gallery"/, "時刻付きの場面グリッドを表示");
 assert.match(css, /\.storyboard-layout\{display:grid/, "記事に合う2列レイアウト");
-console.log("Kick録画・配信AI新聞：時刻別場面プレビューの計画・ファイル安全性・共通UIテスト成功");
+console.log("Kick録画：時刻別場面プレビューの計画・ファイル安全性・共通UIテスト成功");
