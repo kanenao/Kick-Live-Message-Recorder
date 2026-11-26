@@ -5,7 +5,7 @@ const app = readFileSync(new URL("../src/ui/App.tsx", import.meta.url), "utf8");
 const css = readFileSync(new URL("../src/ui/styles.css", import.meta.url), "utf8");
 const workflow = readFileSync(new URL("../.github/workflows/build.yml", import.meta.url), "utf8");
 
-assert.match(app, /<main className=\{tab === "library" \? "main main-library" : "main"\}>/, "The library should use a wide page layout.");
+assert.match(app, /<main className=\{tab === "library" \? "main main-library" : tab === "ranking" \? "main main-ranking" : "main"\}>/, "The library should use a wide page layout.");
 assert.match(css, /\.main\.main-library\{[^}]*max-width:none;[^}]*min-width:0;/, "The library must be able to grow horizontally.");
 
 const channelListRule = css.match(/\.recording-channel-list\{([^}]*)\}/)?.[1];
