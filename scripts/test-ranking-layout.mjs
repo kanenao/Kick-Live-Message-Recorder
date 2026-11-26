@@ -1,0 +1,17 @@
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+const ui=readFileSync(new URL("../src/ui/KickRanking.tsx",import.meta.url),"utf8");
+const css=readFileSync(new URL("../src/ui/styles.css",import.meta.url),"utf8");
+assert.match(ui,/const RANKING_REFRESH_MS=10000/);
+assert.match(ui,/className="ranking-list" role="list"/);
+assert.match(ui,/className="ranking-card" key=\{row.slug\}/);
+assert.match(ui,/aria-pressed=\{sort===item.id\}/);
+for(const mode of ["viewers","growth","chat","active","momentum","kicks","giftSubs"])assert.ok(ui.includes('id:"'+mode+'"'));
+assert.match(ui,/className="ranking-details"><summary>/);
+for(const group of ["position","stream","numbers","score","actions"])assert.ok(ui.includes('className="ranking-card-'+group+'"'));
+assert.match(css,/\.kick-ranking\{[^}]*container-type:inline-size/);
+assert.match(css,/@container \(max-width:560px\)/);
+assert.match(ui,/openHistory\(row.slug\)/);
+assert.match(ui,/action\(row.slug\)/);
+assert.match(ui,/supportBySlug.get\(row.slug\)/);
+console.log("ランキング表示：7種類・カード・折り返し・10秒・操作維持のソース確認");
