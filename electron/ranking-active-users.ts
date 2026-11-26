@@ -21,18 +21,19 @@ export class RankingActiveUsers{
    if(this.size>=this.maxTotal||channel.users.size>=this.maxPerChannel){channel.incompleteAt=Math.max(channel.incompleteAt,now);return;}
    channel.users.set(key,now);this.size++;
  }
- measure(slug:string,connectedSince:number|null,startedAt:string|null,now=Date.now()):ActiveObservation{
+ measure(slug:string,connectedSince:number|null,startedAt:string|null,now=Date.now(),windowMs=WINDOW):ActiveObservation{
    const start=Date.parse(startedAt??"");
    if(connectedSince===null||!Number.isFinite(connectedSince)||!Number.isFinite(start)||!Number.isFinite(now))return {activeUsers:null,activeSeconds:0,activeComplete:false};
    this.prune(now);
-   const from=Math.max(now-WINDOW,connectedSince,start);
+   const duration=windowMs===60000?60000:WINDOW;
+   const from=Math.max(now-duration,connectedSince,start);
    const activeSeconds=Math.max(0,Math.floor((now-from)/1000));
    if(from>now)return {activeUsers:null,activeSeconds:0,activeComplete:false};
    const channel=this.channels.get(slug);
    // A missing channel while at capacity may have been dropped.
    if(!channel&&this.channels.size>=this.maxChannels)return {activeUsers:null,activeSeconds,activeComplete:false};
    let count=0;for(const at of channel?.users.values()??[])if(at>=from&&at<=now)count++;
-   return {activeUsers:count,activeSeconds,activeComplete:activeSeconds>=300&&!(channel&&channel.incompleteAt>=from)};
+   return {activeUsers:count,activeSeconds,activeComplete:activeSeconds>=duration/1000&&!(channel&&channel.incompleteAt>=from)};
  }
  private prune(now:number){
    if(now>=this.lastPrune&&now-this.lastPrune<5000)return;this.lastPrune=now;

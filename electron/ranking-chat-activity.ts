@@ -39,6 +39,10 @@ export class RankingChatActivity {
     this.prune(Math.floor(now/5000));
     return recentChatCount(this.channels.get(slug),connectedSince,startedAt,now,this.channels.size>=this.maxChannels);
   }
+  activeMinute(slug:string,connectedSince:number|null,startedAt:string|null,now=Date.now()){
+    const result=this.activeUsers.measure(slug,connectedSince,startedAt,now,60000);
+    return {activeMinuteUsers:result.activeComplete?result.activeUsers:null,activeMinuteSeconds:result.activeSeconds};
+  }
   active(slug:string,connectedSince:number|null,startedAt:string|null,now=Date.now()){return this.activeUsers.measure(slug,connectedSince,startedAt,now);}
   private prune(minute:number):void{
     if(this.lastPruneMinute===minute)return;this.lastPruneMinute=minute;

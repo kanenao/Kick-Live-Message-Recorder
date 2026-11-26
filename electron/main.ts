@@ -818,7 +818,7 @@ function rankingChatMeasurement(snapshot:RankingSnapshot|null,slug:string){
   const row=[...(snapshot?.entries??[]),...(snapshot?.trackedEntries??[])].find(r=>r.slug===slug);
   const since=[chatReceiver.getConnectedSince(slug),rankingChatReceiver.getConnectedSince(slug)].filter((n):n is number=>n!==null);
   const connectedSince=since.length?Math.min(...since):null, startedAt=row?.startedAt??null, now=Date.now();
-  return {recentMessages:rankingChatActivity.recent(slug,connectedSince,startedAt,now),...rankingChatActivity.measured(slug,connectedSince,startedAt,now),...rankingChatActivity.active(slug,connectedSince,startedAt,now)};
+  return {recentMessages:rankingChatActivity.recent(slug,connectedSince,startedAt,now),...rankingChatActivity.measured(slug,connectedSince,startedAt,now),...rankingChatActivity.active(slug,connectedSince,startedAt,now),...rankingChatActivity.activeMinute(slug,connectedSince,startedAt,now)};
 }
 function renewRankingChat(scope:RankingScope,selected:string|null):void{
   if(rankingChatScope!==null&&rankingChatScope!==scope)stopRankingChat();
@@ -840,7 +840,8 @@ function renewRankingChat(scope:RankingScope,selected:string|null):void{
   if(!slugs.length){rankingChatSignature="";if(rankingChatReceiver.getDesiredSlugs().length)void rankingChatReceiver.stop().catch(()=>undefined);return;}
   const topMissing=snapshot.entries.slice(0,10).some(row=>slugs.includes(row.slug)&&!rankingChatReceiver.getDesiredSlugs().includes(row.slug));
   // Ordinary churn/partial retries must allow five minutes of active-user observation.
-  if(rankingChatStarting||Date.now()-rankingChatLastStart<(topMissing?60000:360000))return;
+  const healthy=rankingChatReceiver.getConnectedSlugs().length>0;
+  if(rankingChatStarting||Date.now()-rankingChatLastStart<(healthy?360000:topMissing?60000:120000))return;
   rankingChatLastStart=Date.now();rankingChatSignature=signature;rankingChatStarting=true;
   void rankingChatReceiver.start(slugs).catch(()=>{if(rankingChatSignature===signature)rankingChatSignature="";}).finally(()=>{rankingChatStarting=false;});
 }

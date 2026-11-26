@@ -12,10 +12,10 @@ export function aiRankingInput(snapshot:RankingSnapshot,chat:readonly MomentumCh
  const bySlug=new Map(chat.map(c=>[c.slug,c]));
  return snapshot.entries.flatMap(r=>{
   const c=bySlug.get(r.slug);
-  if(!c||c.state!=="connected"||(c.observedSeconds??0)<60||!c.activeComplete||(c.activeSeconds??0)<300||
-   !Number.isFinite(r.viewerChange)||!Number.isFinite(c.ratePerMinute)||!Number.isSafeInteger(c.activeUsers)||
-   (c.ratePerMinute??-1)<0||(c.activeUsers??-1)<0)return [];
-  return [[r.viewers,r.viewerChange,c.ratePerMinute,c.activeUsers]];
+  if(!c||c.state!=="connected"||(c.observedSeconds??0)<60||(c.activeMinuteSeconds??0)<60||
+   !Number.isFinite(r.viewerChange)||!Number.isFinite(c.ratePerMinute)||!Number.isSafeInteger(c.activeMinuteUsers)||
+   (c.ratePerMinute??-1)<0||(c.activeMinuteUsers??-1)<0)return [];
+  return [[r.viewers,r.viewerChange,c.ratePerMinute,c.activeMinuteUsers]];
  }).slice(0,30);
 }
 const empty=(message:string):RankingAiStatus=>({weights:null,at:null,state:"waiting",message});
@@ -29,7 +29,7 @@ export class RankingAiWeights{
   let entry=this.states.get(scope);
   if(!entry||entry.key!==key){entry={key,status:empty("AI採点準備中"),last:-Infinity};this.states.set(scope,entry);}
   if(entry.status.at&&now-Date.parse(entry.status.at)>300000)entry.status=empty("AI配点の有効期限切れ");
-  if(!snapshot||!snapshot.complete||now-Date.parse(snapshot.fetchedAt)>90000)return {...entry.status,weights:null,state:"waiting",message:"ランキング観測待ち・通常採点"};
+  if(!snapshot||now-Date.parse(snapshot.fetchedAt)>90000)return {...entry.status,weights:null,state:"waiting",message:"ランキング観測待ち・通常採点"};
   const input=aiRankingInput(snapshot,chat);
   if(input.length<3)return {...entry.status,weights:null,state:"waiting",message:"4指標の観測済み配信が3件未満・通常採点"};
   if(!/^[a-zA-Z0-9._:-]{1,100}$/.test(model))return {weights:null,at:null,state:"unavailable",message:"Ollamaモデル設定を確認"};
@@ -45,7 +45,7 @@ export class RankingAiWeights{
   return entry.status;
  }
  private async generate(model:string,input:ReturnType<typeof aiRankingInput>):Promise<MomentumWeights|null>{
-  const response=await fetch("http://127.0.0.1:11434/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},signal:AbortSignal.timeout(25000),body:JSON.stringify({model,stream:false,format:"json",options:{temperature:0,num_predict:120},prompt:"You are evaluating a livestream momentum ranking. Each anonymous row contains [concurrent viewers, viewer change since last snapshot, received chat per minute, unique active chat users in 5 minutes]. Choose fair relative integer weights for all four metrics based on the current distribution. Balance popularity, growth, chat intensity and participation; avoid overvaluing one noisy metric. Each weight must be 10 to 50, sum exactly 100. Return only JSON with keys viewers, growth, chat, active. Rows: "+JSON.stringify(input)})});
+  const response=await fetch("http://127.0.0.1:11434/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},signal:AbortSignal.timeout(25000),body:JSON.stringify({model,stream:false,format:"json",options:{temperature:0,num_predict:120},prompt:"You are evaluating a livestream momentum ranking. Each anonymous row contains [concurrent viewers, viewer change since last snapshot, received chat per minute, unique active chat users in the last 60 seconds]. Choose fair relative integer weights for all four metrics based on the current distribution. Balance popularity, growth, chat intensity and participation; avoid overvaluing one noisy metric. Each weight must be 10 to 50, sum exactly 100. Return only JSON with keys viewers, growth, chat, active. Rows: "+JSON.stringify(input)})});
   if(!response.ok)return null;
   const data=await response.json() as {response?:unknown};
   if(typeof data.response!=="string"||data.response.length>2000)return null;

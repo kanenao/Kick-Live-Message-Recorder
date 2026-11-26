@@ -1,5 +1,5 @@
 import type {RankingEntry} from "./kick-ranking";
-export type MomentumChat={slug:string;messages:number;state:string;observedSeconds?:number;ratePerMinute?:number|null;activeUsers?:number|null;activeSeconds?:number;activeComplete?:boolean};
+export type MomentumChat={slug:string;messages:number;state:string;observedSeconds?:number;ratePerMinute?:number|null;activeUsers?:number|null;activeSeconds?:number;activeComplete?:boolean;activeMinuteUsers?:number|null;activeMinuteSeconds?:number};
 export type MomentumScore={slug:string;score:number;complete:boolean;growthKnown:boolean;chatKnown:boolean;activeKnown:boolean;rank:number|null};
 /** Scope-wide log normalization, not dependent on search, category, page, or sort.
  * Missing observations are not interpreted as zero. Partial scores are explicitly
@@ -8,7 +8,7 @@ export type MomentumWeights={viewers:number;growth:number;chat:number;active:num
 export const MOMENTUM_WEIGHTS={viewers:40,growth:25,chat:20,active:15} as const;
 export function momentumScores(rows:readonly RankingEntry[],chat:readonly MomentumChat[],weights:MomentumWeights=MOMENTUM_WEIGHTS):MomentumScore[]{
   const observed=new Map(chat.filter(c=>c.state==="connected"&&(c.observedSeconds??0)>=60&&typeof c.ratePerMinute==="number"&&Number.isFinite(c.ratePerMinute)&&c.ratePerMinute>=0).map(c=>[c.slug,c.ratePerMinute!]));
-  const active=new Map(chat.filter(c=>c.state==="connected"&&c.activeComplete===true&&(c.activeSeconds??0)>=300&&typeof c.activeUsers==="number"&&Number.isSafeInteger(c.activeUsers)&&c.activeUsers>=0).map(c=>[c.slug,c.activeUsers!]));
+  const active=new Map(chat.filter(c=>c.state==="connected"&&(c.activeMinuteSeconds??0)>=60&&typeof c.activeMinuteUsers==="number"&&Number.isSafeInteger(c.activeMinuteUsers)&&c.activeMinuteUsers>=0).map(c=>[c.slug,c.activeMinuteUsers!]));
   const positive=(n:number)=>Number.isFinite(n)?Math.max(0,n):0;
   const maxView=Math.max(0,...rows.map(r=>positive(r.viewers)));
   const maxGrowth=Math.max(0,...rows.map(r=>positive(r.viewerChange??0)));
