@@ -244,6 +244,7 @@ declare global {
       clearKickCredentials: () => Promise<{ ok: boolean }>;
       getRankingBackground: () => Promise<import("../../electron/ranking-background").RankingBackgroundStatus>;
       setRankingBackground: (enabled:boolean,scope:"ja"|"all") => Promise<import("../../electron/ranking-background").RankingBackgroundStatus>;
+      getRankingAi: (scope:"ja"|"all") => Promise<import("../../electron/ranking-ai").RankingAiStatus>;
       getRegisteredRanks: () => Promise<Record<"ja"|"all",import("../../electron/kick-ranking").RankingSnapshot|null>>;
       getRankingChatActivity: (scope:"ja"|"all",enabled:boolean,selected?:string|null) => Promise<{rows:Array<{slug:string;messages:number;state:"connected"|"connecting"|"recent"|"unavailable";observedSeconds:number;ratePerMinute:number|null;activeUsers:number|null;activeSeconds:number;activeComplete:boolean}>;message:string;targets:number;connected:number}>;
       getKickRankingHistory: (scope:"ja"|"all",hours:24|168|720,slug:string|null) => Promise<import("../../electron/kick-ranking-history").RankingHistory>;
