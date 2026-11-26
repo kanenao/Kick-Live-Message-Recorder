@@ -1,0 +1,15 @@
+import assert from "node:assert/strict";
+import {recentChatCount} from "../electron/ranking-chat-recent.ts";
+const start="2026-11-26T00:00:00Z",base=Date.parse(start),bucket=base/5000;
+const counts=new Map([[bucket,50],[bucket+1,2],[bucket+2,3],[bucket+3,90]]);
+assert.equal(recentChatCount(counts,base,start,base+15000),5);
+assert.equal(recentChatCount(counts,base,start,base+19999),5);
+assert.equal(recentChatCount(counts,base+5001,start,base+15000),null);
+assert.equal(recentChatCount(counts,base,new Date(base+5001).toISOString(),base+15000),null);
+assert.equal(recentChatCount(counts,null,start,base+15000),null);
+assert.equal(recentChatCount(counts,base,null,base+15000),null);
+assert.equal(recentChatCount(undefined,base,start,base+15000),0);
+assert.equal(recentChatCount(undefined,base,start,base+15000,true),null);
+assert.equal(recentChatCount(counts,base,start,NaN),null);
+assert.equal(recentChatCount(counts,base,start,base+20000),93);
+console.log("ten-second chat: complete buckets, session boundaries, disconnected/unknown, zero and capacity OK");
