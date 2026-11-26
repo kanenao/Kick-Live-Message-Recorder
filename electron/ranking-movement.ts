@@ -1,4 +1,5 @@
-import {supportRankValue,type SupportObservation} from "./ranking-support";
+import type {SupportObservation} from "./ranking-support";
+import {supportRankValue} from "./ranking-support-policy";
 import type {RankingEntry,RankingSnapshot,RankingScope} from "./kick-ranking";
 import {momentumScores,type MomentumChat,type MomentumWeights} from "./ranking-momentum";
 export type RankingMode="viewers"|"growth"|"chat"|"active"|"momentum"|"kicks"|"giftSubs";

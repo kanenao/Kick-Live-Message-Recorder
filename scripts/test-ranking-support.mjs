@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import {parseSupportEvent,RankingSupportActivity,supportRankValue,supportRetryDelayMs,SUPPORT_ZERO_CONFIRM_SECONDS} from "../electron/ranking-support.ts";
+import {parseSupportEvent,RankingSupportActivity} from "../electron/ranking-support.ts";
+import {supportRankValue,supportRetryDelayMs,SUPPORT_ZERO_CONFIRM_SECONDS} from "../electron/ranking-support-policy.ts";
 import {rankingFrame} from "../electron/ranking-movement.ts";
 const gift=parseSupportEvent("KicksGifted",{gift_transaction_id:"tx",gift:{amount:500,gift_id:"rage_quit"}},"kicks");
 assert.deepEqual(gift,{kind:"kicks",amount:500,id:"tx"});

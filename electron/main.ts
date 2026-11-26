@@ -1,4 +1,5 @@
-import {RankingSupportActivity,supportRetryDelayMs} from "./ranking-support";
+import {RankingSupportActivity} from "./ranking-support";
+import {supportRetryDelayMs} from "./ranking-support-policy";
 import { RankingAiWeights } from "./ranking-ai";
 import { buildFeedbackIssueUrl } from "./feedback-url";
 import { rankingChatTargets } from "./ranking-chat-targets";
