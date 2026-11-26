@@ -220,7 +220,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "1.3.1-beta.106";
+const APP_VERSION = "1.3.2-beta.107";
 const CURRENT_EDITION: "beta" | "stable" = APP_VERSION.includes("-beta.") ? "beta" : "stable";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
@@ -249,6 +249,7 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  { version: "1.3.2-beta.107", title: "ランキングの表示密度・絞り込み", changes: ["標準／コンパクト、20・50・100件、順位取得済みのみ", "同じ観測フレームで順位と並び順を統一、ページ操作改善"] },
   { version: "1.3.1-beta.106", title: "ランキングの見やすさ改善", changes: ["カード型一覧、7種類の切替、選択項目強調、狭い画面への対応", "監視・AI設定を折りたたみ、10秒更新と録画・推移を維持"] },
   { version: "1.3.0-beta.105", title: "KICKs・ギフトサブスクランキング", changes: ["上位10配信のギフトイベント受信、60秒集計・10秒更新", "独立した並び順・順位推移、未観測を区別"] },
   { version: "1.2.1-beta.104", title: "総合勢いの観測不足改善", changes: ["総合採点用のアクティブ人数は60秒実測、5分人数ランキングは維持", "チャット観測の維持と不足項目・秒数の表示"] },

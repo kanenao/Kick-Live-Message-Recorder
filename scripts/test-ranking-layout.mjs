@@ -15,3 +15,13 @@ assert.match(ui,/openHistory\(row.slug\)/);
 assert.match(ui,/action\(row.slug\)/);
 assert.match(ui,/supportBySlug.get\(row.slug\)/);
 console.log("ランキング表示：7種類・カード・折り返し・10秒・操作維持のソース確認");
+
+assert.match(ui,/const displayFrame=chatSort\?chatFrame:frame/);
+assert.match(ui,/displayFrame\?\.orders\[sort\]/);
+assert.match(ui,/const rank=displayFrame\?\.ranks\[sort\]/);
+assert.match(ui,/!rankedOnly\|\|displayFrame\?\.ranks\[sort\]\.has\(row.slug\)/);
+assert.match(ui,/Math\.ceil\(sorted\.length\/pageSize\)/);
+assert.match(ui,/sorted\.slice\(currentPage\*pageSize,\(currentPage\+1\)\*pageSize\)/);
+assert.match(ui,/data-density=\{compact\?"compact":"standard"\}/);
+assert.match(css,/\.ranking-list\[data-density=compact\]/);
+assert.match(ui,/goToPage\(currentPage\+1\)/);
