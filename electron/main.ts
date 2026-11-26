@@ -815,7 +815,7 @@ function rankingChatMeasurement(snapshot:RankingSnapshot|null,slug:string){
   const row=[...(snapshot?.entries??[]),...(snapshot?.trackedEntries??[])].find(r=>r.slug===slug);
   const since=[chatReceiver.getConnectedSince(slug),rankingChatReceiver.getConnectedSince(slug)].filter((n):n is number=>n!==null);
   const connectedSince=since.length?Math.min(...since):null, startedAt=row?.startedAt??null, now=Date.now();
-  return {...rankingChatActivity.measured(slug,connectedSince,startedAt,now),...rankingChatActivity.active(slug,connectedSince,startedAt,now)};
+  return {recentMessages:rankingChatActivity.recent(slug,connectedSince,startedAt,now),...rankingChatActivity.measured(slug,connectedSince,startedAt,now),...rankingChatActivity.active(slug,connectedSince,startedAt,now)};
 }
 function renewRankingChat(scope:RankingScope,selected:string|null):void{
   if(rankingChatScope!==null&&rankingChatScope!==scope)stopRankingChat();
