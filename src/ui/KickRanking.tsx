@@ -1,3 +1,4 @@
+import {observationStatus} from "../shared/ranking-observation";
 import {SUPPORT_WINDOW_SECONDS,SUPPORT_ZERO_CONFIRM_SECONDS} from "../../electron/ranking-support-policy";
 import type {SupportObservation} from "../../electron/ranking-support";
 import {advanceRankFrame,rankingFrame,rankMovement,type RankFrame,type RankFrameHistory,type RankingMode} from "../../electron/ranking-movement";
@@ -171,9 +172,7 @@ export function KickRanking({pageVisible,configured,desktop,onSettings,registere
   const q=search.trim().toLowerCase();
   const categories=[...new Set((snapshot?.entries??[]).map(row=>row.category))].sort((a,b)=>a.localeCompare(b,"ja"));
   const entries=snapshot?.entries??[];
-  const chatAge=chatAt?Math.max(0,now-Date.parse(chatAt)):Infinity;
-  const chatUsable=chatScope===scope&&chatAge<=30000;
-  const chatDelayed=Boolean(chatError)||chatAge>15000;
+  const {usable:chatUsable,delayed:chatDelayed}=observationStatus(chatAt,now,chatScope===scope,Boolean(chatError));
   const scopedChat=useMemo(()=>chatUsable?chatActivity:[],[chatUsable,chatActivity]);
   const scopedSupport=useMemo(()=>chatUsable&&observeChat?support:[],[chatUsable,observeChat,support]);
   const supportBySlug=new Map(scopedSupport.map(row=>[row.slug,row]));
