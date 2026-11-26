@@ -734,3 +734,6 @@
 
 /* Stable live thumbnails and control dimensions during refresh. */
 .ranking-thumb .ranking-thumb-ready,.ranking-thumb .ranking-thumb-pending{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.ranking-thumb .ranking-thumb-pending{opacity:0;pointer-events:none}.ranking-thumb-placeholder{position:absolute;inset:0;display:grid;place-items:center;color:#83e2a7}.ranking-card .ranking-title{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.ranking-card .ranking-card-score small{min-height:1.35em}.kick-ranking .ranking-toolbar>button{min-width:76px}.ranking-card{transition:border-color .15s ease}.ranking-status-strip>span{font-variant-numeric:tabular-nums}@media(prefers-reduced-motion:reduce){.ranking-card{transition:none}}
+
+/* Keep the ranking mounted across navigation without occupying the other page. */
+.ranking-page-host{min-width:0}.ranking-page-host[hidden]{display:none!important}

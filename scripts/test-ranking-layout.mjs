@@ -29,3 +29,16 @@ assert.ok(ui.includes("const visible=topRows.filter("));
 assert.ok(!ui.includes("setPageSize("));
 assert.ok(!ui.includes('className="ranking-pages"'));
 console.log("ランキング全7種：50位上限、絞り込み前の上限、ページ送り廃止");
+
+const app=readFileSync(new URL("../src/ui/App.tsx",import.meta.url),"utf8");
+assert.ok(app.includes('const [rankingOpened,setRankingOpened]=useState(false)'));
+assert.ok(app.includes('setRankingOpened(true);setTab("ranking")'));
+assert.ok(app.includes('(rankingOpened || tab === "ranking") && <div className="ranking-page-host" hidden={tab !== "ranking"}>'));
+assert.ok(app.includes('<KickRanking pageVisible={tab === "ranking"}'));
+assert.ok(css.includes('.ranking-page-host[hidden]{display:none!important}'));
+assert.ok(ui.includes('},[scope,configured,desktop,auto]);'));
+assert.ok(ui.includes('},[desktop,scope,observeChat]);'));
+assert.ok(ui.includes('if(!pageVisible){closePreview();setHistoryJump(0);}'));
+assert.ok(ui.includes('pageVisible&&preview?.slug===row.slug'));
+assert.ok(ui.includes('if(!pageVisible||!desktop||!showHistory||!window.kickRecorder)return;'));
+console.log("画面切替：初回だけマウント、監視を継続、非表示時の動画停止、履歴表示を保持");

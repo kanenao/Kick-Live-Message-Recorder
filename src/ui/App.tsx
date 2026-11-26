@@ -188,7 +188,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "1.4.2-beta.110";
+const APP_VERSION = "1.4.3-beta.111";
 const CURRENT_EDITION: "beta" | "stable" = APP_VERSION.includes("-beta.") ? "beta" : "stable";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
@@ -217,6 +217,7 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  { version: "1.4.3-beta.111", title: "別メニューでもランキング維持", changes: ["10秒更新・コメント・ギフト・順位推移を継続", "検索条件保持、非表示中のライブプレビュー停止"] },
   { version: "1.4.2-beta.110", title: "ランキング50位上限", changes: ["全7種類を最大50位に固定、ページ送り廃止", "10秒更新・内部集計・順位取得済み絞り込みを維持"] },
   { version: "1.4.1-beta.109", title: "KICKs・ギフトサブスクの速報化", changes: ["60秒待たず実受信を次の10秒更新で順位反映", "受信待ち10秒、未接続時の再試行を20秒へ短縮"] },
   { version: "1.4.0-beta.108", title: "配信記事廃止・ランキング更新改善", changes: ["記事生成・画面・バックグラウンド解析を廃止、AIランキング専用設定", "サムネイル差し替えを滑らかにし、→ KEEPへ変更"] },
@@ -1158,6 +1159,8 @@ export default function App() {
     return () => window.clearInterval(ticker);
   }, []);
   const [tab, setTab] = useState<"dashboard" | "ranking" | "recording" | "library" | "comment-video" | "updates" | "feedback" | "settings">("dashboard");
+  // Mount the ranking once on first visit, then keep its subscriptions and state alive.
+  const [rankingOpened,setRankingOpened]=useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [feedbackDetails, setFeedbackDetails] = useState("");
   const [feedbackBusy, setFeedbackBusy] = useState(false);
@@ -2335,7 +2338,7 @@ export default function App() {
       <div className="brand"><img className="brand-mark brand-icon" src="./app-icon.png" alt="" aria-hidden="true" /><div><strong>Kick Live Message Recorder</strong><small>配信映像・チャット記録</small></div></div>
       <div className="nav-label">メインメニュー</div>
       <button className={tab === "dashboard" ? "nav-item selected" : "nav-item"} onClick={() => setTab("dashboard")}>▦ <span>ダッシュボード</span></button>
-      <button className={tab === "ranking" ? "nav-item selected" : "nav-item"} onClick={() => setTab("ranking")}>▥ <span>Kickランキング</span></button>
+      <button className={tab === "ranking" ? "nav-item selected" : "nav-item"} onClick={() => {setRankingOpened(true);setTab("ranking");}}>▥ <span>Kickランキング</span></button>
       <button className={tab === "recording" ? "nav-item selected" : "nav-item"} onClick={() => setTab("recording")}>● <span>録画専用</span></button>
       <button className={tab === "library" ? "nav-item selected" : "nav-item"} onClick={() => setTab("library")}>▤ <span>録画ライブラリ</span></button>
       <button className={tab === "comment-video" ? "nav-item selected" : "nav-item"} onClick={() => setTab("comment-video")}>✦ <span>コメント付き動画</span></button>
@@ -2354,8 +2357,8 @@ export default function App() {
 
       {storageError && <div className="storage-error" role="alert">{storageError}</div>}
 
-      {tab === "ranking" && <><div className="notice"><strong>追っかけ録画の補完設定（実験機能）</strong><div>手動LIVE録画を、サーバーに残っている最古のHLS映像から試行します。配信開始からの取得・過去コメント・コメント同期は保証されません。再接続は通常録画になります。</div><label><input type="checkbox" checked={chaseRecoverVod} onChange={e=>setChaseRecoverVod(e.target.checked)}/> 放送終了後、同じ公開VODを自動取得（別ファイル・追加の通信量）</label><label><input type="checkbox" disabled={!chaseRecoverVod} checked={chaseRecoverVod && chaseRecoverChat} onChange={e=>setChaseRecoverChat(e.target.checked)}/> 同じVODの過去コメントも自動取得（JSONL・TXT・ASS）</label>{chaseChatJobs.map(job=><div key={job.url}><strong>{job.slug}</strong>：{job.message}{job.state==="waiting" && <button className="small-action" onClick={()=>{void window.kickRecorder?.cancelChaseChatRecovery(job.url).catch(()=>undefined);}}>コメント取得待ちを取消</button>}</div>)}<div>放送終了を確認した場合だけ最大6回検索します。自動補完を有効にして録画を開始してください。元の動画は保持します。</div>{chaseRecoveryJobs.map(job=><div key={job.id}><strong>{job.slug}</strong>：{job.message}（{job.attempt}/6）{["waiting","checking"].includes(job.state) && <button className="small-action" onClick={()=>{void window.kickRecorder?.cancelChaseVodRecovery(job.id).then(()=>window.kickRecorder?.listChaseVodRecovery()).then(jobs=>{if(jobs)setChaseRecoveryJobs(jobs);}).catch(()=>undefined);}}>検索停止</button>}</div>)}</div>
-<KickRanking model={settings.rankingAiModel} onModelChange={model=>setSettings(prev=>({...prev,rankingAiModel:model}))} recoverVod={chaseRecoverVod} recoverChat={chaseRecoverChat} configured={kickCredentialsConfigured} desktop={isDesktop} onSettings={()=>setTab("settings")} registered={[...channels,...recordingOnlyChannels].map(c=>c.name.toLowerCase())} canRegister={isReady} onRegister={slug=>{if(!/^[a-z0-9_]{1,25}$/.test(slug)||[...channels,...recordingOnlyChannels].some(c=>c.name.toLowerCase()===slug)||channels.length>=200)return false;setChannels(prev=>prev.some(c=>c.name.toLowerCase()===slug)?prev:[...prev,{id:Date.now(),name:slug,url:"https://kick.com/"+slug,mode:"auto",status:"待機中",recording:false}]);return true;}}/></>}
+      {(rankingOpened || tab === "ranking") && <div className="ranking-page-host" hidden={tab !== "ranking"}><div className="notice"><strong>追っかけ録画の補完設定（実験機能）</strong><div>手動LIVE録画を、サーバーに残っている最古のHLS映像から試行します。配信開始からの取得・過去コメント・コメント同期は保証されません。再接続は通常録画になります。</div><label><input type="checkbox" checked={chaseRecoverVod} onChange={e=>setChaseRecoverVod(e.target.checked)}/> 放送終了後、同じ公開VODを自動取得（別ファイル・追加の通信量）</label><label><input type="checkbox" disabled={!chaseRecoverVod} checked={chaseRecoverVod && chaseRecoverChat} onChange={e=>setChaseRecoverChat(e.target.checked)}/> 同じVODの過去コメントも自動取得（JSONL・TXT・ASS）</label>{chaseChatJobs.map(job=><div key={job.url}><strong>{job.slug}</strong>：{job.message}{job.state==="waiting" && <button className="small-action" onClick={()=>{void window.kickRecorder?.cancelChaseChatRecovery(job.url).catch(()=>undefined);}}>コメント取得待ちを取消</button>}</div>)}<div>放送終了を確認した場合だけ最大6回検索します。自動補完を有効にして録画を開始してください。元の動画は保持します。</div>{chaseRecoveryJobs.map(job=><div key={job.id}><strong>{job.slug}</strong>：{job.message}（{job.attempt}/6）{["waiting","checking"].includes(job.state) && <button className="small-action" onClick={()=>{void window.kickRecorder?.cancelChaseVodRecovery(job.id).then(()=>window.kickRecorder?.listChaseVodRecovery()).then(jobs=>{if(jobs)setChaseRecoveryJobs(jobs);}).catch(()=>undefined);}}>検索停止</button>}</div>)}</div>
+<KickRanking pageVisible={tab === "ranking"} model={settings.rankingAiModel} onModelChange={model=>setSettings(prev=>({...prev,rankingAiModel:model}))} recoverVod={chaseRecoverVod} recoverChat={chaseRecoverChat} configured={kickCredentialsConfigured} desktop={isDesktop} onSettings={()=>setTab("settings")} registered={[...channels,...recordingOnlyChannels].map(c=>c.name.toLowerCase())} canRegister={isReady} onRegister={slug=>{if(!/^[a-z0-9_]{1,25}$/.test(slug)||[...channels,...recordingOnlyChannels].some(c=>c.name.toLowerCase()===slug)||channels.length>=200)return false;setChannels(prev=>prev.some(c=>c.name.toLowerCase()===slug)?prev:[...prev,{id:Date.now(),name:slug,url:"https://kick.com/"+slug,mode:"auto",status:"待機中",recording:false}]);return true;}}/</div>}
 
       {tab === "dashboard" && <>
         <section className="stats">

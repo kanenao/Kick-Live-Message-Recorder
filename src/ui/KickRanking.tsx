@@ -19,7 +19,7 @@ function SmoothRankingThumbnail({source,refreshed}:{source:string|null;refreshed
   const candidate=target&&target!==shown?target:null;
   return <>{!shown&&<span className="ranking-thumb-placeholder">LIVE</span>}{shown&&<img key={shown} className="ranking-thumb-ready" src={shown} alt="" referrerPolicy="no-referrer"/>}{candidate&&<img key={candidate} className="ranking-thumb-pending" src={candidate} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onLoad={()=>setShown(candidate)} onError={()=>{if(candidate!==source)setFailed(candidate);}}/>}</>;
 }
-export function KickRanking({configured,desktop,onSettings,registered,canRegister,onRegister,recoverVod,recoverChat,model,onModelChange}:{configured:boolean;desktop:boolean;onSettings:()=>void;registered:string[];canRegister:boolean;onRegister:(slug:string)=>boolean;recoverVod:boolean;recoverChat:boolean;model:string;onModelChange:(model:string)=>void}){
+export function KickRanking({pageVisible,configured,desktop,onSettings,registered,canRegister,onRegister,recoverVod,recoverChat,model,onModelChange}:{pageVisible:boolean;configured:boolean;desktop:boolean;onSettings:()=>void;registered:string[];canRegister:boolean;onRegister:(slug:string)=>boolean;recoverVod:boolean;recoverChat:boolean;model:string;onModelChange:(model:string)=>void}){
   const [scope,setScope]=useState<RankingScope>("ja");
   const [snapshots,setSnapshots]=useState<Partial<Record<RankingScope,RankingSnapshot>>>({});
   const [search,setSearch]=useState("");
@@ -43,7 +43,7 @@ export function KickRanking({configured,desktop,onSettings,registered,canRegiste
   function openHistory(slug:string){setShowHistory(true);setHistorySlug(slug);setHistoryJump(v=>v+1);}
   function closeHistory(){setShowHistory(false);setHistoryJump(0);}
   function toggleHistory(){if(showHistory)closeHistory();else{setShowHistory(true);setHistoryJump(v=>v+1);}}
-  useEffect(()=>{if(historyJump>0&&showHistory){historyPanelRef.current?.focus({preventScroll:true});historyPanelRef.current?.scrollIntoView({block:"start",behavior:"smooth"});}},[historyJump,showHistory]);
+  useEffect(()=>{if(pageVisible&&historyJump>0&&showHistory){historyPanelRef.current?.focus({preventScroll:true});historyPanelRef.current?.scrollIntoView({block:"start",behavior:"smooth"});}},[historyJump,showHistory]);
   const [sort,setSort]=useState<RankingMode>("viewers");
   const [aiEnabled,setAiEnabled]=useState(true);
   const [aiResult,setAiResult]=useState<{scope:RankingScope;status:RankingAiStatus}|null>(null);
@@ -66,8 +66,9 @@ export function KickRanking({configured,desktop,onSettings,registered,canRegiste
   const [chatCoverage,setChatCoverage]=useState({targets:0,connected:0});
   useEffect(()=>{previewRef.current=preview?.slug??null;},[preview]);
   function cancelHover(){if(hoverTimer.current!==null){window.clearTimeout(hoverTimer.current);hoverTimer.current=null;}}
-  function closePreview(){cancelHover();setPreview(null);setPreviewPinned(false);}
-  function hoverPreview(slug:string,name:string){if(previewPinned)return;cancelHover();hoverTimer.current=window.setTimeout(()=>{hoverTimer.current=null;setPreview({slug,name});},450);}
+  function closePreview(){cancelHover();previewRef.current=null;setPreview(null);setPreviewPinned(false);}
+  useEffect(()=>{if(!pageVisible){closePreview();setHistoryJump(0);}},[pageVisible]);
+  function hoverPreview(slug:string,name:string){if(!pageVisible||previewPinned)return;cancelHover();hoverTimer.current=window.setTimeout(()=>{hoverTimer.current=null;setPreview({slug,name});},450);}
   function leavePreview(slug:string){cancelHover();if(!previewPinned)setPreview(current=>current?.slug===slug?null:current);}
   function togglePreview(slug:string,name:string){cancelHover();if(previewPinned&&preview?.slug===slug){closePreview();return;}setPreview({slug,name});setPreviewPinned(true);}
   useEffect(()=>{closePreview();return cancelHover;},[scope]);
@@ -146,13 +147,13 @@ export function KickRanking({configured,desktop,onSettings,registered,canRegiste
   }
   const snapshot=snapshots[scope];
   useEffect(()=>{
-    if(!desktop||!showHistory||!window.kickRecorder)return;
+    if(!pageVisible||!desktop||!showHistory||!window.kickRecorder)return;
     let live=true,waiting=false;setHistoryError("");setHistoryLoading(true);
     const api=window.kickRecorder;
     const refresh=()=>{if(waiting)return;waiting=true;void api.getKickRankingHistory(scope,historyHours,historySlug).then(value=>{if(live){setHistoryResult({key:historyKey,data:value});setHistoryError("");}}).catch(e=>{if(live)setHistoryError(e instanceof Error?e.message:String(e));}).finally(()=>{waiting=false;if(live)setHistoryLoading(false);});};
     refresh();const timer=window.setInterval(refresh,30000);
     return()=>{live=false;window.clearInterval(timer);};
-  },[scope,historyHours,historySlug,desktop,showHistory,historyKey]);
+  },[scope,historyHours,historySlug,desktop,showHistory,historyKey,pageVisible]);
   function register(slug:string){
     if(!canRegister||registered.includes(slug))return;
     if(!window.confirm(slug+" を自動録画対象として登録しますか？ アプリの監視・自動録画設定が有効な場合、配信中や今後の配信を自動録画します。"))return;
@@ -209,13 +210,13 @@ export function KickRanking({configured,desktop,onSettings,registered,canRegiste
   const visible=topRows.filter(row=>(!rankedOnly||ranks?.has(row.slug))&&(!category||row.category===category)&&(!q||[row.slug,row.name,row.title,row.category].some(value=>value.toLowerCase().includes(q))));
   const rankLabels:Record<RankingMode,string>={viewers:"同接順位",growth:"増加順位",chat:"コメント順位",active:"アクティブ順位",momentum:"AI総合順位",kicks:"KICKs順位",giftSubs:"ギフトサブスク順位"};
   const movementLabels={up:"▲ UP",down:"▼ DOWN",keep:"→ KEEP",new:"★ NEW",unknown:"—"};
-  const previewVisible=preview===null||visible.some(row=>row.slug===preview.slug);
+  const previewVisible=pageVisible&&(preview===null||visible.some(row=>row.slug===preview.slug));
   useEffect(()=>{if(!previewVisible)closePreview();},[previewVisible]);
   const stale=!snapshot||now-Date.parse(snapshot.fetchedAt)>180000;
   const elapsed=(date:string|null)=>{if(!date)return "不明";const m=Math.max(0,Math.floor((now-Date.parse(date))/60000));return Math.floor(m/60)+"時間"+(m%60)+"分";};
   const action=(slug:string)=>{const recording=active.includes(slug),working=pending.includes(slug),disabled=!desktop||working||(!recording&&stale);return <div className="ranking-record-buttons">{recording?<button className="small-action" disabled={disabled} onClick={()=>void record(slug,true)}>■ 録画停止</button>:<><button className="primary-small" disabled={disabled} onClick={()=>void record(slug,false,false)}>{working?"処理中…":"● 通常録画"}</button><button className="small-action chase-recording-button" disabled={disabled} onClick={()=>void record(slug,false,true)} title="取得可能な最古の映像から録画を試行">↶ 追っかけ録画</button></>}</div>;};
   return <section className="panel kick-ranking">
-    <div className="panel-heading"><div><h2>リアルタイムランキング</h2><p>Kick公式APIから独自集計。登録していない配信者も直接録画できます。</p></div><span className="count-pill">{snapshot? snapshot.total.toLocaleString()+" 配信取得":"未取得"}</span></div>
+    <div className="panel-heading"><div><h2>リアルタイムランキング</h2><p>Kick公式APIから独自集計。別メニューでも自動更新・監視を継続します。登録していない配信者も直接録画できます。</p></div><span className="count-pill">{snapshot? snapshot.total.toLocaleString()+" 配信取得":"未取得"}</span></div>
     {!configured&&<div className="notice">ランキングにはKick APIの設定が必要です。<button className="small-action" onClick={onSettings}>設定を開く</button></div>}
     <div className="ranking-toolbar"><select aria-label="ランキング範囲" value={scope} onChange={e=>setScope(e.target.value as RankingScope)}><option value="ja">日本語配信</option><option value="all">全世界</option></select><select aria-label="カテゴリ絞り込み" value={category} onChange={e=>setCategory(e.target.value)}><option value="">全カテゴリ</option>{categories.map(c=><option key={c} value={c}>{c}</option>)}</select><input aria-label="配信検索" placeholder="配信者・タイトル・カテゴリ検索" value={search} onChange={e=>setSearch(e.target.value)}/><label><input type="checkbox" checked={auto} onChange={e=>setAuto(e.target.checked)}/> 自動更新（{RANKING_REFRESH_MS/1000}秒）</label><button className="small-action" disabled={busy||!configured||!desktop} onClick={()=>refreshRef.current()}>{busy?"取得中…":"更新"}</button></div>
     <div className="ranking-sort-tabs" role="group" aria-label="ランキングの種類">{([{id:"viewers",label:"同時視聴者"},{id:"growth",label:"視聴者増加"},{id:"chat",label:"コメント"},{id:"active",label:"アクティブ"},{id:"momentum",label:"AI総合"},{id:"kicks",label:"KICKs"},{id:"giftSubs",label:"ギフトサブ"}] as const).map(item=><button key={item.id} type="button" aria-pressed={sort===item.id} onClick={()=>setSort(item.id)}>{item.label}</button>)}</div>
@@ -253,7 +254,7 @@ export function KickRanking({configured,desktop,onSettings,registered,canRegiste
     <div className="ranking-list" role="list" data-density={compact?"compact":"standard"} aria-label={rankLabels[sort]+"一覧"}>
       {visible.map(row=><article role="listitem" className="ranking-card" key={row.slug} aria-label={row.name+"の配信"}>
         <div className="ranking-card-position">{(()=>{const rank=displayFrame?.ranks[sort].get(row.slug),change=chatSort?(chatFrame?rankMovement(chatFrame,previousChatFrame,sort,row):null):frame?rankMovement(frame,previousRankFrames[scope],sort,row):null;return <div className="ranking-position"><strong className="ranking-rank">{rank!=null?rank+"位":"—"}</strong><span className={"ranking-move ranking-move-"+(change?.kind??"unknown")} title={change?.previous!=null?"前回 "+change.previous+"位":change?.kind==="new"?"新しい配信・新規登場":"比較可能な前回順位なし"}>{movementLabels[change?.kind??"unknown"]}{change&&change.delta>0?" "+change.delta:""}</span>{change?.previous!=null&&<small>前回 {change.previous}位</small>}{sort!=="viewers"&&<small>同接 {row.rank}位</small>}{(()=>{const p=trendFor(row.slug,row.startedAt),segments=rankTrendSegments(p);return segments.length?<button type="button" className="ranking-trend-button" onClick={()=>openHistory(row.slug)} title="順位推移を詳しく見る"><svg className="ranking-trend" viewBox="0 0 72 26" role="img" aria-label={"順位推移："+p.map(v=>v.rank==null?"欠測":v.rank+"位").join(" → ")}>{segments.map((v,i)=><polyline key={i} points={v} fill="none" stroke="currentColor" strokeWidth="2"/>)}</svg></button>:<small>推移観測中</small>;})()}</div>;})()}</div>
-        <div className="ranking-card-stream"><div className="ranking-thumb" onMouseEnter={()=>hoverPreview(row.slug,row.name)} onMouseLeave={()=>leavePreview(row.slug)}><SmoothRankingThumbnail source={row.thumbnail} refreshed={row.thumbnail?refreshedRankingThumbnail(row.thumbnail,snapshot?.fetchedAt)??row.thumbnail:null}/>{preview?.slug===row.slug&&/^[a-z0-9_-]{1,40}$/.test(row.slug)&&<iframe key={row.slug} className="ranking-thumb-player" src={"https://player.kick.com/"+encodeURIComponent(row.slug)+"?autoplay=true&muted=true"} title={row.name+"のライブ映像"} allow="autoplay" tabIndex={-1} aria-hidden="true"/>}<button type="button" className="ranking-thumb-toggle" onClick={()=>togglePreview(row.slug,row.name)} aria-label={row.name+(previewPinned&&preview?.slug===row.slug?"の固定プレビューを解除":"のライブ映像を同じ枠内に固定")} aria-pressed={previewPinned&&preview?.slug===row.slug} title="マウスを合わせると枠内再生・クリックで固定/解除">{preview?.slug===row.slug&&<span className="ranking-thumb-live">{previewPinned?"● 固定":"● LIVE"}</span>}</button></div><div className="ranking-card-identity"><button className="ranking-name" onClick={()=>void window.kickRecorder?.openKickProfile(row.slug).catch(e=>setMessage(String(e)))}>{row.avatar&&<img src={row.avatar} alt="" loading="lazy" referrerPolicy="no-referrer"/>}{row.name}</button><div className="ranking-title">{row.title}</div><small>{row.category} ・ {row.language||"言語不明"}</small><small className="ranking-duration">{elapsed(row.startedAt)}</small></div></div>
+        <div className="ranking-card-stream"><div className="ranking-thumb" onMouseEnter={()=>hoverPreview(row.slug,row.name)} onMouseLeave={()=>leavePreview(row.slug)}><SmoothRankingThumbnail source={row.thumbnail} refreshed={row.thumbnail?refreshedRankingThumbnail(row.thumbnail,snapshot?.fetchedAt)??row.thumbnail:null}/>{pageVisible&&preview?.slug===row.slug&&/^[a-z0-9_-]{1,40}$/.test(row.slug)&&<iframe key={row.slug} className="ranking-thumb-player" src={"https://player.kick.com/"+encodeURIComponent(row.slug)+"?autoplay=true&muted=true"} title={row.name+"のライブ映像"} allow="autoplay" tabIndex={-1} aria-hidden="true"/>}<button type="button" className="ranking-thumb-toggle" onClick={()=>togglePreview(row.slug,row.name)} aria-label={row.name+(previewPinned&&preview?.slug===row.slug?"の固定プレビューを解除":"のライブ映像を同じ枠内に固定")} aria-pressed={previewPinned&&preview?.slug===row.slug} title="マウスを合わせると枠内再生・クリックで固定/解除">{preview?.slug===row.slug&&<span className="ranking-thumb-live">{previewPinned?"● 固定":"● LIVE"}</span>}</button></div><div className="ranking-card-identity"><button className="ranking-name" onClick={()=>void window.kickRecorder?.openKickProfile(row.slug).catch(e=>setMessage(String(e)))}>{row.avatar&&<img src={row.avatar} alt="" loading="lazy" referrerPolicy="no-referrer"/>}{row.name}</button><div className="ranking-title">{row.title}</div><small>{row.category} ・ {row.language||"言語不明"}</small><small className="ranking-duration">{elapsed(row.startedAt)}</small></div></div>
         <div className="ranking-card-numbers">
           <div className="ranking-metric" data-selected={sort==="viewers"}><span className="ranking-metric-label">同時視聴者</span><strong className="ranking-viewers">{row.viewers.toLocaleString("ja-JP")}</strong></div>
           <div className="ranking-metric" data-selected={sort==="growth"}><span className="ranking-metric-label">視聴者増加</span><strong>{row.viewerChange===null?"比較なし":(row.viewerChange>0?"+":"")+row.viewerChange.toLocaleString("ja-JP")}</strong></div>
