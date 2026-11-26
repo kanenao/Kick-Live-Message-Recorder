@@ -34,7 +34,11 @@ jobs:
               "不具合情報": { color: "D73A4A", description: "不具合・動作障害の報告" },
               "機能要望": { color: "1D76DB", description: "新機能・改善の提案" },
               "AI判定待ち": { color: "FBCA04", description: "AIが内容・優先度・重複を確認する前" },
-              "AI確認済み": { color: "C2E0C6", description: "AIが分類・既存課題との照合を完了" }
+              "AI確認済み": { color: "C2E0C6", description: "AIが分類・既存課題との照合を完了" },
+              "優先度:緊急": { color: "B60205", description: "録画不能・データ消失・重大なセキュリティ障害の疑い" },
+              "優先度:高": { color: "D93F0B", description: "主要機能の障害・影響範囲が大きい" },
+              "優先度:通常": { color: "FBCA04", description: "通常の修正・改善" },
+              "優先度:低": { color: "0E8A16", description: "軽微な表示・改善要望" }
             };
             for (const [name, meta] of Object.entries(names)) {
               try {
@@ -50,7 +54,7 @@ jobs:
             }
             // An edited title must not leave contradictory edition/kind labels.
             const existing = issue.labels.map(label => label.name);
-            for (const name of ["β版","製品版","不具合情報","機能要望","AI確認済み"]) {
+            for (const name of ["β版","製品版","不具合情報","機能要望","AI確認済み","優先度:緊急","優先度:高","優先度:通常","優先度:低"]) {
               if (!desired.includes(name) && existing.includes(name)) {
                 await github.rest.issues.removeLabel({ owner, repo, issue_number, name });
               }
