@@ -1,0 +1,11 @@
+import assert from "node:assert/strict";
+import {parseAiWeights,aiRankingInput,RankingAiWeights} from "../electron/ranking-ai.ts";
+const valid={viewers:20,growth:30,chat:25,active:25};
+assert.deepEqual(parseAiWeights(valid),valid);
+for(const v of [null,{}, {...valid,active:24},{...valid,viewers:0,growth:50},{...valid,viewers:"20"},{...valid,viewers:20.5,growth:29.5},{...valid,viewers:NaN}])assert.equal(parseAiWeights(v),null);
+const snapshot={entries:[{slug:"a",viewers:100,viewerChange:10},{slug:"b",viewers:20,viewerChange:1},{slug:"c",viewers:50,viewerChange:0}],complete:true,fetchedAt:new Date().toISOString()};
+const c=slug=>({slug,state:"connected",observedSeconds:300,ratePerMinute:10,activeSeconds:300,activeComplete:true,activeUsers:5});
+assert.deepEqual(aiRankingInput(snapshot,[c("a"),{...c("b"),activeComplete:false},c("c")]),[[100,10,10,5],[50,0,10,5]]);
+assert.equal(new RankingAiWeights().poll("ja",snapshot,[c("a")],"qwen2.5vl:3b").weights,null);
+assert.equal(new RankingAiWeights().poll("ja",null,[],"qwen2.5vl:3b").state,"waiting");
+console.log("AI ranking: bounded weights, anonymous numeric input, incomplete observations and fallback");

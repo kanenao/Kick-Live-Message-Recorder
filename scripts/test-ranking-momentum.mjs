@@ -28,3 +28,7 @@ for(const patch of [{activeComplete:false},{activeSeconds:299},{activeUsers:null
 }
 assert.equal(momentumScores(equalRows,equalChat.map(({activeUsers,activeSeconds,activeComplete,...c})=>c)).every(r=>r.rank===null),true);
 console.log("4指標：配点、アクティブ人数の加点、0人、未観測・暫定の区別");
+
+const adaptive=momentumScores(equalRows,equalChat,{viewers:20,growth:20,chat:20,active:40});
+assert.equal(adaptive[0].score,100);assert.equal(adaptive[1].score,60);
+assert.equal(adaptive[0].rank,1);

@@ -220,7 +220,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "1.1.4-beta.102";
+const APP_VERSION = "1.2.0-beta.103";
 const CURRENT_EDITION: "beta" | "stable" = APP_VERSION.includes("-beta.") ? "beta" : "stable";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
@@ -249,6 +249,7 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  { version: "1.2.0-beta.103", title: "AI総合勢いランキング", changes: ["Ollamaが4指標の配点を判断、100点満点で10秒更新", "配点とAI状態を表示、未接続・観測不足時は通常採点"] },
   { version: "1.1.4-beta.102", title: "アプリ内の不具合情報・機能要望", changes: ["500文字の入力欄、版・バージョンの自動引継ぎ、認証情報の検査", "投稿後のAI分類・優先度タグ対応"] },
   { version: "1.1.3-beta.101", title: "ランキング10秒更新・順位推移改善", changes: ["Nico版風の順位ミニグラフ、推移ボタンの直接移動、詳細順位・視聴者数グラフ", "一覧上部の推移詳細・履歴切替時の混在防止・欠測グラフ修正", "画面表示と実際の更新を10秒に統一", "直近10秒の実受信コメント件数と5分集計を併記", "API停止中も既存チャット受信を継続、重複・欠測時の誤順位比較を防止"] },
   { version: "1.1.3-beta.100", title: "10秒ランキング・アクティブ人数", changes: ["ランキングを10秒自動更新、実受信チャットの勢い・アクティブ・総合順位の前回比を独立更新", "API停止中の既存チャット監視を維持、重複・欠測時の誤順位比較を抑止", "直近5分のユニークコメント投稿者数・アクティブ人数順", "連投・重複受信を除外、未観測と暫定表示を区別", "総合勢いを同接40・増加25・コメント20・アクティブ人数15の4指標に変更", "全ランキングにUP/DOWN/KEEP/NEW・前回順位を表示"] },
