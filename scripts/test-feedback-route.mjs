@@ -1,32 +1,30 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-
-const root = new URL("../", import.meta.url);
-const source = path => readFileSync(new URL(path, root), "utf8");
-const pkg = JSON.parse(source("package.json"));
-const beta = pkg.version.includes("-beta.");
-const main = source("electron/main.ts");
-const preload = source("electron/preload.ts");
-const types = source("src/types/electron.d.ts");
-const ui = source("src/ui/App.tsx");
-
-assert.match(main, /ipcMain\.handle\("feedback:open", async \(event, kind: unknown\)/);
-assert.match(main, /assertTrustedSender\(event\)/);
-assert.match(main, /kind !== "bug" && kind !== "feature"/);
-assert.match(main, /app\.getVersion\(\)\.includes\("-beta\."\)/);
-for (const path of ["01-beta-bug.yml", "02-stable-bug.yml", "03-beta-feature.yml", "04-stable-feature.yml"]) {
-  assert.ok(main.includes(path), "official report template URL must be present: " + path);
+import {readFileSync} from "node:fs";
+import {buildFeedbackIssueUrl} from "../electron/feedback-url.ts";
+for(const [version,edition] of [["1.1.4-beta.102","β版"],["1.0.1","製品版"]]){
+ for(const kind of ["bug","feature"]){
+  const message="録画停止 & 日本語\n詳細 #1";
+  const url=new URL(buildFeedbackIssueUrl(kind,message,version));
+  assert.equal(url.origin,"https://github.com");
+  assert.equal(url.pathname,"/kanenao/Kick-Live-Message-Recorder/issues/new");
+  assert.equal(url.searchParams.get("template"),edition==="β版"?(kind==="bug"?"01-beta-bug.yml":"03-beta-feature.yml"):(kind==="bug"?"02-stable-bug.yml":"04-stable-feature.yml"));
+  assert.equal(url.searchParams.get("app_version"),version);
+  assert.equal(url.searchParams.get(kind==="bug"?"problem":"request"),message);
+  assert.ok(url.searchParams.get("title").startsWith("["+edition+"]["+(kind==="bug"?"不具合情報":"機能要望")+"]"));
+ }
 }
-assert.match(main, /shell\.openExternal\(link\)/);
-assert.match(preload, /openFeedbackForm: \(kind: "bug" \| "feature"\)/);
-assert.match(preload, /ipcRenderer\.invoke\("feedback:open", kind\)/);
-assert.match(types, /openFeedbackForm: \(kind: "bug" \| "feature"\)/);
-assert.match(ui, /"feedback" \| "settings"/);
-assert.match(ui, /setTab\("feedback"\)/);
-assert.match(ui, /tab === "feedback" && <section className="panel feedback-panel"/);
-assert.match(ui, /onClick=\{\(\) => void openFeedback\("bug"\)\}/);
-assert.match(ui, /onClick=\{\(\) => void openFeedback\("feature"\)\}/);
-assert.match(ui, /パスワード、APIキー、認証Cookie/);
-assert.ok(!main.includes("issues:create"), "do not silently post reports or credentials to GitHub");
-assert.equal(pkg.build.publish[0].channel, beta ? "beta" : "latest", "don't cross release channels");
-console.log("フィードバックの4種類・版別ルーティング・本人送信・IPCの回帰テスト成功：", pkg.version);
+for(const value of [""," ","a".repeat(501),"user_session=abcdef","Cookie: secret","API_KEY=abcd","Authorization: Bearer secret","client_secret=secret"]){
+ assert.throws(()=>buildFeedbackIssueUrl("bug",value,"1.0.1"));
+}
+assert.throws(()=>buildFeedbackIssueUrl("other","test","1.0.1"));
+assert.throws(()=>buildFeedbackIssueUrl("bug","test","invalid"));
+assert.equal(new URL(buildFeedbackIssueUrl("bug","a".repeat(500),"1.0.1")).searchParams.get("problem").length,500);
+const source=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
+assert.match(source("electron/main.ts"),/assertTrustedSender\(event\);\s*const link = buildFeedbackIssueUrl\(kind, details, app\.getVersion\(\)\)/);
+assert.match(source("electron/main.ts"),/shell\.openExternal\(link\)/);
+assert.match(source("electron/preload.ts"),/ipcRenderer\.invoke\("feedback:open", kind, details\)/);
+assert.match(source("src/types/electron.d.ts"),/openFeedbackForm: \(kind: "bug" \| "feature", details: string\)/);
+assert.match(source("src/ui/App.tsx"),/maxLength=\{500\}/);
+assert.match(source("src/ui/App.tsx"),/openFeedbackForm\(kind, details\)/);
+assert.ok(!source("electron/main.ts").includes("issues:create"));
+console.log("報告フォーム：版別4経路、入力制限、秘密情報保護、本人送信の回帰テスト成功");

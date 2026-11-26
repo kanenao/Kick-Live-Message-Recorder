@@ -1,3 +1,4 @@
+import { buildFeedbackIssueUrl } from "./feedback-url";
 import { rankingChatTargets } from "./ranking-chat-targets";
 import { LiveRankingPeaks } from "./ranking-live-peaks";
 import { RankingRequestQueue } from "./ranking-request-queue";
@@ -1613,16 +1614,9 @@ function registerIpcHandlers(): void {
   });
 
 
-  ipcMain.handle("feedback:open", async (event, kind: unknown) => {
+  ipcMain.handle("feedback:open", async (event, kind: unknown, details: unknown) => {
     assertTrustedSender(event);
-    if (kind !== "bug" && kind !== "feature") throw new Error("報告の種類が不正です。");
-    // Edition and destination are fixed by the installed app, never supplied by
-    // the renderer. Open only one of four official GitHub Issue Forms.
-    const edition = app.getVersion().includes("-beta.") ? "beta" : "stable";
-    const form = edition === "beta"
-      ? kind === "bug" ? "01-beta-bug.yml" : "03-beta-feature.yml"
-      : kind === "bug" ? "02-stable-bug.yml" : "04-stable-feature.yml";
-    const link = "https://github.com/kanenao/Kick-Live-Message-Recorder/issues/new?template=" + form;
+    const link = buildFeedbackIssueUrl(kind, details, app.getVersion());
     await shell.openExternal(link);
     return { opened: true as const };
   });

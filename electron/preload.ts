@@ -291,7 +291,7 @@ const api = {
   getEditionReleases: (): Promise<EditionHistory> => ipcRenderer.invoke("editions:list"),
   openEditionInstaller: (target: "beta" | "stable"): Promise<{ opened: boolean; version?: string }> =>
     ipcRenderer.invoke("editions:switch", target),
-  openFeedbackForm: (kind: "bug" | "feature"): Promise<{ opened: boolean }> => ipcRenderer.invoke("feedback:open", kind),
+  openFeedbackForm: (kind: "bug" | "feature", details: string): Promise<{ opened: boolean }> => ipcRenderer.invoke("feedback:open", kind, details),
   getUpdateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke("updater:get-status"),
   checkForUpdates: (): Promise<UpdateStatus> => ipcRenderer.invoke("updater:check"),
   installUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("updater:install"),

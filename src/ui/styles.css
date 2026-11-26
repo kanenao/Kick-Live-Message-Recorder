@@ -693,3 +693,5 @@
 
 /* Compact Nico-style observed rank trend; no table width expansion. */
 .ranking-trend-button{display:block;width:72px;padding:0;border:0;background:transparent;color:#59b6ff;cursor:pointer;line-height:0;border-radius:3px}.ranking-trend-button:focus-visible{outline:2px solid #59b6ff;outline-offset:2px}.ranking-trend{display:block;width:72px;height:26px}.ranking-history-panel{scroll-margin-top:12px}.ranking-trend-button:hover{color:#9ad6ff}
+
+.feedback-input-label{display:flex;justify-content:space-between;gap:12px;margin:12px 0 7px;color:#c9d4e5;font-size:13px}.feedback-input-label span{color:#8fa1b8;font-variant-numeric:tabular-nums}.feedback-details{display:block;width:100%;box-sizing:border-box;min-height:86px;resize:vertical;border:1px solid #46566d;border-radius:10px;background:#131d2d;color:#eef3fb;padding:10px 12px;font:inherit;line-height:1.6}.feedback-details:focus-visible{outline:2px solid #b7c9e3;outline-offset:1px}.feedback-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
