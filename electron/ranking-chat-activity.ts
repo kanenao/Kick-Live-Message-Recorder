@@ -1,3 +1,4 @@
+import {recentChatCount} from "./ranking-chat-recent";
 import {RankingActiveUsers} from "./ranking-active-users";
 /** Received message counts only. No extra subscriptions, identities or message bodies. */
 export class RankingChatActivity {
@@ -32,6 +33,11 @@ export class RankingChatActivity {
     if(observedSeconds<60)return {observedSeconds,ratePerMinute:null};
     let count=0;for(const [bucket,n] of this.channels.get(slug)??[])if(bucket>=begin&&bucket<end)count+=n;
     return {observedSeconds,ratePerMinute:Math.round(count*600/observedSeconds)/10};
+  }
+  recent(slug:string,connectedSince:number|null,startedAt:string|null,now=Date.now()):number|null{
+    if(!Number.isFinite(now))return null;
+    this.prune(Math.floor(now/5000));
+    return recentChatCount(this.channels.get(slug),connectedSince,startedAt,now,this.channels.size>=this.maxChannels);
   }
   active(slug:string,connectedSince:number|null,startedAt:string|null,now=Date.now()){return this.activeUsers.measure(slug,connectedSince,startedAt,now);}
   private prune(minute:number):void{
