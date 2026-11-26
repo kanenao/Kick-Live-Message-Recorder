@@ -16,3 +16,10 @@ assert.equal(missing.measure("room",t-300000,start,t).activeComplete,false);
 const activity=new RankingChatActivity();activity.add("room",t,"e",1);activity.add("room",t,"e",2);activity.add("room",t,"f",1);
 assert.equal(activity.active("room",t-300000,start,t).activeUsers,1);
 console.log("アクティブ人数：ユニーク集計、イベント重複、期限、放送・接続範囲、上限、識別不能");
+
+const minute=new RankingChatActivity();minute.add("room",t-90000,"old",1);minute.add("room",t-30000,"new",2);minute.add("room",t-10000,"repeat",2);
+assert.deepEqual(minute.activeMinute("room",t-60000,start,t),{activeMinuteUsers:1,activeMinuteSeconds:60});
+assert.equal(minute.active("room",t-60000,start,t).activeComplete,false);
+assert.equal(minute.activeMinute("room",t-59000,start,t).activeMinuteUsers,null);
+assert.equal(minute.activeMinute("quiet",t-60000,start,t).activeMinuteUsers,0);
+minute.add("room",t-1000,"unknown",null);assert.equal(minute.activeMinute("room",t-60000,start,t).activeMinuteUsers,null);

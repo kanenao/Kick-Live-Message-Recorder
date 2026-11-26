@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {advanceRankFrame,rankingFrame,rankMovement} from "../electron/ranking-movement.ts";
 const start="2026-11-25T00:00:00Z";
 const row=(slug,rank,viewerChange,startedAt=start)=>({slug,rank,viewers:100-rank,viewerChange,rankChange:null,startedAt});
-const chat=(slug,n)=>({slug,state:"connected",messages:n,observedSeconds:300,ratePerMinute:n,activeUsers:n,activeSeconds:300,activeComplete:true});
+const chat=(slug,n)=>({slug,state:"connected",messages:n,observedSeconds:300,ratePerMinute:n,activeUsers:n,activeSeconds:300,activeComplete:true,activeMinuteUsers:n,activeMinuteSeconds:60});
 const snap=(entries,at,complete=true,total=entries.length,scope="ja")=>({scope,entries,fetchedAt:at,complete,total});
 const previous=rankingFrame(snap([row("a",1,10),row("b",2,20)],"2026-11-25T00:05:00Z"),[chat("a",10),chat("b",20)]);
 const nextRows=[row("b",1,5),row("a",2,30),row("c",3,0)];
