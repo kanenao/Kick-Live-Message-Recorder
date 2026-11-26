@@ -4,8 +4,9 @@ export type MomentumScore={slug:string;score:number;complete:boolean;growthKnown
 /** Scope-wide log normalization, not dependent on search, category, page, or sort.
  * Missing observations are not interpreted as zero. Partial scores are explicitly
  * labelled and never ranked against four-metric scores. */
+export type MomentumWeights={viewers:number;growth:number;chat:number;active:number};
 export const MOMENTUM_WEIGHTS={viewers:40,growth:25,chat:20,active:15} as const;
-export function momentumScores(rows:readonly RankingEntry[],chat:readonly MomentumChat[]):MomentumScore[]{
+export function momentumScores(rows:readonly RankingEntry[],chat:readonly MomentumChat[],weights:MomentumWeights=MOMENTUM_WEIGHTS):MomentumScore[]{
   const observed=new Map(chat.filter(c=>c.state==="connected"&&(c.observedSeconds??0)>=60&&typeof c.ratePerMinute==="number"&&Number.isFinite(c.ratePerMinute)&&c.ratePerMinute>=0).map(c=>[c.slug,c.ratePerMinute!]));
   const active=new Map(chat.filter(c=>c.state==="connected"&&c.activeComplete===true&&(c.activeSeconds??0)>=300&&typeof c.activeUsers==="number"&&Number.isSafeInteger(c.activeUsers)&&c.activeUsers>=0).map(c=>[c.slug,c.activeUsers!]));
   const positive=(n:number)=>Number.isFinite(n)?Math.max(0,n):0;
@@ -13,7 +14,7 @@ export function momentumScores(rows:readonly RankingEntry[],chat:readonly Moment
   const maxGrowth=Math.max(0,...rows.map(r=>positive(r.viewerChange??0)));
   const maxChat=Math.max(0,...rows.map(r=>observed.get(r.slug)??0));
   const maxActive=Math.max(0,...rows.map(r=>active.get(r.slug)??0));
-  const w=MOMENTUM_WEIGHTS;
+  const w=weights;
   const norm=(value:number,max:number)=>max>0?Math.min(1,Math.log1p(positive(value))/Math.log1p(max)):0;
   const result=rows.map(r=>{
     const growthKnown=r.viewerChange!==null&&Number.isFinite(r.viewerChange);
