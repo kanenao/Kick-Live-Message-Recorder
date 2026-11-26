@@ -651,3 +651,5 @@
 .feedback-hint { color: #b1bdcd; font-size: 12px; line-height: 1.75; margin: 14px 0 0; }
 .feedback-message { margin-top: 12px; color: #a5dfb5; font-size: 12px; overflow-wrap: anywhere; }
 @media (max-width: 850px) { .feedback-kinds { grid-template-columns: 1fr; } }
+
+.feedback-input-label{display:flex;justify-content:space-between;gap:12px;margin:12px 0 7px;color:#c9d4e5;font-size:13px}.feedback-input-label span{color:#8fa1b8;font-variant-numeric:tabular-nums}.feedback-details{display:block;width:100%;box-sizing:border-box;min-height:86px;resize:vertical;border:1px solid #46566d;border-radius:10px;background:#131d2d;color:#eef3fb;padding:10px 12px;font:inherit;line-height:1.6}.feedback-details:focus-visible{outline:2px solid #b7c9e3;outline-offset:1px}.feedback-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}

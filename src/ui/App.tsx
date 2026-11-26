@@ -1244,18 +1244,24 @@ export default function App() {
   }, []);
   const [tab, setTab] = useState<"dashboard" | "recording" | "library" | "comment-video" | "articles" | "updates" | "feedback" | "settings">("dashboard");
   const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [feedbackDetails, setFeedbackDetails] = useState("");
+  const [feedbackBusy, setFeedbackBusy] = useState(false);
   const openFeedback = async (kind: "bug" | "feature"): Promise<void> => {
+    if (feedbackBusy) return;
+    const details = feedbackDetails.trim();
+    if (!details || details.length > 500) { setFeedbackMessage("報告内容を1〜500文字で入力してください。"); return; }
     if (!window.kickRecorder) {
       setFeedbackMessage("報告フォームはWindowsデスクトップ版で開けます。");
       return;
     }
-    setFeedbackMessage("GitHubの投稿フォームをブラウザーで開いています。");
+    setFeedbackBusy(true);
+    setFeedbackMessage("GitHubの確認画面を開いています。");
     try {
-      await window.kickRecorder.openFeedbackForm(kind);
-      setFeedbackMessage("ブラウザーでGitHubにログインし、内容を入力して送信してください。送信後にタグが付与され、AIが確認します。");
+      await window.kickRecorder.openFeedbackForm(kind, details);
+      setFeedbackMessage("入力内容を引き継ぎました。GitHubで確認して送信してください。まだ投稿は完了していません。");
     } catch (error) {
       setFeedbackMessage("フォームを開けませんでした：" + (error instanceof Error ? error.message : String(error)));
-    }
+    } finally { setFeedbackBusy(false); }
   };
 
   const [isReady, setIsReady] = useState(false);
@@ -3568,21 +3574,15 @@ export default function App() {
       </section>}
 
       {tab === "feedback" && <section className="panel feedback-panel">
-        <div className="panel-heading"><div><h2>不具合情報・機能要望</h2><p>このアプリの{APP_VERSION.includes("-beta.") ? "β版" : "製品版"}向けに報告できます。対象バージョン：{appVersion}</p></div></div>
-        <div className="feedback-kinds">
-          <article className="feedback-kind">
-            <strong className="feedback-chip">不具合情報</strong>
-            <p>録画が止まる、コメントが取得できない、操作しても反応しないなどの問題を報告します。</p>
-            <button className="small-act" type="button" onClick={() => void openFeedback("bug")}>不具合情報を報告</button>
-          </article>
-          <article className="feedback-kind">
-            <strong className="feedback-chip">機能要望</strong>
-            <p>追加してほしい機能や操作性の改善を提案します。β版・製品版の区分が自動的に付けられます。</p>
-            <button className="small-act" type="button" onClick={() => void openFeedback("feature")}>機能要望を送る</button>
-          </article>
+        <div className="panel-heading"><div><span className="eyebrow">FEEDBACK / AI TRIAGE</span><h2>不具合情報・機能要望</h2><p>β版・正規版どちらも対応。報告後にAIが種類・対象版・優先度を定期的に判断してタグを付けます。</p></div></div>
+        <p className="feedback-hint">対象：{APP_VERSION.includes("-beta.") ? "β版" : "正規版"} ／ バージョン：{appVersion}</p>
+        <label className="feedback-input-label" htmlFor="feedback-details">報告するメッセージ（500文字まで） <span>{feedbackDetails.length}/500</span></label>
+        <textarea id="feedback-details" className="feedback-details" rows={4} maxLength={500} value={feedbackDetails} onChange={event => setFeedbackDetails(event.target.value)} placeholder="例：コメント付き動画の生成が50%で停止する／録画ライブラリをもっと見やすくしてほしい" />
+        <div className="feedback-actions">
+          <button className="small-act" type="button" disabled={feedbackBusy || !feedbackDetails.trim()} onClick={() => void openFeedback("bug")}>不具合情報</button>
+          <button className="small-act" type="button" disabled={feedbackBusy || !feedbackDetails.trim()} onClick={() => void openFeedback("feature")}>機能要望</button>
         </div>
-        <p className="feedback-hint">報告はGitHub Issuesで投稿します。投稿時に「不具合情報／機能要望」と「β版／製品版」のタグを自動付与し、AIが内容・重複・優先度を定期的に確認します。AIが投稿文の命令をそのまま実行したり、確認なしに製品版を更新することはありません。</p>
-        <p className="feedback-hint">パスワード、APIキー、認証Cookie、配信のセッショントークン、個人情報は投稿しないでください。製品版の通常修正は月1回程度です。</p>
+        <p className="feedback-hint">GitHubで内容を確認して送信してください。投稿後はAI判定待ちとなり、定期的に分類します。パスワード、APIキー、認証Cookie、user_session・個人情報は書かないでください。</p>
         {feedbackMessage && <p className="feedback-message" role="status">{feedbackMessage}</p>}
       </section>}
 
