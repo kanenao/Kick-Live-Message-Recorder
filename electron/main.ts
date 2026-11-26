@@ -1,3 +1,4 @@
+import { RankingAiWeights } from "./ranking-ai";
 import { buildFeedbackIssueUrl } from "./feedback-url";
 import { rankingChatTargets } from "./ranking-chat-targets";
 import { LiveRankingPeaks } from "./ranking-live-peaks";
@@ -369,6 +370,7 @@ async function getKickAccessToken(): Promise<string> {
 
 function rankingHistory():KickRankingHistory{return new KickRankingHistory(join(app.getPath("userData"),"RankingHistory"));}
 const rankingCache = new Map<RankingScope,RankingSnapshot>();
+const rankingAiWeights = new RankingAiWeights();
 const liveRankingPeaks = new LiveRankingPeaks();
 const rankingInflight = new RankingRequestQueue<RankingScope,RankingSnapshot>();
 async function getKickRanking(scope:RankingScope):Promise<RankingSnapshot>{
@@ -1731,6 +1733,14 @@ function registerIpcHandlers(): void {
     const online=new Set(connected),normalWanted=new Set(normal),rankWanted=new Set(rankingChatWanted),rankDesired=new Set(desired);
     const status=rankingChatReceiver.getStatus();
     return {rows:rows.map(row=>({...row,...rankingChatMeasurement(rankingCache.get(scope)??null,row.slug),state:online.has(row.slug)?"connected":normalWanted.has(row.slug)?row.state:rankWanted.has(row.slug)?(rankingChatStarting||(!rankDesired.has(row.slug)&&Date.now()-rankingChatLastStart<60000&&status.running)?"connecting":rankDesired.has(row.slug)&&!status.running?"connecting":"unavailable"):row.messages>0?"recent":"unavailable"})),message:status.message+(enabled&&rankingCache.has(scope)&&Date.now()-Date.parse(rankingCache.get(scope)!.fetchedAt)>90000?" ／ API更新待ち・既存チャット監視を継続":""),targets:rankingChatWanted.length,connected:rankingChatWanted.filter(s=>online.has(s)).length};
+  });
+  ipcMain.handle("kick:ranking-ai",(event,scope:unknown)=>{
+    assertTrustedSender(event);
+    if(scope!=="ja"&&scope!=="all")throw Error("AIランキング範囲が不正です。");
+    const snapshot=rankingCache.get(scope)??null;
+    const connected=[...chatReceiver.getConnectedSlugs(),...rankingChatReceiver.getConnectedSlugs()];
+    const chat=rankingChatActivity.observed(connected,[]).map(row=>({...row,...rankingChatMeasurement(snapshot,row.slug)}));
+    return rankingAiWeights.poll(scope,snapshot,chat,readState().settings.aiArticleModel);
   });
   ipcMain.handle("kick:ranking-history",(event,scope:unknown,hours:unknown,slug:unknown)=>{
     assertTrustedSender(event);
