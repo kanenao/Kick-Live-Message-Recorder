@@ -17,9 +17,9 @@ export function parseSupportEvent(event:unknown,payload:unknown,kind:SupportKind
   const recipients=p.gifted_usernames;
   if(!Array.isArray(recipients)||!recipients.length||recipients.length>10000||!recipients.every(v=>typeof v==="string"&&v.length>0&&v.length<=200))return null;
   const amount=new Set(recipients).size;
-  const key=id(p.id);
+  const key=id(p.correlation_id)??id(p.id);
   // Some chunk deliveries have no event ID. Do not merge different purchases by name/time.
-  return {kind,amount,id:key?key+":"+createHash("sha256").update(JSON.stringify(recipients)).digest("hex"):null};
+  return {kind,amount,id:key?key+":"+createHash("sha256").update(JSON.stringify([...new Set(recipients)].sort())).digest("hex"):null};
  }
  return null;
 }
