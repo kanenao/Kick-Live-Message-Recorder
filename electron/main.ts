@@ -40,12 +40,6 @@ import { listLibrarySessions } from "./library-sessions";
 import { KickCommentVideoGenerator, listCommentLogFiles, previewCommentVideo } from "./comment-video";
 import { listRecentCommentMessages } from "./recording-library";
 import { trashCommentLogFile } from "./comment-log-delete";
-import { isValidStreamArticleId, deleteStreamArticle, generateStreamArticle, getStreamArticlePreview, listStreamArticles } from "./articles";
-import { LiveStreamArticleManager } from "./live-articles";
-import { startLiveVideoFrameCapture, type LiveVideoFrameStatus } from "./live-video-frames";
-import { addLiveArticleFrameSample } from "./live-article-frame-sampling";
-import { detachCaptureIfCurrent, nextManualCaptureRetryDelayMs } from "./live-capture-policy";
-import type { VideoFrameSample } from "./video-frames";
 import { deleteRecordingFile, isPathInsideDirectory, KickRecordingManager, listRecordingFiles } from "./recording";
 import { recordingVideoThumbnail } from "./recording-thumbnails";
 import { recordingVideoStoryboard } from "./recording-storyboard";
@@ -86,13 +80,7 @@ type AppSettings = {
   vodAssRowLimit: number;
   vodAssCollisionGap: number;
   vodAssDelaySeconds: number;
-  aiArticleEnabled: boolean;
-  aiArticleProvider: "ollama" | "openai";
-  aiArticleOllamaUrl: string;
-  aiArticleModel: string;
-  aiArticleIntervalSeconds: number;
-  aiArticleAudioEnabled: boolean;
-  aiArticleAudioModel: string;
+  rankingAiModel: string;
 };
 
 type AppState = {
@@ -127,13 +115,7 @@ const DEFAULT_STATE: AppState = {
   vodAssRowLimit: 16,
   vodAssCollisionGap: 40,
   vodAssDelaySeconds: 0,
-    aiArticleEnabled: false,
-    aiArticleProvider: "ollama",
-    aiArticleOllamaUrl: "http://127.0.0.1:11434",
-    aiArticleModel: "qwen2.5vl:3b",
-    aiArticleIntervalSeconds: 120,
-    aiArticleAudioEnabled: true,
-    aiArticleAudioModel: "frozenlab/qwen3-asr:0.6b"
+    rankingAiModel: "qwen2.5vl:3b"
   }
 };
 
@@ -212,43 +194,6 @@ function getKickChannelRateLimitWaitSeconds(response?: Response): number {
     ? Number(value)
     : Math.ceil((Date.parse(value) - Date.now()) / 1000);
   return Math.max(1, Math.min(3600, Number.isFinite(seconds) ? seconds : 60));
-}
-
-function getOpenAiCredentialsPath(): string {
-  return join(app.getPath("userData"), "openai-article-credentials.json");
-}
-
-function readOpenAiApiKey(): string | null {
-  const filePath = getOpenAiCredentialsPath();
-  if (!existsSync(filePath) || !safeStorage.isEncryptionAvailable()) return null;
-  try {
-    const parsed = JSON.parse(readFileSync(filePath, "utf8")) as { encryptedApiKey?: unknown };
-    if (typeof parsed.encryptedApiKey !== "string") return null;
-    return safeStorage.decryptString(Buffer.from(parsed.encryptedApiKey, "base64")) || null;
-  } catch { return null; }
-}
-
-function saveOpenAiApiKey(input: unknown): { ok: true } {
-  if (!safeStorage.isEncryptionAvailable()) throw new Error("このWindows環境では暗号化ストレージを利用できません。");
-  if (typeof input !== "string" || input.trim().length < 20 || input.trim().length > 1024) {
-    throw new Error("有効なOpenAI APIキーを入力してください。");
-  }
-  const directory = app.getPath("userData");
-  mkdirSync(directory, { recursive: true });
-  const temporaryPath = join(directory, `openai-article-${process.pid}-${Date.now()}.tmp`);
-  writeFileSync(temporaryPath, JSON.stringify({ encryptedApiKey: safeStorage.encryptString(input.trim()).toString("base64") }), { encoding: "utf8", mode: 0o600 });
-  renameSync(temporaryPath, getOpenAiCredentialsPath());
-  return { ok: true };
-}
-
-function clearOpenAiApiKey(): { ok: true } {
-  const filePath = getOpenAiCredentialsPath();
-  if (existsSync(filePath)) unlinkSync(filePath);
-  return { ok: true };
-}
-
-function getOpenAiCredentialStatus(): { configured: boolean; encryptionAvailable: boolean } {
-  return { configured: Boolean(readOpenAiApiKey()), encryptionAvailable: safeStorage.isEncryptionAvailable() };
 }
 
 function getKickCredentialsPath(): string {
@@ -739,24 +684,6 @@ function showMainWindow(): void {
   mainWindow.focus();
 }
 
-const liveArticleManager = new LiveStreamArticleManager(
-  getRecordingOutputDirectory,
-  () => {
-    const settings = readState().settings;
-    return {
-      enabled: settings.aiArticleEnabled,
-      provider: settings.aiArticleProvider,
-      baseUrl: settings.aiArticleOllamaUrl,
-      model: settings.aiArticleModel,
-      intervalSeconds: settings.aiArticleIntervalSeconds,
-      audioEnabled: settings.aiArticleAudioEnabled,
-      audioModel: settings.aiArticleAudioModel
-    };
-  },
-  readOpenAiApiKey,
-  article => mainWindow?.webContents.send("articles:updated", article)
-);
-
 // Intentional user stop must not be undone by background auto-recording during the same LIVE.
 const manuallyStoppedLiveBroadcasts = new Map<string, string | null>();
 const backgroundConfirmedOfflinePolls = new Map<string, number>();
@@ -781,9 +708,6 @@ const recordingManager = new KickRecordingManager(event => {
   } else if (!event.isVod && event.status === "recording") {
     autoRecordingRetryNotBefore.delete(event.slug);
   }
-  if (!event.isVod && event.filePath && event.status === "stopped" && existsSync(event.filePath)) {
-    liveArticleManager.attachRecording(event.slug, event.filePath);
-  }
 }, resolveCurrentKickLive, undefined, request => chaseVodRecovery.schedule(request));
 
 const commentVideoGenerator = new KickCommentVideoGenerator(event => {
@@ -795,7 +719,6 @@ const chatReceiver = new KickChatReceiver(
   () => readState().settings.saveChat,
   message => {
     rankingChatActivity.add(message.channelSlug.toLowerCase(),Date.now(),message.eventId,message.senderUserId);
-    liveArticleManager.onChatMessage(message);
     mainWindow?.webContents.send("chat:message", message);
   },
   status => mainWindow?.webContents.send("chat:status", status)
@@ -908,145 +831,6 @@ function restoreChaseJournal():void{
   persistChaseJournal();
 }
 
-type ArticleLiveMetadata = {
-  slug: string;
-  displayName: string;
-  streamTitle: string;
-  categoryName: string;
-  startedAt: string | null;
-  viewerCount: number;
-};
-type ManualArticleSession = {
-  metadata: ArticleLiveMetadata;
-  previousChatSlugs: string[];
-  ownsArticleSession: boolean;
-};
-type LiveArticleFrameCapture = { stop: () => Promise<void>; frames: VideoFrameSample[] };
-const liveArticleFrameCaptures = new Map<string, LiveArticleFrameCapture>();
-const liveArticleFrameSampleStates = new Map<string, { historyFrames: VideoFrameSample[]; seenCount: number }>();
-const liveArticleCaptureRetryTimers = new Map<string, NodeJS.Timeout>();
-const liveArticleCaptureRetryAttempts = new Map<string, number>();
-let manualArticleSession: ManualArticleSession | null = null;
-
-function clearArticleFrameCaptureRetry(slug: string): void {
-  const timer = liveArticleCaptureRetryTimers.get(slug);
-  if (timer) clearTimeout(timer);
-  liveArticleCaptureRetryTimers.delete(slug);
-  liveArticleCaptureRetryAttempts.delete(slug);
-}
-
-function scheduleManualArticleFrameCaptureRetry(slug: string): void {
-  if (isQuitting || liveArticleCaptureRetryTimers.has(slug) ||
-      !manualArticleSession || manualArticleSession.metadata.slug !== slug ||
-      !liveArticleManager.hasSession(slug)) return;
-  const attempt = (liveArticleCaptureRetryAttempts.get(slug) ?? 0) + 1;
-  liveArticleCaptureRetryAttempts.set(slug, attempt);
-  const delayMs = nextManualCaptureRetryDelayMs(attempt);
-  const timer = setTimeout(() => {
-    liveArticleCaptureRetryTimers.delete(slug);
-    if (isQuitting || liveArticleFrameCaptures.has(slug) ||
-        !manualArticleSession || manualArticleSession.metadata.slug !== slug ||
-        !liveArticleManager.hasSession(slug)) return;
-    void checkKickChannels([slug], false).then(results => {
-      if (!manualArticleSession || manualArticleSession.metadata.slug !== slug ||
-          !liveArticleManager.hasSession(slug)) return;
-      const channel = results.find(result => result.slug === slug);
-      if (channel?.found && channel.isLive) {
-        startArticleFrameCapture(slug);
-      } else {
-        scheduleManualArticleFrameCaptureRetry(slug);
-      }
-    }).catch(error => {
-      console.warn("Manual LIVE article capture reconnect check failed:", error);
-      scheduleManualArticleFrameCaptureRetry(slug);
-    });
-  }, delayMs);
-  liveArticleCaptureRetryTimers.set(slug, timer);
-  mainWindow?.webContents.send("articles:live-capture-status", {
-    slug, status: "starting", frameCount: 0,
-    message: `LIVE映像の接続が切れました。約${Math.ceil(delayMs / 1000)}秒後に再接続を確認します（試行 ${attempt}）。`
-  });
-}
-
-function startArticleFrameCapture(slugInput: string): void {
-  const slug = slugInput.toLowerCase();
-  if (liveArticleFrameCaptures.has(slug)) return;
-  clearArticleFrameCaptureRetry(slug);
-  const sampleState = liveArticleFrameSampleStates.get(slug) ?? { historyFrames: [], seenCount: 0 };
-  liveArticleFrameSampleStates.set(slug, sampleState);
-  const frames = sampleState.historyFrames;
-  let capture: LiveArticleFrameCapture | null = null;
-  try {
-    const stop = startLiveVideoFrameCapture(slug, frame => {
-      if (capture) {
-        const retryTimer = liveArticleCaptureRetryTimers.get(slug);
-        if (retryTimer) clearTimeout(retryTimer);
-        liveArticleCaptureRetryTimers.delete(slug);
-        liveArticleCaptureRetryAttempts.delete(slug);
-      }
-      const sampled = addLiveArticleFrameSample(frames, frame, sampleState.seenCount);
-      sampleState.seenCount = sampled.seenCount;
-      frames.splice(0, frames.length, ...sampled.historyFrames);
-      liveArticleManager.updateVideoFrames(slug, sampled.frames);
-    }, status => {
-      mainWindow?.webContents.send("articles:live-capture-status", { slug, ...status });
-      if (status.status !== "completed" && status.status !== "error") return;
-      if (!capture || !detachCaptureIfCurrent(liveArticleFrameCaptures, slug, capture)) return;
-      void capture.stop().catch(error => console.warn("LIVE article capture cleanup failed:", error));
-      if (status.status === "error") scheduleManualArticleFrameCaptureRetry(slug);
-    }, (() => {
-      const captureSettings = readState().settings;
-      return captureSettings.aiArticleProvider === "ollama" && captureSettings.aiArticleAudioEnabled
-        ? (chunk: { timeSeconds: number; wavBase64: string }) => liveArticleManager.onAudioChunk(slug, chunk)
-        : undefined;
-    })(), audioError => {
-      liveArticleManager.onAudioCaptureError(slug, audioError);
-    }, liveArticleManager.getElapsedSeconds(slug));
-    capture = { stop, frames };
-    liveArticleFrameCaptures.set(slug, capture);
-  } catch (error) {
-    const status: LiveVideoFrameStatus = {
-      status: "error", frameCount: 0,
-      message: error instanceof Error ? error.message : String(error)
-    };
-    mainWindow?.webContents.send("articles:live-capture-status", { slug, ...status });
-    scheduleManualArticleFrameCaptureRetry(slug);
-  }
-}
-
-function stopArticleFrameCapture(slugInput: string): Promise<void> {
-  const slug = slugInput.toLowerCase();
-  clearArticleFrameCaptureRetry(slug);
-  const capture = liveArticleFrameCaptures.get(slug);
-  liveArticleFrameSampleStates.delete(slug);
-  if (!capture) return Promise.resolve();
-  liveArticleFrameCaptures.delete(slug);
-  return capture.stop();
-}
-
-function parseArticleChannelSlug(input: unknown): string {
-  if (typeof input !== "string" || input.trim().length === 0 || input.length > 2048) {
-    throw new Error("Kickのチャンネル名または配信URLを入力してください。");
-  }
-  const value = input.trim();
-  let slug = value;
-  if (/^https?:\/\//i.test(value)) {
-    let url: URL;
-    try { url = new URL(value); } catch { throw new Error("Kickの配信URLが正しくありません。"); }
-    if (url.protocol !== "https:" || !["kick.com", "www.kick.com"].includes(url.hostname.toLowerCase())) {
-      throw new Error("https://kick.com/チャンネル名 の形式で入力してください。");
-    }
-    const match = url.pathname.match(/^\/([a-zA-Z0-9_]{1,25})\/?$/);
-    if (!match) throw new Error("チャンネルのトップページURLを入力してください。");
-    slug = match[1];
-  }
-  if (!/^[a-zA-Z0-9_]{1,25}$/.test(slug)) {
-    throw new Error("チャンネル名は半角英数字とアンダースコアで入力してください。");
-  }
-  return slug.toLowerCase();
-}
-
-
 function getRecordingOutputDirectory(): string {
   const configured = readState().settings.outputDirectory.trim();
   return configured || join(app.getPath("videos"), "Kick Live Message Recorder");
@@ -1129,18 +913,7 @@ function normalizeState(input: unknown): AppState {
         ? Math.round(Math.max(0, Math.min(200, settings.vodAssCollisionGap))) : 40,
       vodAssDelaySeconds: typeof settings.vodAssDelaySeconds === "number" && Number.isFinite(settings.vodAssDelaySeconds)
         ? Math.max(-10, Math.min(10, settings.vodAssDelaySeconds)) : 0,
-      aiArticleEnabled: settings.aiArticleEnabled === true,
-      aiArticleProvider: settings.aiArticleProvider === "openai" ? "openai" : "ollama",
-      aiArticleOllamaUrl: typeof settings.aiArticleOllamaUrl === "string" && /^https?:\/\//i.test(settings.aiArticleOllamaUrl) ? settings.aiArticleOllamaUrl.slice(0, 300) : "http://127.0.0.1:11434",
-      aiArticleModel: typeof settings.aiArticleModel === "string" && /^[a-zA-Z0-9._:-]{1,100}$/.test(settings.aiArticleModel)
-        ? (settings.aiArticleProvider !== "openai" && settings.aiArticleModel === "qwen2.5:3b" ? "qwen2.5vl:3b" : settings.aiArticleModel)
-        : (settings.aiArticleProvider === "openai" ? "gpt-6-luna" : "qwen2.5vl:3b"),
-      aiArticleIntervalSeconds: typeof settings.aiArticleIntervalSeconds === "number" && Number.isFinite(settings.aiArticleIntervalSeconds)
-        ? Math.max(30, Math.min(600, Math.round(settings.aiArticleIntervalSeconds))) : 120,
-      aiArticleAudioEnabled: settings.aiArticleAudioEnabled !== false,
-      aiArticleAudioModel: typeof settings.aiArticleAudioModel === "string" &&
-        /^[a-zA-Z0-9._:/-]{1,120}$/.test(settings.aiArticleAudioModel)
-        ? settings.aiArticleAudioModel : "frozenlab/qwen3-asr:0.6b"
+      rankingAiModel: typeof settings.rankingAiModel === "string" && /^[a-zA-Z0-9._:-]{1,100}$/.test(settings.rankingAiModel) ? settings.rankingAiModel : "qwen2.5vl:3b"
     }
   };
 }
@@ -1231,10 +1004,9 @@ function updateSleepBlocker(enabled: boolean): void {
 }
 
 function getBackgroundChatSlugs(state: AppState): string[] {
-  const aiArticleChatEnabled = state.settings.aiArticleEnabled && Boolean(readOpenAiApiKey());
   const selected = [
-    ...(state.settings.autoReceiveChat || aiArticleChatEnabled ? state.channels : []),
-    ...(state.settings.autoReceiveChatForRecordingOnly || aiArticleChatEnabled ? state.recordingOnlyChannels : [])
+    ...(state.settings.autoReceiveChat ? state.channels : []),
+    ...(state.settings.autoReceiveChatForRecordingOnly ? state.recordingOnlyChannels : [])
   ];
   return [...new Set(selected.map(channel => channel.name.toLowerCase()))];
 }
@@ -1371,17 +1143,6 @@ async function runBackgroundMonitor(): Promise<void> {
       const confirmedOffline = !live && offlinePolls >= 3;
       // Retain LIVE state through isolated false readings to prevent spurious end/start.
       if (live || confirmedOffline) backgroundPreviousLiveState.set(result.slug, live);
-      const articleMetadata = {
-        slug: result.slug, displayName: result.displayName || result.slug,
-        streamTitle: result.streamTitle, categoryName: result.categoryName,
-        startedAt: result.startedAt, viewerCount: result.viewerCount
-      };
-      if (live) {
-        liveArticleManager.startOrUpdate(articleMetadata);
-        if (liveArticleManager.hasSession(result.slug)) startArticleFrameCapture(result.slug);
-      } else if (wasLive && confirmedOffline) {
-        void stopArticleFrameCapture(result.slug).finally(() => liveArticleManager.finishStream(articleMetadata));
-      }
       if (confirmedOffline) {
         chatReceiver.clearBroadcastSession(result.slug);
         liveRecordingFileTimes.delete(result.slug);
@@ -1666,44 +1427,6 @@ function registerIpcHandlers(): void {
     return { ok: true };
   });
 
-  ipcMain.handle("ai-article:get-status", event => {
-    assertTrustedSender(event);
-    return { ...getOpenAiCredentialStatus(), ...readState().settings };
-  });
-
-  ipcMain.handle("ai-article:save-key", (event, apiKey: unknown) => {
-    assertTrustedSender(event);
-    const result = saveOpenAiApiKey(apiKey);
-    configureBackgroundServices();
-    return result;
-  });
-
-  ipcMain.handle("ai-article:clear-key", event => {
-    assertTrustedSender(event);
-    const result = clearOpenAiApiKey();
-    configureBackgroundServices();
-    return result;
-  });
-
-  ipcMain.handle("ai-article:test", async (event, model: unknown) => {
-    assertTrustedSender(event);
-    return liveArticleManager.testConnection(model);
-  });
-
-  ipcMain.handle("ai-article:pull-model", async (event, model: unknown) => {
-    assertTrustedSender(event);
-    return liveArticleManager.pullOllamaModel(model, status => {
-      if (mainWindow && !mainWindow.webContents.isDestroyed()) {
-        mainWindow.webContents.send("ai-article:model-pull-status", status);
-      }
-    });
-  });
-
-  ipcMain.handle("ai-article:cancel-model-pull", event => {
-    assertTrustedSender(event);
-    return liveArticleManager.cancelOllamaModelPull();
-  });
-
   ipcMain.handle("kick:get-credentials-status", event => {
     assertTrustedSender(event);
     return getKickCredentialsStatus();
@@ -1762,7 +1485,7 @@ function registerIpcHandlers(): void {
     const snapshot=rankingCache.get(scope)??null;
     const connected=[...chatReceiver.getConnectedSlugs(),...rankingChatReceiver.getConnectedSlugs()];
     const chat=rankingChatActivity.observed(connected,[]).map(row=>({...row,...rankingChatMeasurement(snapshot,row.slug)}));
-    return rankingAiWeights.poll(scope,snapshot,chat,readState().settings.aiArticleModel);
+    return rankingAiWeights.poll(scope,snapshot,chat,readState().settings.rankingAiModel);
   });
   ipcMain.handle("kick:ranking-history",(event,scope:unknown,hours:unknown,slug:unknown)=>{
     assertTrustedSender(event);
@@ -1960,134 +1683,6 @@ function registerIpcHandlers(): void {
     const error = await shell.openPath(directory);
     if (error) throw new Error("録画の保存先フォルダーを開けませんでした：" + error);
     return { ok: true as const };
-  });
-
-  ipcMain.handle("articles:live:start", async (event, channelInput: unknown) => {
-    assertTrustedSender(event);
-    if (manualArticleSession) {
-      throw new Error(`すでに ${manualArticleSession.metadata.slug} の記事専用LIVEセッションが動作中です。`);
-    }
-    const slug = parseArticleChannelSlug(channelInput);
-    const results = await checkKickChannels([slug], false);
-    const channel = results.find(item => item.slug === slug);
-    if (!channel?.found) throw new Error("Kickチャンネルが見つかりません。URLとチャンネル名を確認してください。");
-    if (!channel.isLive) throw new Error("このチャンネルは現在LIVE配信中ではありません。生放送中のチャンネルを指定してください。");
-
-    const settings = readState().settings;
-    if (settings.aiArticleProvider === "ollama") {
-      await liveArticleManager.testConnection(settings.aiArticleModel);
-    } else if (!readOpenAiApiKey()) {
-      throw new Error("OpenAI APIキーが未設定です。AI設定でAPIキーを保存するか、Ollamaを選択してください。");
-    }
-    const metadata: ArticleLiveMetadata = {
-      slug,
-      displayName: channel.displayName || slug,
-      streamTitle: channel.streamTitle || `${channel.displayName || slug}のLIVE配信`,
-      categoryName: channel.categoryName || "",
-      startedAt: channel.startedAt,
-      viewerCount: channel.viewerCount
-    };
-    const previousChatSlugs = chatReceiver.getDesiredSlugs();
-    const ownsArticleSession = !liveArticleManager.hasSession(slug);
-    const article = liveArticleManager.startManualArticle(metadata);
-    try {
-      if (!previousChatSlugs.includes(slug) || !chatReceiver.getStatus().running) {
-        const merged = [...new Set([...previousChatSlugs, slug])];
-        if (merged.length > 50) throw new Error("コメント受信は最大50チャンネルです。ほかの自動受信チャンネルを減らしてください。");
-        await chatReceiver.start(merged);
-      }
-      manualArticleSession = { metadata, previousChatSlugs, ownsArticleSession };
-      startArticleFrameCapture(slug);
-      return { ok: true as const, slug, article, chatStatus: chatReceiver.getStatus() };
-    } catch (error) {
-      if (ownsArticleSession) await liveArticleManager.finishStream(metadata);
-      const current = chatReceiver.getDesiredSlugs();
-      if (previousChatSlugs.length > 0 && current.join("|") !== previousChatSlugs.join("|")) {
-        await chatReceiver.start(previousChatSlugs).catch(() => undefined);
-      } else if (previousChatSlugs.length === 0) {
-        await chatReceiver.stop().catch(() => undefined);
-      }
-      throw error;
-    }
-  });
-
-  ipcMain.handle("articles:live:stop", async event => {
-    assertTrustedSender(event);
-    const session = manualArticleSession;
-    if (!session) throw new Error("記事専用LIVEセッションは開始されていません。");
-    manualArticleSession = null;
-    const slug = session.metadata.slug;
-    await stopArticleFrameCapture(slug);
-    if (session.ownsArticleSession) await liveArticleManager.finishStream(session.metadata);
-
-    const currentSlugs = chatReceiver.getDesiredSlugs();
-    const restoreSlugs = currentSlugs.filter(current =>
-      current !== slug || session.previousChatSlugs.includes(current)
-    );
-    if (restoreSlugs.length === 0) await chatReceiver.stop();
-    else if (restoreSlugs.join("|") !== currentSlugs.join("|")) await chatReceiver.start(restoreSlugs);
-    return { ok: true as const, slug };
-  });
-
-  ipcMain.handle("articles:list", (event, slug?: unknown) => {
-    assertTrustedSender(event);
-    return listStreamArticles(getRecordingOutputDirectory(), slug);
-  });
-
-  ipcMain.handle("articles:preview", (event, slugInput: unknown, idInput: unknown) => {
-    assertTrustedSender(event);
-    return getStreamArticlePreview(getRecordingOutputDirectory(), slugInput, idInput);
-  });
-
-  ipcMain.handle("articles:delete", (event, slug: unknown, id: unknown) => {
-    assertTrustedSender(event);
-    if (liveArticleManager.isArticleActive(slug, id)) {
-      throw new Error("LIVE更新中の記事は削除できません。配信終了後にもう一度お試しください。");
-    }
-    return deleteStreamArticle(getRecordingOutputDirectory(), slug, id);
-  });
-
-  ipcMain.handle("articles:generate", async (event, input: unknown) => {
-    assertTrustedSender(event);
-    const videoPath = input && typeof input === "object" && "videoPath" in input
-      ? (input as { videoPath?: unknown }).videoPath : null;
-    if (typeof videoPath === "string" &&
-        (recordingManager.isFileActive(videoPath) || vodDownloadManager.isFileActive(videoPath))) {
-      throw new Error("録画中の動画は映像解析できません。録画終了後に記事を生成してください。");
-    }
-    const article = await generateStreamArticle(input, getRecordingOutputDirectory());
-    const settings = readState().settings;
-    // Manual archive generation can use AI even when automatic LIVE article generation is disabled.
-    if (settings.aiArticleProvider === "ollama" || readOpenAiApiKey()) {
-      return liveArticleManager.enhanceArchivedArticle(article);
-    }
-    return article;
-  });
-
-  ipcMain.handle("articles:reanalyze", async (event, slugInput: unknown, idInput: unknown) => {
-    assertTrustedSender(event);
-    if (typeof slugInput !== "string" || typeof idInput !== "string" ||
-        !isValidStreamArticleId(slugInput, idInput)) {
-      throw new Error("再解析する記事のIDが不正です。");
-    }
-    const article = listStreamArticles(getRecordingOutputDirectory(), slugInput)
-      .find(item => item.id === idInput);
-    if (!article) throw new Error("再解析する記事が見つかりません。");
-    if (liveArticleManager.isArticleActive(slugInput, idInput)) {
-      throw new Error("LIVE更新中の記事は再解析できません。放送終了後に実行してください。");
-    }
-    // A crash can leave a stale article marked live even though no session is active.
-    // Recover the saved article as an archive instead of making it permanently uneditable.
-    if (article.status === "live") article.status = "completed";
-    if (article.sourceVideo && (recordingManager.isFileActive(article.sourceVideo) ||
-        vodDownloadManager.isFileActive(article.sourceVideo))) {
-      throw new Error("録画中の動画は解析できません。録画完了後に実行してください。");
-    }
-    const settings = readState().settings;
-    if (settings.aiArticleProvider === "openai" && !readOpenAiApiKey()) {
-      throw new Error("OpenAI APIキーが未設定です。Ollamaへ切り替えるかAPIキーを登録してください。");
-    }
-    return liveArticleManager.enhanceArchivedArticle(article);
   });
 
   ipcMain.handle("comment-video:list-logs", event => {
@@ -2407,13 +2002,6 @@ app.on("before-quit", () => {
   chaseVodRecovery.suspend();
   chaseChatQueue.stopAll();
   recordingManager.stopAll();
-  for (const capture of liveArticleFrameCaptures.values()) capture.stop();
-  liveArticleFrameCaptures.clear();
-  liveArticleFrameSampleStates.clear();
-  for (const timer of liveArticleCaptureRetryTimers.values()) clearTimeout(timer);
-  liveArticleCaptureRetryTimers.clear();
-  liveArticleCaptureRetryAttempts.clear();
-  manualArticleSession = null;
   void chatReceiver.stop();
   vodChatDownloader.stopAll();
   vodDownloadManager.stopAll();

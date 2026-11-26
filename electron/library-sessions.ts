@@ -2,7 +2,6 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 import { listRecordingFiles, type RecordingFile } from "./recording";
 import { listCommentLogFiles, type CommentLogFile } from "./comment-video";
-import { listStreamArticles, type StreamArticle } from "./articles";
 import { parseBroadcastFileStem } from "./recording-filenames";
 
 
@@ -15,7 +14,6 @@ export type LibrarySession = {
   title: string;
   videos: RecordingFile[];
   logs: CommentLogFile[];
-  article?: StreamArticle;
   status: "saved" | "interrupted" | "failed" | "unknown";
   warnings: string[];
   commentAssociation: "exact" | "none";
@@ -102,14 +100,9 @@ function readSessionMetadata(root: string): SessionMetadata[] {
   return result;
 }
 
-function safePath(value: string): string {
-  return resolve(value).toLowerCase();
-}
-
 export function buildRecordingSessions(
   recordings: RecordingFile[],
   commentLogs: CommentLogFile[],
-  articles: StreamArticle[],
   metadata: SessionMetadata[] = []
 ): LibrarySession[] {
   const sessions = new Map<string, LibrarySession>();
@@ -142,28 +135,6 @@ export function buildRecordingSessions(
     s.videos.push(file);
     if (s.status !== "interrupted" && s.status !== "failed") s.status = file.size > 0 ? "saved" : "unknown";
     if (file.size === 0) s.warnings.push("サイズ0の動画ファイルがあります。");
-  }
-
-  const byVideoPath = new Map<string, LibrarySession>();
-  for (const s of sessions.values()) {
-    for (const file of s.videos) byVideoPath.set(safePath(file.path), s);
-  }
-  for (const article of articles) {
-    if (!article || typeof article.slug !== "string" || typeof article.id !== "string") continue;
-    const slug = article.slug.toLowerCase();
-    const source = typeof article.sourceVideo === "string" ? safePath(article.sourceVideo) : "";
-    // Archived articles point at a real video; some LIVE articles retain an output prefix.
-    let s = source ? byVideoPath.get(source) : undefined;
-    if (!s && source) {
-      s = [...sessions.values()].find(item => item.slug === slug &&
-        item.videos.some(v => safePath(v.path).startsWith(source + ".")));
-    }
-    if (!s) {
-      const date = Number.isFinite(Date.parse(article.startedAt)) ? article.startedAt : article.createdAt;
-      s = ensure(slug + "_article_" + article.id, slug, "LIVE", date);
-    }
-    if (!s.article || Date.parse(article.createdAt) > Date.parse(s.article.createdAt)) s.article = article;
-    if (!s.title) s.title = article.streamTitle || article.headline || "";
   }
 
   for (const log of commentLogs) {
@@ -204,15 +175,6 @@ export function buildRecordingSessions(
   }
 
   for (const s of sessions.values()) {
-    if (s.article?.sourceLogs?.length) {
-      for (const log of commentLogs) {
-        if (log.channelSlug.toLowerCase() !== s.slug || s.logs.some(item => item.path === log.path)) continue;
-        if (s.article.sourceLogs.some(path => safePath(path) === safePath(log.path))) {
-          s.logs.push(log);
-          s.commentAssociation = "exact";
-        }
-      }
-    }
     if (s.status === "saved" && !s.videos.some(v => v.size > 0)) {
       s.status = "failed";
       s.warnings.push("完了記録はありますが、動画が見つかりません。");
@@ -221,10 +183,7 @@ export function buildRecordingSessions(
     s.logs.sort((a,b) => Date.parse(a.modifiedAt) - Date.parse(b.modifiedAt));
     if (!s.videos.length && s.logs.length) s.warnings.push("動画が見つかりません。コメントのみ保存されています。");
   }
-  // A RecordingSessions/*.json record is only historical metadata, not proof
-  // that a video or chat file still exists. Likewise an AI article may remain
-  // after its original recording was deleted. Keep that article in Articles,
-  // but never show an empty/phantom recording in the recording library.
+  // Only existing recordings and comments appear in the library.
   return [...sessions.values()]
     .filter(session => session.videos.length > 0 || session.logs.length > 0)
     .sort((a,b) => Date.parse(b.startedAt || "0") - Date.parse(a.startedAt || "0"))
@@ -235,7 +194,6 @@ export function listLibrarySessions(outputDirectory: string): LibrarySession[] {
   return buildRecordingSessions(
     listRecordingFiles(outputDirectory),
     listCommentLogFiles(outputDirectory),
-    listStreamArticles(outputDirectory),
     readSessionMetadata(outputDirectory)
   );
 }

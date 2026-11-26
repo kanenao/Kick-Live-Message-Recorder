@@ -30,13 +30,7 @@ type AppSettings = {
   vodAssRowLimit: number;
   vodAssCollisionGap: number;
   vodAssDelaySeconds: number;
-  aiArticleEnabled: boolean;
-  aiArticleProvider: "ollama" | "openai";
-  aiArticleOllamaUrl: string;
-  aiArticleModel: string;
-  aiArticleIntervalSeconds: number;
-  aiArticleAudioEnabled: boolean;
-  aiArticleAudioModel: string;
+  rankingAiModel: string;
 };
 
 type AppState = {
@@ -69,7 +63,6 @@ type LibrarySession = {
   title: string;
   videos: RecordingFile[];
   logs: CommentLogFile[];
-  article?: StreamArticle;
   status: "saved" | "interrupted" | "failed" | "unknown";
   warnings: string[];
   commentAssociation: "exact" | "none";
@@ -110,19 +103,6 @@ type CommentVideoOptions = {
   displaySeconds?: number; speedPercent?: number; rowLimit?: number; collisionGap?: number; opacity?: number;
   quality?: "high" | "standard" | "compact"; position?: "scroll" | "top" | "bottom"; showUsername?: boolean; removeEmotes?: boolean; autoFlow?: boolean;
 };
-type StreamArticle = {
-  id: string; slug: string; displayName: string; headline: string; streamTitle?: string; category: string; startedAt: string;
-  durationSeconds: number; commentCount: number; uniqueCommenters: number; keywords: string[];
-  paragraphs: string[]; sourceVideo: string; sourceLogs: string[]; createdAt: string;
-  status?: "live" | "completed"; aiGenerated?: boolean; aiSummary?: string; highlights?: string[];
-  lastAiUpdateAt?: string | null; viewerCount?: number; peakViewerCount?: number; aiError?: string;
-  videoAnalyzed?: boolean; videoFrameCount?: number; videoSummary?: string; videoScenes?: string[]; videoAnalyzedAt?: string | null;
-  videoPreviewAvailable?: boolean; videoPreviewTimeSeconds?: number; videoPreviewUpdatedAt?: string;
-  audioAnalyzed?: boolean; audioSegmentCount?: number; audioSummary?: string; audioTranscript?: string;
-  audioTranscriptSegments?: Array<{ startSeconds: number; endSeconds: number; text: string }>;
-  audioAnalyzedAt?: string | null; audioError?: string;
-};
-
 type CommentVideoPreviewResult = {
   width: number;
   height: number;
@@ -131,20 +111,6 @@ type CommentVideoPreviewResult = {
   malformedLines: number;
   outsideVideoCount: number;
   comments: Array<{ seconds: number; content: string; username: string; color: string }>;
-};
-type AiArticleStatus = {
-  configured: boolean; encryptionAvailable: boolean;
-  aiArticleEnabled: boolean; aiArticleProvider: "ollama" | "openai"; aiArticleOllamaUrl: string; aiArticleModel: string; aiArticleIntervalSeconds: number;
-};
-
-type AiModelPullStatus = {
-  model: string;
-  status: string;
-  percent: number | null;
-  completed?: number;
-  total?: number;
-  done: boolean;
-  error?: string;
 };
 type CommentVideoEvent = {
   status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string;
@@ -331,37 +297,6 @@ const api = {
   revealRecording: (filePath: string): Promise<{ ok: true }> =>
     ipcRenderer.invoke("recording:reveal", filePath),
   openRecordingFolder: (): Promise<{ ok: true }> => ipcRenderer.invoke("recording:open-folder"),
-  getAiArticleStatus: (): Promise<AiArticleStatus> => ipcRenderer.invoke("ai-article:get-status"),
-  saveAiArticleKey: (apiKey: string): Promise<{ ok: true }> => ipcRenderer.invoke("ai-article:save-key", apiKey),
-  clearAiArticleKey: (): Promise<{ ok: true }> => ipcRenderer.invoke("ai-article:clear-key"),
-  testAiArticleConnection: (model: string): Promise<{ ok: true; message: string }> => ipcRenderer.invoke("ai-article:test", model),
-  pullAiArticleModel: (model: string): Promise<{ ok: true; model: string }> => ipcRenderer.invoke("ai-article:pull-model", model),
-  cancelAiArticleModelPull: (): Promise<{ ok: true; cancelled: boolean; model?: string }> => ipcRenderer.invoke("ai-article:cancel-model-pull"),
-  onAiArticleModelPullStatus: (callback: (status: AiModelPullStatus) => void): (() => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, status: AiModelPullStatus): void => callback(status);
-    ipcRenderer.on("ai-article:model-pull-status", listener);
-    return () => ipcRenderer.removeListener("ai-article:model-pull-status", listener);
-  },
-  onStreamArticleUpdate: (callback: (article: StreamArticle) => void): (() => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, article: StreamArticle): void => callback(article);
-    ipcRenderer.on("articles:updated", listener);
-    return () => ipcRenderer.removeListener("articles:updated", listener);
-  },
-  startManualLiveArticle: (channel: string): Promise<{ ok: true; slug: string; article: StreamArticle; chatStatus: ChatReceiverStatus }> =>
-    ipcRenderer.invoke("articles:live:start", channel),
-  stopManualLiveArticle: (): Promise<{ ok: true; slug: string }> => ipcRenderer.invoke("articles:live:stop"),
-  onLiveArticleCaptureStatus: (callback: (status: { slug: string; status: "starting" | "capturing" | "completed" | "stopped" | "error"; frameCount: number; message: string }) => void): (() => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, status: { slug: string; status: "starting" | "capturing" | "completed" | "stopped" | "error"; frameCount: number; message: string }): void => callback(status);
-    ipcRenderer.on("articles:live-capture-status", listener);
-    return () => ipcRenderer.removeListener("articles:live-capture-status", listener);
-  },
-  listStreamArticles: (slug?: string): Promise<StreamArticle[]> => ipcRenderer.invoke("articles:list", slug),
-  getStreamArticlePreview: (slug: string, id: string): Promise<string | null> => ipcRenderer.invoke("articles:preview", slug, id),
-  deleteStreamArticle: (slug: string, id: string): Promise<{ ok: true; id: string }> => ipcRenderer.invoke("articles:delete", slug, id),
-  generateStreamArticle: (input: { videoPath: string; slug: string; displayName?: string; category?: string; headline?: string; chatPaths?: string[] }): Promise<StreamArticle> =>
-    ipcRenderer.invoke("articles:generate", input),
-  reanalyzeStreamArticle: (slug: string, id: string): Promise<StreamArticle> =>
-    ipcRenderer.invoke("articles:reanalyze", slug, id),
   listCommentLogFiles: (): Promise<CommentLogFile[]> => ipcRenderer.invoke("comment-video:list-logs"),
   deleteCommentLog: (filePath: string): Promise<{ ok: true; name: string }> => ipcRenderer.invoke("library:delete-comment-log", filePath),
   listRecentCommentMessages: (channelSlug: string, limit = 100): Promise<LibraryCommentMessage[]> =>

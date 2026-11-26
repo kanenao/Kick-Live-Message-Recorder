@@ -33,13 +33,7 @@ type KickRecorderAppState = {
     vodAssRowLimit: number;
     vodAssCollisionGap: number;
     vodAssDelaySeconds: number;
-    aiArticleEnabled: boolean;
-    aiArticleProvider: "ollama" | "openai";
-    aiArticleOllamaUrl: string;
-    aiArticleModel: string;
-    aiArticleIntervalSeconds: number;
-    aiArticleAudioEnabled: boolean;
-    aiArticleAudioModel: string;
+    rankingAiModel: string;
   };
 };
 
@@ -67,7 +61,6 @@ type KickRecorderLibrarySession = {
   title: string;
   videos: KickRecorderRecordingFile[];
   logs: KickRecorderCommentLogFile[];
-  article?: KickRecorderStreamArticle;
   status: "saved" | "interrupted" | "failed" | "unknown";
   warnings: string[];
   commentAssociation: "exact" | "none";
@@ -100,33 +93,8 @@ type KickRecorderCommentLogFile = { path: string; name: string; channelSlug: str
 type KickRecorderLibraryCommentMessage = {
   eventId: string; senderUsername: string; content: string; createdAt: string; usernameColor: string | null;
 };
-type KickRecorderStreamArticle = {
-  id: string; slug: string; displayName: string; headline: string; streamTitle?: string; category: string; startedAt: string;
-  durationSeconds: number; commentCount: number; uniqueCommenters: number; keywords: string[];
-  paragraphs: string[]; sourceVideo: string; sourceLogs: string[]; createdAt: string;
-  status?: "live" | "completed"; aiGenerated?: boolean; aiSummary?: string; highlights?: string[];
-  lastAiUpdateAt?: string | null; viewerCount?: number; peakViewerCount?: number; aiError?: string;
-  videoAnalyzed?: boolean; videoFrameCount?: number; videoSummary?: string; videoScenes?: string[]; videoAnalyzedAt?: string | null;
-  videoPreviewAvailable?: boolean; videoPreviewTimeSeconds?: number; videoPreviewUpdatedAt?: string;
-  audioAnalyzed?: boolean; audioSegmentCount?: number; audioSummary?: string; audioTranscript?: string;
-  audioTranscriptSegments?: Array<{ startSeconds: number; endSeconds: number; text: string }>;
-  audioAnalyzedAt?: string | null; audioError?: string;
-};
 
-type KickRecorderAiArticleStatus = {
-  configured: boolean; encryptionAvailable: boolean;
-  aiArticleEnabled: boolean; aiArticleProvider: "ollama" | "openai"; aiArticleOllamaUrl: string; aiArticleModel: string; aiArticleIntervalSeconds: number;
-};
 
-type KickRecorderAiModelPullStatus = {
-  model: string;
-  status: string;
-  percent: number | null;
-  completed?: number;
-  total?: number;
-  done: boolean;
-  error?: string;
-};
 
 type KickRecorderCommentVideoEvent = {
   status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string;
@@ -298,22 +266,6 @@ declare global {
       openRecording: (filePath: string) => Promise<{ ok: true }>;
       revealRecording: (filePath: string) => Promise<{ ok: true }>;
       openRecordingFolder: () => Promise<{ ok: true }>;
-      getAiArticleStatus: () => Promise<KickRecorderAiArticleStatus>;
-      saveAiArticleKey: (apiKey: string) => Promise<{ ok: true }>;
-      clearAiArticleKey: () => Promise<{ ok: true }>;
-      testAiArticleConnection: (model: string) => Promise<{ ok: true; message: string }>;
-      pullAiArticleModel: (model: string) => Promise<{ ok: true; model: string }>;
-      cancelAiArticleModelPull: () => Promise<{ ok: true; cancelled: boolean; model?: string }>;
-      onAiArticleModelPullStatus: (callback: (status: KickRecorderAiModelPullStatus) => void) => () => void;
-      onStreamArticleUpdate: (callback: (article: KickRecorderStreamArticle) => void) => () => void;
-      startManualLiveArticle: (channel: string) => Promise<{ ok: true; slug: string; article: KickRecorderStreamArticle; chatStatus: KickRecorderChatStatus }>;
-      stopManualLiveArticle: () => Promise<{ ok: true; slug: string }>;
-      onLiveArticleCaptureStatus: (callback: (status: { slug: string; status: "starting" | "capturing" | "completed" | "stopped" | "error"; frameCount: number; message: string }) => void) => () => void;
-      listStreamArticles: (slug?: string) => Promise<KickRecorderStreamArticle[]>;
-      getStreamArticlePreview: (slug: string, id: string) => Promise<string | null>;
-      deleteStreamArticle: (slug: string, id: string) => Promise<{ ok: true; id: string }>;
-      generateStreamArticle: (input: { videoPath: string; slug: string; displayName?: string; category?: string; headline?: string; chatPaths?: string[] }) => Promise<KickRecorderStreamArticle>;
-      reanalyzeStreamArticle: (slug: string, id: string) => Promise<KickRecorderStreamArticle>;
       listCommentLogFiles: () => Promise<KickRecorderCommentLogFile[]>;
       deleteCommentLog: (filePath: string) => Promise<{ ok: true; name: string }>;
       listRecentCommentMessages: (channelSlug: string, limit?: number) => Promise<KickRecorderLibraryCommentMessage[]>;

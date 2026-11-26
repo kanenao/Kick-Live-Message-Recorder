@@ -2,12 +2,9 @@ import { registeredRank, registeredRankPeak, registeredRankPeakLabel, registered
 import { useEffect, useMemo, useRef, useState } from "react";
 import { KickRanking } from "./KickRanking";
 import { getRecordingChannelSlug } from "../shared/recording-library";
-import { getAvailableArticleChannels, selectAssociatedArticleLogs } from "../shared/article-sources";
 import { computeNicoAssProfile } from "../../electron/nico-ass-auto";
 import { CommentVideoLivePreview } from "./CommentVideoLivePreview";
 import { parseReleaseNotes, splitReleaseNoteInline } from "../shared/release-notes";
-import { formatArticleEvidenceTime, type ArticleEvidenceEvent } from "../../electron/article-evidence";
-import { deduplicateArticleSentences, deduplicateArticleList } from "../../electron/article-text-dedupe";
 
 function ReleaseNoteInlineText({ value }: { value: string }) {
   return <>{splitReleaseNoteInline(value).map((part, index) =>
@@ -62,13 +59,7 @@ type AppSettings = {
   vodAssRowLimit: number;
   vodAssCollisionGap: number;
   vodAssDelaySeconds: number;
-  aiArticleEnabled: boolean;
-  aiArticleProvider: "ollama" | "openai";
-  aiArticleOllamaUrl: string;
-  aiArticleModel: string;
-  aiArticleIntervalSeconds: number;
-  aiArticleAudioEnabled: boolean;
-  aiArticleAudioModel: string;
+  rankingAiModel: string;
 };
 
 type PersistedState = {
@@ -171,7 +162,7 @@ type LibraryCommentMessage = {
 };
 type LibrarySession = {
   id: string; slug: string; kind: "LIVE" | "VOD"; startedAt: string; endedAt?: string;
-  title: string; videos: RecordingFile[]; logs: CommentLogFile[]; article?: StreamArticle;
+  title: string; videos: RecordingFile[]; logs: CommentLogFile[]; 
   status: "saved" | "interrupted" | "failed" | "unknown"; warnings: string[];
   commentAssociation: "exact" | "none";
 };
@@ -183,29 +174,6 @@ type RecordingLibraryChannel = {
   logs: CommentLogFile[];
   sessions: LibrarySession[];
   latestAt: string;
-};
-type StreamArticle = {
-  id: string; slug: string; displayName: string; headline: string; streamTitle?: string; category: string; startedAt: string;
-  durationSeconds: number; commentCount: number; uniqueCommenters: number; keywords: string[];
-  paragraphs: string[]; sourceVideo: string; sourceLogs: string[]; createdAt: string;
-  commentEvidenceCount?: number;
-  pendingAnalysisComments?: Array<{ at: string; text: string; timeInSeconds?: number }>;
-  pendingAnalysisAudioSegments?: Array<{ startSeconds: number; endSeconds: number; text: string }>;
-  evidenceTimeline?: ArticleEvidenceEvent[];
-  status?: "live" | "completed"; aiGenerated?: boolean; aiSummary?: string; highlights?: string[];
-  lastAiUpdateAt?: string | null; viewerCount?: number; peakViewerCount?: number; aiError?: string;
-  videoAnalyzed?: boolean; videoFrameCount?: number; videoAnalyzedSampleCount?: number; videoSummary?: string; videoScenes?: string[]; videoAnalyzedAt?: string | null;
-  videoPreviewAvailable?: boolean; videoPreviewTimeSeconds?: number; videoPreviewUpdatedAt?: string;
-  audioAnalyzed?: boolean; audioSamplingMode?: "continuous" | "distributed"; audioSegmentCount?: number; audioSummary?: string; audioTranscript?: string;
-  audioTranscriptSegments?: Array<{ startSeconds: number; endSeconds: number; text: string }>;
-  audioAnalyzedAt?: string | null; audioError?: string;
-};
-type AiArticleStatus = {
-  configured: boolean; encryptionAvailable: boolean;
-  aiArticleEnabled: boolean; aiArticleProvider: "ollama" | "openai"; aiArticleOllamaUrl: string; aiArticleModel: string; aiArticleIntervalSeconds: number;
-};
-type AiModelPullStatus = {
-  model: string; status: string; percent: number | null; completed?: number; total?: number; done: boolean; error?: string;
 };
 type CommentVideoEvent = { status: "starting" | "encoding" | "completed" | "cancelled" | "error"; percent: number; message: string; outputPath?: string; generatedComments?: number; skippedComments?: number };
 type CommentVideoPreviewData = {
@@ -887,13 +855,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   vodAssRowLimit: 16,
   vodAssCollisionGap: 40,
   vodAssDelaySeconds: 0,
-  aiArticleEnabled: false,
-  aiArticleProvider: "ollama",
-  aiArticleOllamaUrl: "http://127.0.0.1:11434",
-  aiArticleModel: "qwen2.5vl:3b",
-  aiArticleIntervalSeconds: 120,
-  aiArticleAudioEnabled: true,
-  aiArticleAudioModel: "frozenlab/qwen3-asr:0.6b"
+  rankingAiModel: "qwen2.5vl:3b"
 };
 
 function normalizeState(value: unknown): PersistedState {
@@ -975,17 +937,7 @@ function normalizeState(value: unknown): PersistedState {
         ? Math.round(Math.max(0, Math.min(200, settings.vodAssCollisionGap))) : 40,
       vodAssDelaySeconds: typeof settings.vodAssDelaySeconds === "number" && Number.isFinite(settings.vodAssDelaySeconds)
         ? Math.max(-10, Math.min(10, settings.vodAssDelaySeconds)) : 0,
-      aiArticleEnabled: settings.aiArticleEnabled === true,
-      aiArticleProvider: settings.aiArticleProvider === "openai" ? "openai" : "ollama",
-      aiArticleOllamaUrl: typeof settings.aiArticleOllamaUrl === "string" ? settings.aiArticleOllamaUrl.slice(0, 300) : "http://127.0.0.1:11434",
-      aiArticleModel: typeof settings.aiArticleModel === "string" && /^[a-zA-Z0-9._:-]{1,100}$/.test(settings.aiArticleModel)
-        ? (settings.aiArticleProvider !== "openai" && settings.aiArticleModel === "qwen2.5:3b" ? "qwen2.5vl:3b" : settings.aiArticleModel) : (settings.aiArticleProvider === "openai" ? "gpt-6-luna" : "qwen2.5vl:3b"),
-      aiArticleIntervalSeconds: typeof settings.aiArticleIntervalSeconds === "number"
-        ? Math.max(30, Math.min(600, Math.round(settings.aiArticleIntervalSeconds))) : 120,
-      aiArticleAudioEnabled: settings.aiArticleAudioEnabled !== false,
-      aiArticleAudioModel: typeof settings.aiArticleAudioModel === "string" &&
-        /^[a-zA-Z0-9._:/-]{1,120}$/.test(settings.aiArticleAudioModel)
-        ? settings.aiArticleAudioModel : "frozenlab/qwen3-asr:0.6b"
+      rankingAiModel: typeof settings.rankingAiModel === "string" && /^[a-zA-Z0-9._:-]{1,100}$/.test(settings.rankingAiModel) ? settings.rankingAiModel : "qwen2.5vl:3b"
     }
   };
 }
@@ -1027,7 +979,7 @@ async function loadState(): Promise<PersistedState> {
   }
 }
 
-function formatArticlePreviewTime(seconds: number): string {
+function formatRecordingPreviewTime(seconds: number): string {
   const total = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0));
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
@@ -1035,67 +987,6 @@ function formatArticlePreviewTime(seconds: number): string {
   return hours > 0
     ? String(hours).padStart(2, "0") + ":" + String(minutes).padStart(2, "0") + ":" + String(remainingSeconds).padStart(2, "0")
     : String(minutes).padStart(2, "0") + ":" + String(remainingSeconds).padStart(2, "0");
-}
-
-function ArticleBroadcastFrame({ article, onOpenStoryboard }: { article: StreamArticle; onOpenStoryboard: (filePath: string, title: string) => void }) {
-  const frameRef = useRef<HTMLElementTagNameMap["figure"] | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    let observer: IntersectionObserver | null = null;
-    setPreviewUrl(null);
-    if (!article.videoPreviewAvailable || !window.kickRecorder) return;
-
-    const loadPreview = (): void => {
-      void window.kickRecorder?.getStreamArticlePreview(article.slug, article.id)
-        .then(url => { if (!cancelled) setPreviewUrl(url); })
-        .catch(() => { if (!cancelled) setPreviewUrl(null); });
-    };
-
-    if (typeof IntersectionObserver !== "undefined" && frameRef.current) {
-      observer = new IntersectionObserver(entries => {
-        if (entries.some(entry => entry.isIntersecting)) {
-          observer?.disconnect();
-          loadPreview();
-        }
-      }, { rootMargin: "280px" });
-      observer.observe(frameRef.current);
-    } else {
-      loadPreview();
-    }
-
-    return () => {
-      cancelled = true;
-      observer?.disconnect();
-    };
-  }, [article.slug, article.id, article.videoPreviewAvailable, article.videoPreviewUpdatedAt]);
-
-  return <figure ref={frameRef} className={previewUrl ? "article-broadcast-frame has-image" : "article-broadcast-frame is-empty"}>
-    {previewUrl
-      ? <img src={previewUrl} alt={article.displayName + "の配信画面"} loading="lazy" />
-      : <div className="article-broadcast-placeholder">
-          <span className="article-broadcast-placeholder-mark" aria-hidden="true">▶</span>
-          <strong>放送画面は未取得です</strong>
-          <small>{article.videoPreviewAvailable
-            ? "放送画面を読み込み中、または画像が見つかりません"
-            : article.status === "live"
-              ? "LIVE映像の代表フレームを待っています"
-              : article.sourceVideo
-                ? "録画から画像を取得するには記事を再生成してください"
-                : "この記録には保存済みの映像がありません"}</small>
-        </div>}
-    <figcaption>
-      <span>放送画面</span>
-      <span>{typeof article.videoPreviewTimeSeconds === "number"
-        ? "開始から " + formatArticlePreviewTime(article.videoPreviewTimeSeconds)
-        : article.status === "live" ? "LIVEフレーム" : "代表フレーム"}</span>
-    </figcaption>
-    {article.status === "live" && <span className="article-broadcast-live-pill"><i /> LIVE</span>}
-    {article.sourceVideo && <button className="article-broadcast-gallery-button" type="button"
-      onClick={() => onOpenStoryboard(article.sourceVideo, article.headline)}
-      title="録画から時刻別の場面一覧を表示">場面プレビュー</button>}
-  </figure>;
 }
 
 function LibraryChannelAvatar({ displayName, picture, onOpenProfile }: {
@@ -1219,10 +1110,10 @@ function RecordingStoryboardDialog({ filePath, title, onClose }: {
       {error && <div className="storyboard-status storyboard-error" role="alert">{error}</div>}
       {data && data.frames.length > 0 && <div className="storyboard-layout">
         <div className="storyboard-featured">
-          {selected && <><img src={selected.imageDataUrl} alt={"録画の開始から" + formatArticlePreviewTime(selected.timeSeconds) + "の場面"} />
-            <span className="storyboard-featured-time">{formatArticlePreviewTime(selected.timeSeconds)}</span></>}
+          {selected && <><img src={selected.imageDataUrl} alt={"録画の開始から" + formatRecordingPreviewTime(selected.timeSeconds) + "の場面"} />
+            <span className="storyboard-featured-time">{formatRecordingPreviewTime(selected.timeSeconds)}</span></>}
           <div className="storyboard-meta"><strong>{data.frames.length}場面を抽出</strong>
-            <span>動画の長さ {formatArticlePreviewTime(data.durationSeconds)}</span></div>
+            <span>動画の長さ {formatRecordingPreviewTime(data.durationSeconds)}</span></div>
           <div className="storyboard-actions">
             <button type="button" className="primary-small" onClick={() => void window.kickRecorder?.openRecording(filePath)}>元動画を再生</button>
             <button type="button" className="small-action" onClick={() => void window.kickRecorder?.revealRecording(filePath)}>保存先を開く</button>
@@ -1233,10 +1124,10 @@ function RecordingStoryboardDialog({ filePath, title, onClose }: {
           {data.frames.map((frame, index) => <button type="button"
             key={frame.timeSeconds + ":" + index}
             className={"storyboard-tile" + (selectedIndex === index ? " is-selected" : "")}
-            aria-label={"開始から " + formatArticlePreviewTime(frame.timeSeconds) + " の場面"}
+            aria-label={"開始から " + formatRecordingPreviewTime(frame.timeSeconds) + " の場面"}
             aria-pressed={selectedIndex === index} onClick={() => setSelectedIndex(index)}>
             <img src={frame.imageDataUrl} loading="lazy" alt="" />
-            <time>{formatArticlePreviewTime(frame.timeSeconds)}</time>
+            <time>{formatRecordingPreviewTime(frame.timeSeconds)}</time>
           </button>)}
         </div>
       </div>}
@@ -1263,7 +1154,7 @@ export default function App() {
     const ticker = window.setInterval(() => setVodClock(Date.now()), 1000);
     return () => window.clearInterval(ticker);
   }, []);
-  const [tab, setTab] = useState<"dashboard" | "ranking" | "recording" | "library" | "comment-video" | "articles" | "updates" | "feedback" | "settings">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "ranking" | "recording" | "library" | "comment-video" | "updates" | "feedback" | "settings">("dashboard");
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [feedbackDetails, setFeedbackDetails] = useState("");
   const [feedbackBusy, setFeedbackBusy] = useState(false);
@@ -1360,7 +1251,7 @@ export default function App() {
   const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
   const libraryLoadedOnceRef = useRef(false);
   const [librarySearch, setLibrarySearch] = useState("");
-  const [libraryTypeFilter, setLibraryTypeFilter] = useState<"all" | "videos" | "comments" | "articles">("all");
+  const [libraryTypeFilter, setLibraryTypeFilter] = useState<"all" | "videos" | "comments">("all");
   const [isLoadingLibraryLogs, setIsLoadingLibraryLogs] = useState(false);
   const [expandedLibraryVideosChannel, setExpandedLibraryVideosChannel] = useState<string | null>(null);
   const [expandedLibrarySessions, setExpandedLibrarySessions] = useState<Record<string, boolean>>({});
@@ -1395,61 +1286,6 @@ export default function App() {
   const [commentVideoPreviewLoading, setCommentVideoPreviewLoading] = useState(false);
   const [commentVideoPreviewError, setCommentVideoPreviewError] = useState("");
   const [commentVideoOutputPath, setCommentVideoOutputPath] = useState("");
-  const [streamArticles, setStreamArticles] = useState<StreamArticle[]>([]);
-  const [articleSearch, setArticleSearch] = useState("");
-  const [articleStatusFilter, setArticleStatusFilter] = useState<"all" | "live" | "archive">("all");
-  const [articleSlug, setArticleSlug] = useState("");
-  const [articleVideoPath, setArticleVideoPath] = useState("");
-  const [articleSelectedLogPaths, setArticleSelectedLogPaths] = useState<string[]>([]);
-  const [reanalyzingArticleId, setReanalyzingArticleId] = useState<string | null>(null);
-  const [articleHeadline, setArticleHeadline] = useState("");
-  const [articleBusy, setArticleBusy] = useState(false);
-  const [deletingArticleId, setDeletingArticleId] = useState<string | null>(null);
-  const [articleMessage, setArticleMessage] = useState("");
-  const [manualLiveArticleInput, setManualLiveArticleInput] = useState("");
-  const [manualLiveArticleBusy, setManualLiveArticleBusy] = useState(false);
-  const [manualLiveArticleSlug, setManualLiveArticleSlug] = useState("");
-  const [liveArticleCaptureStatus, setLiveArticleCaptureStatus] = useState<{ slug: string; status: "starting" | "capturing" | "completed" | "stopped" | "error"; frameCount: number; message: string } | null>(null);
-  const [aiArticleApiKey, setAiArticleApiKey] = useState("");
-  const [aiArticleStatus, setAiArticleStatus] = useState<AiArticleStatus>({
-    configured: false, encryptionAvailable: false, aiArticleEnabled: false,
-    aiArticleProvider: "ollama", aiArticleOllamaUrl: "http://127.0.0.1:11434", aiArticleModel: "qwen2.5vl:3b", aiArticleIntervalSeconds: 120
-  });
-  const [aiArticleBusy, setAiArticleBusy] = useState(false);
-  const [aiArticleMessage, setAiArticleMessage] = useState("");
-  const [aiModelPullBusy, setAiModelPullBusy] = useState(false);
-  const [aiModelPullStatus, setAiModelPullStatus] = useState<AiModelPullStatus | null>(null);
-
-  const filteredStreamArticles = useMemo(() => {
-    const query = articleSearch.trim().toLocaleLowerCase("ja-JP");
-    return streamArticles.filter(article => {
-      const isLive = article.status === "live";
-      if (articleStatusFilter === "live" && !isLive) return false;
-      if (articleStatusFilter === "archive" && isLive) return false;
-      if (!query) return true;
-      return [
-        article.displayName, article.slug, article.headline, article.streamTitle ?? "", article.category, article.aiSummary ?? "",
-        ...(article.paragraphs ?? []), ...(article.keywords ?? []), ...(article.highlights ?? []),
-        article.videoSummary ?? "", ...(article.videoScenes ?? []), article.audioSummary ?? "",
-        article.audioTranscript ?? ""
-      ].join(" ").toLocaleLowerCase("ja-JP").includes(query);
-    });
-  }, [streamArticles, articleSearch, articleStatusFilter]);
-
-  const articleDateGroups = useMemo(() => {
-    const groups = new Map<string, StreamArticle[]>();
-    for (const article of filteredStreamArticles) {
-      const date = new Date(article.startedAt);
-      const label = Number.isNaN(date.getTime())
-        ? "日付不明"
-        : date.toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "short" });
-      const items = groups.get(label) ?? [];
-      items.push(article);
-      groups.set(label, items);
-    }
-    return [...groups.entries()];
-  }, [filteredStreamArticles]);
-
   const activeCount = useMemo(() => [...channels, ...recordingOnlyChannels].filter(c => c.recording).length, [channels, recordingOnlyChannels]);
   const activeRecordingChannels = useMemo(() => {
     const unique = new Map<string, Channel>();
@@ -1540,13 +1376,12 @@ export default function App() {
     return recordingLibraryChannels.filter(group => {
       if (libraryTypeFilter === "videos" && group.sessions.every(item => item.videos.length === 0)) return false;
       if (libraryTypeFilter === "comments" && group.sessions.every(item => item.logs.length === 0)) return false;
-      if (libraryTypeFilter === "articles" && group.sessions.every(item => !item.article)) return false;
       if (!query) return true;
       const searchable = [
         group.slug, group.displayName,
         ...group.videos.map(file => file.name),
         ...group.logs.map(file => file.name),
-        ...group.sessions.flatMap(session => [session.title, session.article?.headline ?? "", session.article?.aiSummary ?? ""])
+        ...group.sessions.map(session => session.title)
       ].join(" ").toLocaleLowerCase("ja-JP");
       return searchable.includes(query);
     });
@@ -1730,7 +1565,7 @@ export default function App() {
   );
 
   useEffect(() => {
-    if ((tab !== "library" && tab !== "dashboard" && tab !== "comment-video" && tab !== "articles") || !isDesktop || !window.kickRecorder) return;
+    if ((tab !== "library" && tab !== "dashboard" && tab !== "comment-video") || !isDesktop || !window.kickRecorder) return;
     let active = true;
     // Load all three lists together. Separate requests can temporarily display
     // deleted files from an older snapshot alongside newly refreshed sessions.
@@ -1793,48 +1628,6 @@ export default function App() {
       setLibraryLogLoading(false);
     }
   }, [commentLogFiles, librarySelectedLogPath]);
-
-  useEffect(() => {
-    if (!isDesktop || !window.kickRecorder) return;
-    return window.kickRecorder.onLiveArticleCaptureStatus(status => setLiveArticleCaptureStatus(status));
-  }, [isDesktop]);
-
-  useEffect(() => {
-    if (tab !== "articles" || !isDesktop || !window.kickRecorder) return;
-    let active = true;
-    Promise.all([window.kickRecorder.listStreamArticles(), window.kickRecorder.listCommentLogFiles()])
-      .then(([articles, logs]) => {
-        if (!active) return;
-        setStreamArticles(articles);
-        setCommentLogFiles(logs);
-      })
-      .catch(error => setArticleMessage(error instanceof Error ? error.message : "記事データを読み込めませんでした。"));
-    return () => { active = false; };
-  }, [tab, isDesktop, libraryRefreshKey, settings.outputDirectory]);
-
-  useEffect(() => {
-    if (!isDesktop || !window.kickRecorder) return;
-    let active = true;
-    void window.kickRecorder.getAiArticleStatus().then(status => {
-      if (active) setAiArticleStatus(status);
-    }).catch(error => {
-      if (active) setAiArticleMessage(error instanceof Error ? error.message : "AI記事の設定を取得できませんでした。");
-    });
-    const unsubscribe = window.kickRecorder.onStreamArticleUpdate(article => {
-      if (!active) return;
-      setStreamArticles(current => [article, ...current.filter(item => item.id !== article.id)]
-        .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt)));
-    });
-    const unsubscribePull = window.kickRecorder.onAiArticleModelPullStatus(status => {
-      if (!active) return;
-      setAiModelPullStatus(status);
-      if (status.done) {
-        setAiModelPullBusy(false);
-        setAiArticleMessage(status.error || `モデル「${status.model}」のインストールが完了しました。`);
-      }
-    });
-    return () => { active = false; unsubscribe(); unsubscribePull(); };
-  }, [isDesktop]);
 
   useEffect(() => {
     if (tab !== "comment-video" || !isDesktop || !window.kickRecorder) return;
@@ -2524,167 +2317,6 @@ export default function App() {
     }
   }
 
-  async function saveAiArticleApiKey() {
-    if (!window.kickRecorder || !aiArticleApiKey.trim()) return;
-    setAiArticleBusy(true);
-    setAiArticleMessage("");
-    try {
-      await window.kickRecorder.saveAiArticleKey(aiArticleApiKey.trim());
-      setAiArticleApiKey("");
-      const status = await window.kickRecorder.getAiArticleStatus();
-      setAiArticleStatus(status);
-      setAiArticleMessage("OpenAI APIキーをWindowsの暗号化ストレージへ保存しました。");
-    } catch (error) {
-      setAiArticleMessage(error instanceof Error ? error.message : "APIキーを保存できませんでした。");
-    } finally { setAiArticleBusy(false); }
-  }
-
-  async function testAiArticleConnection() {
-    if (!window.kickRecorder) return;
-    setAiArticleBusy(true);
-    setAiArticleMessage("");
-    try {
-      const result = await window.kickRecorder.testAiArticleConnection(settings.aiArticleModel);
-      setAiArticleMessage(result.message);
-    } catch (error) {
-      setAiArticleMessage(error instanceof Error ? error.message : "OpenAI APIへ接続できませんでした。");
-    } finally { setAiArticleBusy(false); }
-  }
-
-  async function pullAiArticleModel(model: string) {
-    if (!window.kickRecorder || settings.aiArticleProvider !== "ollama" || aiModelPullBusy || !model.trim()) return;
-    setAiModelPullBusy(true);
-    setAiModelPullStatus({ model: model.trim(), status: "準備中", percent: 0, done: false });
-    setAiArticleMessage("");
-    try {
-      const result = await window.kickRecorder.pullAiArticleModel(model.trim());
-      setAiArticleMessage(`モデル「${result.model}」をOllamaへインストールしました。接続テストを実行して利用を確認してください。`);
-    } catch (error) {
-      setAiArticleMessage(error instanceof Error ? error.message : "Ollamaモデルをインストールできませんでした。");
-    } finally {
-      setAiModelPullBusy(false);
-    }
-  }
-
-  async function cancelAiArticleModelPull() {
-    if (!window.kickRecorder || !aiModelPullBusy) return;
-    try {
-      await window.kickRecorder.cancelAiArticleModelPull();
-    } catch (error) {
-      setAiArticleMessage(error instanceof Error ? error.message : "モデル取得をキャンセルできませんでした。");
-    }
-  }
-
-  async function clearAiArticleApiKey() {
-    if (!window.kickRecorder) return;
-    setAiArticleBusy(true);
-    setAiArticleMessage("");
-    try {
-      await window.kickRecorder.clearAiArticleKey();
-      setAiArticleStatus(previous => ({ ...previous, configured: false }));
-      setAiArticleMessage("保存済みAPIキーを削除しました。AI記事の自動更新には新しいキーが必要です。");
-    } catch (error) {
-      setAiArticleMessage(error instanceof Error ? error.message : "APIキーを削除できませんでした。");
-    } finally { setAiArticleBusy(false); }
-  }
-
-  async function startManualLiveArticle() {
-    if (!window.kickRecorder || !manualLiveArticleInput.trim()) return;
-    setManualLiveArticleBusy(true);
-    setArticleMessage("");
-    try {
-      const result = await window.kickRecorder.startManualLiveArticle(manualLiveArticleInput.trim());
-      setManualLiveArticleSlug(result.slug);
-      setManualLiveArticleInput("");
-      setArticleMessage(`未登録チャンネル「${result.slug}」の記事専用LIVEを開始しました。録画は行いません。`);
-      setStreamArticles(await window.kickRecorder.listStreamArticles());
-    } catch (error) {
-      setArticleMessage(error instanceof Error ? error.message : "記事専用LIVEを開始できませんでした。");
-    } finally {
-      setManualLiveArticleBusy(false);
-    }
-  }
-
-  async function stopManualLiveArticle() {
-    if (!window.kickRecorder || !manualLiveArticleSlug) return;
-    setManualLiveArticleBusy(true);
-    setArticleMessage("");
-    try {
-      const result = await window.kickRecorder.stopManualLiveArticle();
-      setManualLiveArticleSlug("");
-      setArticleMessage(`「${result.slug}」の記事を保存し、記事専用LIVEを終了しました。`);
-      setStreamArticles(await window.kickRecorder.listStreamArticles());
-    } catch (error) {
-      setArticleMessage(error instanceof Error ? error.message : "記事専用LIVEを停止できませんでした。");
-    } finally {
-      setManualLiveArticleBusy(false);
-    }
-  }
-
-  async function createStreamArticle() {
-    if (!window.kickRecorder || !articleVideoPath || !articleSlug) return;
-    setArticleBusy(true);
-    setArticleMessage("");
-    try {
-      const channel = [...channels, ...recordingOnlyChannels].find(item => item.name.toLowerCase() === articleSlug.toLowerCase());
-      const logs = articleSelectedLogPaths.slice(0, 31);
-      const article = await window.kickRecorder.generateStreamArticle({
-        videoPath: articleVideoPath,
-        slug: articleSlug,
-        displayName: channel?.name ?? articleSlug,
-        headline: articleHeadline.trim() || undefined,
-        chatPaths: logs
-      });
-      const updated = await window.kickRecorder.listStreamArticles();
-      setStreamArticles(updated);
-      setArticleMessage(article.aiGenerated
-        ? `AI記事「${article.headline}」を保存しました。コメント${article.commentCount.toLocaleString("ja-JP")}件${article.videoAnalyzed ? `・映像フレーム${article.videoFrameCount ?? 0}枚` : ""}${article.audioAnalyzed ? `・音声${(article.audioSegmentCount ?? article.audioTranscriptSegments?.length ?? 0).toLocaleString("ja-JP")}区間` : ""}を分析しました。`
-        : article.aiError ? `基本記事を保存しました。AI分析は未完了です：${article.aiError}`
-        : `記事「${article.headline}」を保存しました。コメント${article.commentCount.toLocaleString("ja-JP")}件を集計しました。`);
-      setArticleHeadline("");
-    } catch (error) {
-      setArticleMessage(error instanceof Error ? error.message : "記事の生成に失敗しました。");
-    } finally {
-      setArticleBusy(false);
-    }
-  }
-
-  async function reanalyzeStreamArticle(article: StreamArticle) {
-    if (!window.kickRecorder || reanalyzingArticleId) return;
-    setReanalyzingArticleId(article.id);
-    setArticleMessage("AI記事を再解析しています：" + article.headline);
-    try {
-      const refreshed = await window.kickRecorder.reanalyzeStreamArticle(article.slug, article.id);
-      setStreamArticles(await window.kickRecorder.listStreamArticles());
-      setArticleMessage(refreshed.aiError
-        ? "再解析後も確認が必要です：" + refreshed.aiError
-        : refreshed.aiGenerated ? "映像・音声・コメントのAI再解析が完了しました。" : "AI分析できるデータを確認してください。");
-    } catch (error) {
-      setArticleMessage(error instanceof Error ? error.message : "記事の再解析に失敗しました。");
-    } finally {
-      setReanalyzingArticleId(null);
-    }
-  }
-
-  async function deleteStreamArticle(article: StreamArticle) {
-    if (!window.kickRecorder || deletingArticleId) return;
-    const confirmed = window.confirm(
-      `「${article.headline}」を削除しますか？\\n\\n記事データのみ削除します。元動画とコメントログは削除されません。`
-    );
-    if (!confirmed) return;
-    setDeletingArticleId(article.id);
-    setArticleMessage("");
-    try {
-      await window.kickRecorder.deleteStreamArticle(article.slug, article.id);
-      setStreamArticles(current => current.filter(item => item.id !== article.id || item.slug !== article.slug));
-      setArticleMessage(`記事「${article.headline}」を削除しました。元動画とコメントログは保持されています。`);
-    } catch (error) {
-      setArticleMessage(error instanceof Error ? error.message : "記事を削除できませんでした。");
-    } finally {
-      setDeletingArticleId(null);
-    }
-  }
-
   async function chooseOutputDirectory() {
     if (!window.kickRecorder) return;
     try {
@@ -2704,7 +2336,6 @@ export default function App() {
       <button className={tab === "recording" ? "nav-item selected" : "nav-item"} onClick={() => setTab("recording")}>● <span>録画専用</span></button>
       <button className={tab === "library" ? "nav-item selected" : "nav-item"} onClick={() => setTab("library")}>▤ <span>録画ライブラリ</span></button>
       <button className={tab === "comment-video" ? "nav-item selected" : "nav-item"} onClick={() => setTab("comment-video")}>✦ <span>コメント付き動画</span></button>
-      <button className={tab === "articles" ? "nav-item selected" : "nav-item"} onClick={() => setTab("articles")}>▤ <span>配信記事</span></button>
       <div className="nav-label">アプリ</div>
       <button className={tab === "feedback" ? "nav-item selected" : "nav-item"} onClick={() => setTab("feedback")}>✉ <span>不具合情報・機能要望</span></button>
       <button className={tab === "updates" ? "nav-item selected" : "nav-item"} onClick={() => setTab("updates")}>↻ <span>バージョン更新</span></button>
@@ -2714,14 +2345,14 @@ export default function App() {
 
     <main className={tab === "library" ? "main main-library" : tab === "ranking" ? "main main-ranking" : "main"}>
       <header className="topbar">
-        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "ranking" ? "Kickランキング" : tab === "recording" ? "録画専用" : tab === "library" ? "録画ライブラリ" : tab === "comment-video" ? "コメント付き動画を生成" : tab === "articles" ? "配信記事" : tab === "updates" ? "バージョン更新" : tab === "feedback" ? "不具合情報・機能要望" : "設定"}</h1></div>
+        <div><span className="eyebrow">Kick 配信管理ツール</span><h1>{tab === "dashboard" ? "ダッシュボード" : tab === "ranking" ? "Kickランキング" : tab === "recording" ? "録画専用" : tab === "library" ? "録画ライブラリ" : tab === "comment-video" ? "コメント付き動画を生成" : tab === "updates" ? "バージョン更新" : tab === "feedback" ? "不具合情報・機能要望" : "設定"}</h1></div>
         <div className="top-actions"><span className="connection"><i /> {isDesktop ? "Windows デスクトップ版" : "ブラウザー版プレビュー"}</span><span className="alpha-tag">β版</span><img className="avatar avatar-brand" src="./app-icon.png" alt="Kick Live Message Recorder アイコン" /></div>
       </header>
 
       {storageError && <div className="storage-error" role="alert">{storageError}</div>}
 
       {tab === "ranking" && <><div className="notice"><strong>追っかけ録画の補完設定（実験機能）</strong><div>手動LIVE録画を、サーバーに残っている最古のHLS映像から試行します。配信開始からの取得・過去コメント・コメント同期は保証されません。再接続は通常録画になります。</div><label><input type="checkbox" checked={chaseRecoverVod} onChange={e=>setChaseRecoverVod(e.target.checked)}/> 放送終了後、同じ公開VODを自動取得（別ファイル・追加の通信量）</label><label><input type="checkbox" disabled={!chaseRecoverVod} checked={chaseRecoverVod && chaseRecoverChat} onChange={e=>setChaseRecoverChat(e.target.checked)}/> 同じVODの過去コメントも自動取得（JSONL・TXT・ASS）</label>{chaseChatJobs.map(job=><div key={job.url}><strong>{job.slug}</strong>：{job.message}{job.state==="waiting" && <button className="small-action" onClick={()=>{void window.kickRecorder?.cancelChaseChatRecovery(job.url).catch(()=>undefined);}}>コメント取得待ちを取消</button>}</div>)}<div>放送終了を確認した場合だけ最大6回検索します。自動補完を有効にして録画を開始してください。元の動画は保持します。</div>{chaseRecoveryJobs.map(job=><div key={job.id}><strong>{job.slug}</strong>：{job.message}（{job.attempt}/6）{["waiting","checking"].includes(job.state) && <button className="small-action" onClick={()=>{void window.kickRecorder?.cancelChaseVodRecovery(job.id).then(()=>window.kickRecorder?.listChaseVodRecovery()).then(jobs=>{if(jobs)setChaseRecoveryJobs(jobs);}).catch(()=>undefined);}}>検索停止</button>}</div>)}</div>
-<KickRanking recoverVod={chaseRecoverVod} recoverChat={chaseRecoverChat} configured={kickCredentialsConfigured} desktop={isDesktop} onSettings={()=>setTab("settings")} registered={[...channels,...recordingOnlyChannels].map(c=>c.name.toLowerCase())} canRegister={isReady} onRegister={slug=>{if(!/^[a-z0-9_]{1,25}$/.test(slug)||[...channels,...recordingOnlyChannels].some(c=>c.name.toLowerCase()===slug)||channels.length>=200)return false;setChannels(prev=>prev.some(c=>c.name.toLowerCase()===slug)?prev:[...prev,{id:Date.now(),name:slug,url:"https://kick.com/"+slug,mode:"auto",status:"待機中",recording:false}]);return true;}}/></>}
+<KickRanking model={settings.rankingAiModel} onModelChange={model=>setSettings(prev=>({...prev,rankingAiModel:model}))} recoverVod={chaseRecoverVod} recoverChat={chaseRecoverChat} configured={kickCredentialsConfigured} desktop={isDesktop} onSettings={()=>setTab("settings")} registered={[...channels,...recordingOnlyChannels].map(c=>c.name.toLowerCase())} canRegister={isReady} onRegister={slug=>{if(!/^[a-z0-9_]{1,25}$/.test(slug)||[...channels,...recordingOnlyChannels].some(c=>c.name.toLowerCase()===slug)||channels.length>=200)return false;setChannels(prev=>prev.some(c=>c.name.toLowerCase()===slug)?prev:[...prev,{id:Date.now(),name:slug,url:"https://kick.com/"+slug,mode:"auto",status:"待機中",recording:false}]);return true;}}/></>}
 
       {tab === "dashboard" && <>
         <section className="stats">
@@ -3058,7 +2689,6 @@ export default function App() {
           <div className="recording-library-stat"><span>登録ファイル</span><strong>{(recordingFiles.length + commentLogFiles.length).toLocaleString("ja-JP")}</strong></div>
           <div className="recording-library-stat"><span>録画動画</span><strong>{recordingFiles.length.toLocaleString("ja-JP")}</strong></div>
           <div className="recording-library-stat"><span>コメントログ</span><strong>{commentLogFiles.length.toLocaleString("ja-JP")}</strong></div>
-          <div className="recording-library-stat"><span>AI記事付きの配信</span><strong>{recordingSessions.filter(session => Boolean(session.article)).length.toLocaleString("ja-JP")}</strong></div>
         </div>
 
         <div className="recording-library-filter-row">
@@ -3068,11 +2698,10 @@ export default function App() {
           </label>
           <label>
             <span>表示する種類</span>
-            <select value={libraryTypeFilter} onChange={event => setLibraryTypeFilter(event.target.value as "all" | "videos" | "comments" | "articles")}>
+            <select value={libraryTypeFilter} onChange={event => setLibraryTypeFilter(event.target.value as "all" | "videos" | "comments")}>
               <option value="all">すべて</option>
               <option value="videos">録画動画あり</option>
               <option value="comments">コメントログあり</option>
-              <option value="articles">AI記事付きの録画</option>
             </select>
           </label>
         </div>
@@ -3120,7 +2749,7 @@ export default function App() {
 
                       {expandedLibraryVideosChannel === group.slug && <div className="recording-library-expanded">
                         <div className="recording-library-expanded-title">
-                          <strong>配信別：動画・コメント・AI記事</strong>
+                          <strong>配信別：動画・コメント</strong>
                           <span>{group.sessions.length}件の配信</span>
                         </div>
                         <div className="recording-session-list" role="region" tabIndex={0} aria-label={group.displayName + "の配信別録画"}>
@@ -3137,7 +2766,7 @@ export default function App() {
                                 </div>
                                 <strong>{session.title || (group.displayName + " の" + (session.kind === "LIVE" ? "生放送" : "過去配信"))}</strong>
                                 <small>{Number.isFinite(Date.parse(session.startedAt)) ? new Date(session.startedAt).toLocaleString("ja-JP") : "日時未取得"}</small>
-                                <small>動画 {session.videos.length}件 ・ コメント {session.logs.length}件 ・ AI記事 {session.article ? "あり" : "なし"}</small>
+                                <small>動画 {session.videos.length}件 ・ コメント {session.logs.length}件</small>
                               </div>
                               <div className="recording-session-quick-actions">
                                 {session.videos.length > 0 && <button className="primary-small" onClick={() => void openRecordingFile(session.videos[0].path)}>再生</button>}
@@ -3148,15 +2777,6 @@ export default function App() {
                               </div>
                             </div>
                             {expandedLibrarySessions[session.id] && <>
-                            {session.article && <div className="recording-session-article">
-                              <strong>AI配信記事：{session.article.headline}</strong>
-                              <p>{session.article.aiSummary || session.article.paragraphs?.[0] || "記事を見ると内容を確認できます。"}</p>
-                              <button className="small-action" onClick={() => {
-                                setArticleSearch(session.article?.headline ?? "");
-                                setArticleStatusFilter("all");
-                                setTab("articles");
-                              }}>記事を見る</button>
-                            </div>}
                             {session.warnings.length > 0 && <div className="recording-session-warnings">
                               {session.warnings.map((warning, index) => <p key={index}>{warning}</p>)}
                             </div>}
@@ -3215,14 +2835,6 @@ export default function App() {
                                         </div>}
                               </div>}
                             </div>)}
-                            {!session.article && session.videos.length > 0 && <div className="recording-session-actions">
-                              <button className="small-action" onClick={() => {
-                                setArticleSlug(session.slug);
-                                setArticleVideoPath(session.videos[0].path);
-                                setArticleHeadline("");
-                                setTab("articles");
-                              }}>この録画から記事を生成</button>
-                            </div>}
                             </>}
                           </article>)}
                         </div>
@@ -3460,183 +3072,6 @@ export default function App() {
             </div>
             <div className="notice">生成には動画の再エンコードが必要なため、動画の長さ・解像度・PC性能によって時間がかかります。元動画とコメントJSONLは削除・変更しません。</div>
           </>}
-      </section>}
-
-      {tab === "articles" && <section className="panel stream-articles-panel">
-        <div className="panel-heading">
-          <div><h2>登録配信者の放送記事</h2><p>録画とコメントログから配信ごとの記事を作成し、配信者別・日付順に保存します</p></div>
-          <button className="small-action" onClick={() => setLibraryRefreshKey(value => value + 1)} disabled={!isDesktop || articleBusy}>一覧を更新</button>
-        </div>
-        {!isDesktop ? <div className="empty-state"><strong>Windowsデスクトップ版で利用できます</strong><span>録画ファイルとコメントログを読み込む必要があります。</span></div> : <>
-          <div className="comment-video-intro">配信映像・音声・コメントを別々に解析し、AIが根拠を照合して新聞記事風に統合します。映像は最大8枚の代表フレーム、音声は45秒ごとの文字起こし、コメントは話題や視聴者の反応として扱います。LIVE中も記事を段階的に更新し、終了後に全体を整理します。音声認識にない発言や、静止画だけでは確認できない動きは推測しません。登録不要のチャンネルも録画せずにLIVE記事を生成できます。</div>
-          <div className="settings-subsection manual-live-article-panel">
-            <div className="settings-subheading"><h3>登録不要：LIVE記事だけ生成</h3><span className="api-state connected">録画なし</span></div>
-            <p className="manual-live-article-description">チャンネル管理に登録していない配信者でも利用できます。Kickのチャンネル名またはURLを入力すると、LIVE映像・音声・コメントを解析して記事を自動更新します。録画ファイルは作成せず、通常のチャンネル登録・自動録画設定も変更しません。</p>
-            <div className="comment-video-form-grid">
-              <label className="comment-video-field"><span>Kickチャンネル名／URL</span><input value={manualLiveArticleInput} onChange={event => setManualLiveArticleInput(event.target.value)} placeholder="例：streamer_name または https://kick.com/streamer_name" disabled={manualLiveArticleBusy || Boolean(manualLiveArticleSlug)} /></label>
-            </div>
-            <div className="comment-video-actions">
-              <button className="primary-small" onClick={() => void startManualLiveArticle()} disabled={manualLiveArticleBusy || Boolean(manualLiveArticleSlug) || !manualLiveArticleInput.trim()}>{manualLiveArticleBusy ? "LIVE情報を確認中..." : "登録せずにLIVE記事を開始"}</button>
-              {manualLiveArticleSlug && <button className="remove" onClick={() => void stopManualLiveArticle()} disabled={manualLiveArticleBusy}>記事を保存して終了</button>}
-              {manualLiveArticleSlug && <span className="comment-video-log-count">生成中：{manualLiveArticleSlug}</span>}
-            </div>
-            {manualLiveArticleSlug && liveArticleCaptureStatus?.slug === manualLiveArticleSlug && <div className={liveArticleCaptureStatus.status === "error" ? "comment-video-status error" : "comment-video-status"} role="status"><strong>{liveArticleCaptureStatus.message}</strong></div>}
-            <div className="notice">LIVE映像は25秒間隔で代表フレームを抽出し、音声は45秒単位でWAV化してローカルASRへ渡します。録画ファイルは作成しません。音声文字起こしにはOllamaとQwen3-ASRモデルが必要です。LIVE終了時は音声認識キューを処理して記事を最終化します。この機能にはKick API Client ID／Secretの設定が必要です。</div>
-          </div>
-          <div className="settings-subsection ai-article-settings">
-            <div className="settings-subheading"><h3>LIVE中のリアルタイムAI記事</h3><span className={settings.aiArticleProvider === "ollama" ? "api-state connected" : aiArticleStatus.configured ? "api-state connected" : "api-state"}>{settings.aiArticleProvider === "ollama" ? "無料ローカルAI" : aiArticleStatus.configured ? "APIキー設定済み" : "APIキー未設定"}</span></div>
-            <label className="comment-video-checkbox"><input type="checkbox" checked={settings.aiArticleEnabled} onChange={event => setSettings(previous => ({ ...previous, aiArticleEnabled: event.target.checked }))} disabled={settings.aiArticleProvider === "openai" && !aiArticleStatus.configured} /><span>登録配信者のLIVEを自動でAI記事化する</span></label>
-            <div className="comment-video-form-grid ai-article-form-grid">
-              <label className="comment-video-field"><span>AIエンジン</span><select value={settings.aiArticleProvider} onChange={event => setSettings(previous => ({ ...previous, aiArticleProvider: event.target.value as "ollama" | "openai", aiArticleModel: event.target.value === "ollama" ? "qwen2.5vl:3b" : "gpt-6-luna" }))} disabled={aiArticleBusy}><option value="ollama">Ollama（無料・ローカルAI）</option><option value="openai">OpenAI API（有料）</option></select></label>
-              {settings.aiArticleProvider === "ollama" ? <>
-                <label className="comment-video-field"><span>Ollama接続URL</span><input type="url" value={settings.aiArticleOllamaUrl} onChange={event => setSettings(previous => ({ ...previous, aiArticleOllamaUrl: event.target.value }))} placeholder="http://127.0.0.1:11434" disabled={aiArticleBusy} /><small>通常はこの初期値のままで利用できます。</small></label>
-                <div className="ai-model-install-field">
-                  <label className="comment-video-field"><span>記事生成・映像解析モデル</span><input value={settings.aiArticleModel} onChange={event => setSettings(previous => ({ ...previous, aiArticleModel: event.target.value }))} placeholder="qwen2.5vl:3b" disabled={aiArticleBusy || aiModelPullBusy} /><small>初期値は qwen2.5vl:3b。画像入力に対応したOllama Visionモデルを指定してください。</small></label>
-                  <button className="small-action" onClick={() => void pullAiArticleModel(settings.aiArticleModel)} disabled={aiArticleBusy || aiModelPullBusy || !settings.aiArticleModel.trim()}>記事・映像モデルをインストール</button>
-                </div>
-                <label className="comment-video-checkbox"><input type="checkbox" checked={settings.aiArticleAudioEnabled} onChange={event => setSettings(previous => ({ ...previous, aiArticleAudioEnabled: event.target.checked }))} disabled={aiArticleBusy} /><span>音声を文字起こしして記事へ反映する（無料・ローカル）</span></label>
-                <div className="ai-model-install-field">
-                  <label className="comment-video-field"><span>音声認識モデル（Qwen3-ASR）</span><input value={settings.aiArticleAudioModel} onChange={event => setSettings(previous => ({ ...previous, aiArticleAudioModel: event.target.value }))} placeholder="frozenlab/qwen3-asr:0.6b" disabled={aiArticleBusy || aiModelPullBusy || !settings.aiArticleAudioEnabled} /><small>初期値は frozenlab/qwen3-asr:0.6b（約1GB）。日本語を含む音声を45秒単位で認識します。Qwen3-ASR対応の新しいOllamaが必要です。</small></label>
-                  <button className="small-action" onClick={() => void pullAiArticleModel(settings.aiArticleAudioModel)} disabled={aiArticleBusy || aiModelPullBusy || !settings.aiArticleAudioEnabled || !settings.aiArticleAudioModel.trim()}>音声認識モデルをインストール</button>
-                </div>
-              </> : <>
-              <label className="comment-video-field"><span>OpenAI APIキー</span><input type="password" value={aiArticleApiKey} onChange={event => setAiArticleApiKey(event.target.value)} placeholder={aiArticleStatus.configured ? "保存済み（変更するときだけ入力）" : "sk-..."} autoComplete="new-password" disabled={aiArticleBusy || !aiArticleStatus.encryptionAvailable} /><small>キー自体は画面や設定ファイルへ保存せず、Windowsの暗号化ストレージへ保存します。</small></label>
-              <label className="comment-video-field"><span>AIモデル</span><select value={settings.aiArticleModel} onChange={event => setSettings(previous => ({ ...previous, aiArticleModel: event.target.value }))} disabled={aiArticleBusy}><option value="gpt-6-luna">GPT-6 Luna（低コスト・推奨）</option><option value="gpt-6.1-terra">GPT-6.1 Terra</option><option value="gpt-6.1-sol">GPT-6.1 Sol</option></select></label>
-              </>}
-              <label className="comment-video-field"><span>AI記事の更新間隔</span><select value={settings.aiArticleIntervalSeconds} onChange={event => setSettings(previous => ({ ...previous, aiArticleIntervalSeconds: Number(event.target.value) }))}><option value={30}>30秒</option><option value={60}>1分</option><option value={120}>2分（推奨）</option><option value={300}>5分</option><option value={600}>10分</option></select></label>
-            </div>
-            <div className="comment-video-actions">
-              {settings.aiArticleProvider === "openai" && <><button className="primary-small" onClick={() => void saveAiArticleApiKey()} disabled={aiArticleBusy || !aiArticleApiKey.trim() || !aiArticleStatus.encryptionAvailable}>APIキーを保存</button><button className="small-action" onClick={() => void clearAiArticleApiKey()} disabled={aiArticleBusy || !aiArticleStatus.configured}>APIキーを削除</button></>}
-              <button className="small-action" onClick={() => void testAiArticleConnection()} disabled={aiArticleBusy || aiModelPullBusy}>{settings.aiArticleProvider === "ollama" ? "Ollama接続テスト" : "接続テスト"}</button>
-            </div>
-            {aiModelPullStatus && <div className="ai-model-pull-status" role="status">
-              <div className="ai-model-pull-heading"><strong>{aiModelPullStatus.model}</strong><span>{aiModelPullStatus.done ? "完了" : aiModelPullStatus.status}{aiModelPullStatus.percent !== null ? ` ・ ${aiModelPullStatus.percent}%` : ""}</span></div>
-              {aiModelPullStatus.percent !== null && <div className="version-progress"><div style={{ width: `${aiModelPullStatus.percent}%` }} /></div>}
-              {typeof aiModelPullStatus.completed === "number" && typeof aiModelPullStatus.total === "number" && <small>{(aiModelPullStatus.completed / 1_000_000).toFixed(1)} MB / {(aiModelPullStatus.total / 1_000_000).toFixed(1)} MB</small>}
-              {!aiModelPullStatus.done && <button className="remove" onClick={() => void cancelAiArticleModelPull()}>ダウンロードをキャンセル</button>}
-              {aiModelPullStatus.error && <small>{aiModelPullStatus.error}</small>}
-            </div>}
-            {aiArticleMessage && <div className="api-message" role="status">{aiArticleMessage}</div>}
-            <div className="notice">AI記事の自動更新をONにすると、通常のコメント自動取得設定がOFFでも記事用コメントを受信します。録画済み動画の手動記事生成は、自動LIVE記事のON／OFFとは独立してAI分析します。{settings.aiArticleProvider === "ollama" ? "映像・音声・コメントのデータは設定したOllamaへ送信され、ローカルOllamaを使う場合は外部AIサービスへ送信されません。記事生成用Visionモデルと音声認識モデルは設定画面の「インストール」ボタンから取得できます。ダウンロードには初回のみ通信が必要です。PCのメモリ・CPU/GPUを使用します。" : "記事生成モデルには映像フレーム・コメント・配信情報と、利用可能な場合は音声文字起こしテキストをOpenAI APIへ送信します。API利用料が発生し、映像フレームも外部へ送信されるため、送信してよい録画だけを対象にしてください。音声の新規文字起こし処理はOllama利用時のみです。"}</div>
-          </div>
-          <div className="comment-video-form-grid">
-            <label className="comment-video-field"><span>配信者（未登録の録画にも対応）</span><select value={articleSlug}
-              onChange={event => { setArticleSlug(event.target.value); setArticleVideoPath(""); setArticleSelectedLogPaths([]); }}>
-              <option value="">配信者を選択</option>
-              {getAvailableArticleChannels([...channels, ...recordingOnlyChannels].map(item => item.name), recordingFiles.map(file => file.name))
-                .map(slug => <option key={slug} value={slug}>{slug}</option>)}
-            </select><small>録画ライブラリにある配信者は、監視登録していなくても表示されます。</small></label>
-            <label className="comment-video-field"><span>対象の録画動画</span><select value={articleVideoPath}
-              onChange={event => {
-                const selected = recordingFiles.find(file => file.path === event.target.value);
-                setArticleVideoPath(event.target.value);
-                setArticleSelectedLogPaths(selected ? selectAssociatedArticleLogs(selected.name, articleSlug, commentLogFiles) : []);
-              }}>
-              <option value="">動画を選択してください</option>
-              {recordingFiles.filter(file => getRecordingChannelSlug(file.name) === articleSlug)
-                .map(file => <option key={file.path} value={file.path}>{file.name}</option>)}
-            </select><small>同じ放送に属するコメントログだけを自動選択します。</small></label>
-            <label className="comment-video-field"><span>記事見出し（任意）</span><input value={articleHeadline} onChange={event => setArticleHeadline(event.target.value)} maxLength={160} placeholder="空欄なら配信者名から自動作成" /></label>
-          </div>
-          <div className="settings-subsection">
-            <div className="settings-subheading"><h3>記事に使用するコメントログ</h3><span className="api-state connected">{articleSelectedLogPaths.length}件選択</span></div>
-            <p className="settings-help">同じ配信のコメントログを自動選択します。ファイル名が異なる古いログは、下から手動で選択できます。別の放送のログを選ぶと記事が不正確になるため注意してください。</p>
-            <div className="comment-video-log-list" role="group" aria-label="記事生成に使用するコメントログ">
-              {commentLogFiles.filter(file => file.channelSlug.toLowerCase() === articleSlug.toLowerCase() && articleSlug)
-                .map(file => <label className="comment-video-log-option" key={file.path}>
-                  <input type="checkbox" checked={articleSelectedLogPaths.includes(file.path)}
-                    disabled={articleBusy || (!articleSelectedLogPaths.includes(file.path) && articleSelectedLogPaths.length >= 31)}
-                    onChange={event => setArticleSelectedLogPaths(previous =>
-                      event.target.checked ? [...previous, file.path] : previous.filter(path => path !== file.path))} />
-                  <span><strong>{file.kind}</strong><small>{file.name}</small></span>
-                </label>)}
-            </div>
-          </div>
-          <div className="comment-video-actions"><button className="primary-small" onClick={() => void createStreamArticle()} disabled={articleBusy || !articleSlug || !articleVideoPath}>{articleBusy ? "映像・音声・コメントをAI分析中..." : settings.aiArticleProvider === "ollama" || aiArticleStatus.configured ? "3つの情報源からAI記事を生成" : "この配信の記事を生成"}</button><span className="comment-video-log-count">同じ放送に対応するログ {articleSelectedLogPaths.length}件を使用</span></div>
-          {articleMessage && <div className="api-message" role="status">{articleMessage}</div>}
-          <div className="article-news-masthead">
-            <div className="article-news-title">
-              <span className="article-news-kicker">KICK LIVE JOURNAL / AI BROADCAST EDITION</span>
-              <h2>配信AI新聞</h2>
-              <p>映像・音声・コメントから読み解く、生放送の記録</p>
-            </div>
-            <div className="article-news-issue">
-              <strong>{new Date().toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "long" })}</strong>
-              <span>保存記事 {streamArticles.length.toLocaleString("ja-JP")}本</span>
-            </div>
-          </div>
-          <div className="article-list">
-            <div className="settings-subheading article-list-heading"><h3>放送記事一覧</h3><span className="api-state connected">{filteredStreamArticles.length}件 / 全{streamArticles.length}件</span></div>
-            <div className="article-list-toolbar">
-              <div className="article-status-filters" role="group" aria-label="記事の種類">
-                <button className={articleStatusFilter === "all" ? "selected" : ""} onClick={() => setArticleStatusFilter("all")}>すべて</button>
-                <button className={articleStatusFilter === "live" ? "selected" : ""} onClick={() => setArticleStatusFilter("live")}>LIVE速報</button>
-                <button className={articleStatusFilter === "archive" ? "selected" : ""} onClick={() => setArticleStatusFilter("archive")}>アーカイブ</button>
-              </div>
-              <span className="article-list-count">{filteredStreamArticles.length.toLocaleString("ja-JP")}記事</span>
-            </div>
-            <div className="article-search-row"><input className="article-search" value={articleSearch} onChange={event => setArticleSearch(event.target.value)} placeholder="記事を検索（配信者・見出し・本文・音声文字起こし・キーワード）" aria-label="配信記事を検索" /></div>
-            {streamArticles.length === 0 ? <div className="empty-state"><strong>まだ記事がありません</strong><span>録画ライブラリから動画を選んで記事を生成してください。未登録の配信者にも対応しています。</span></div> : filteredStreamArticles.length === 0 ? <div className="empty-state"><strong>一致する記事がありません</strong><span>検索語を変更してください。</span></div> : articleDateGroups.map(([dateLabel, dayArticles]) => <section className="article-day-group" key={dateLabel}>
-              <div className="article-day-heading"><h4>{dateLabel}</h4><span>{dayArticles.length.toLocaleString("ja-JP")}本</span></div>
-              {dayArticles.map(article => <article className="article-card" key={article.slug + ":" + article.id}>
-              <div className="article-meta"><span className="article-byline">配信者・{article.displayName}</span> ・ {new Date(article.startedAt).toLocaleString("ja-JP")} <span className={article.status === "live" ? "article-status-live" : "article-status-done"}>{article.status === "live" ? "LIVE・更新中" : article.status === "completed" ? "配信終了" : "アーカイブ"}</span>{article.aiGenerated && <span className="article-ai-label">AI記事</span>}</div>
-              <div className="article-broadcast-layout">
-<ArticleBroadcastFrame article={article} onOpenStoryboard={(path, title) => setStoryboardTarget({ path, title })} />
-                <div className="article-broadcast-copy">
-                  <h3>{article.headline}</h3>
-                  {article.streamTitle && article.streamTitle !== article.headline && <p className="article-original-stream-title"><strong>元配信タイトル</strong> {article.streamTitle}</p>}
-                  {article.category && <span className="live-stream-category">{article.category}</span>}
-                  {article.aiSummary && <p className="article-summary">{deduplicateArticleSentences(article.aiSummary, 500)}</p>}
-                </div>
-              </div>
-              <div className="article-source-badges">
-                <span className={article.videoAnalyzed ? "is-analyzed" : ""}>映像 {article.videoAnalyzed ? "分析済み" : "未解析"}</span>
-                <span className={article.audioAnalyzed ? "is-analyzed" : ""}>音声 {article.audioAnalyzed ? `文字起こし ${(article.audioSegmentCount ?? article.audioTranscriptSegments?.length ?? 0).toLocaleString("ja-JP")}区間` : "未解析"}</span>
-                <span className={article.commentCount > 0 ? "is-analyzed" : ""}>コメント {article.commentCount.toLocaleString("ja-JP")}件</span>
-                {typeof article.commentEvidenceCount === "number" && <span className={article.commentEvidenceCount > 0 ? "is-analyzed" : ""}>AI参照候補 {article.commentEvidenceCount.toLocaleString("ja-JP")}件</span>}
-                {((article.pendingAnalysisComments?.length ?? 0) + (article.pendingAnalysisAudioSegments?.length ?? 0)) > 0 &&
-                  <span>AI未解析 {article.pendingAnalysisComments?.length ?? 0}コメント・{article.pendingAnalysisAudioSegments?.length ?? 0}音声区間</span>}
-              </div>
-              {Boolean(article.evidenceTimeline?.length) && <details className="article-evidence-details">
-                <summary>解析に使った時刻付きの情報源（{article.evidenceTimeline?.length ?? 0}件・抜粋）</summary>
-                <p className="article-evidence-note">録画から取得した静止画、受信コメント、音声の文字起こしを時刻順に表示します。AIが内容を検証したことを保証するものではありません。</p>
-                <ol className="article-evidence-list">
-                  {article.evidenceTimeline?.map((event, index) => <li key={event.source + ":" + event.timeSeconds + ":" + index}>
-                    <time>{formatArticleEvidenceTime(event.timeSeconds)}</time>
-                    <span className="article-evidence-source">{event.source === "chat" ? "視聴者コメント" : event.source === "audio" ? "音声文字起こし" : "映像フレーム"}</span>
-                    <span>{event.detail}</span>
-                  </li>)}
-                </ol>
-              </details>}
-              {article.videoAnalyzed && <div className="article-video-analysis"><strong>映像から確認した場面（AI解析した代表フレーム {article.videoAnalyzedSampleCount ?? article.videoScenes?.length ?? 0}枚／取得累計 {article.videoFrameCount ?? 0}枚）</strong>{deduplicateArticleSentences(article.videoSummary, 1000) && <p>{deduplicateArticleSentences(article.videoSummary, 1000)}</p>}{deduplicateArticleList(article.videoScenes ?? [], 8, 300, article.videoSummary ?? "").length > 0 && <ul>{deduplicateArticleList(article.videoScenes ?? [], 8, 300, article.videoSummary ?? "").map((scene, index) => <li key={index}>{scene}</li>)}</ul>}</div>}
-              {article.audioAnalyzed && <div className="article-audio-analysis">
-                <strong>音声から確認した内容</strong>
-                {article.audioSamplingMode === "distributed" && <p className="article-audio-coverage-note">長時間配信のため、全時間帯から一部の音声区間を抜き出して文字起こししています。配信全体の発言を網羅したものではありません。</p>}
-                <p>{deduplicateArticleSentences(article.audioSummary, 1200) || "音声は文字起こし済みです。発言内容の要約はまだ生成されていません。"}</p>
-                {article.audioTranscript && <details className="article-transcript-details">
-                  <summary>音声文字起こしを表示（{(article.audioSegmentCount ?? article.audioTranscriptSegments?.length ?? 0).toLocaleString("ja-JP")}区間）</summary>
-                  <pre>{article.audioTranscript}</pre>
-                </details>}
-              </div>}
-              {article.audioError && <div className="storage-error article-error">音声認識エラー：{article.audioError}</div>}
-              {deduplicateArticleList(article.paragraphs, 5, 1000, article.aiSummary ?? "").map((paragraph, index) => <p key={index}>{paragraph}</p>)}
-              {Boolean(article.highlights?.length) && <div className="article-highlights"><strong>注目ポイント</strong><ul>{deduplicateArticleList(article.highlights ?? [], 5, 240).map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
-              {article.aiError && <div className="storage-error article-error">{article.aiGenerated ? "一部情報源の解析状況：" : "AI更新エラー："}{article.aiError}</div>}
-              <div className="article-stats">配信時間 {Math.floor((article.durationSeconds ?? 0) / 60).toLocaleString("ja-JP")}分 ・ コメント {article.commentCount.toLocaleString("ja-JP")}件 ・ 投稿者 {article.uniqueCommenters.toLocaleString("ja-JP")}人 ・ 視聴者数 {article.viewerCount?.toLocaleString("ja-JP") ?? "—"}人（最大 {article.peakViewerCount?.toLocaleString("ja-JP") ?? "—"}人） ・ 分析キーワード {article.keywords.join("、") || "なし"}{article.lastAiUpdateAt ? ` ・ AI更新 ${new Date(article.lastAiUpdateAt).toLocaleTimeString("ja-JP")}` : ""}</div>
-              {article.sourceVideo && <div className="comment-video-actions"><button className="small-action" onClick={() => void window.kickRecorder?.openRecording(article.sourceVideo)}>元動画を開く</button><button className="small-action" onClick={() => setStoryboardTarget({ path: article.sourceVideo, title: article.headline })}>時刻別の場面一覧</button><button className="small-action" onClick={() => void window.kickRecorder?.revealRecording(article.sourceVideo)}>録画の保存先</button></div>}
-              <div className="comment-video-actions article-card-actions">
-                <button className="small-action" onClick={() => void reanalyzeStreamArticle(article)}
-                  disabled={reanalyzingArticleId !== null || articleBusy}>
-                  {reanalyzingArticleId === article.id ? "AIで再解析中..." : article.status === "live" ? "LIVE終了後の記事を復旧・再解析" : ((article.pendingAnalysisComments?.length ?? 0) + (article.pendingAnalysisAudioSegments?.length ?? 0)) > 0 ? "保存済み未解析データを含めてAI再解析" : "映像・音声・コメントでAI再解析"}
-                </button>
-                <button className="remove" onClick={() => void deleteStreamArticle(article)} disabled={deletingArticleId !== null}>
-                  {deletingArticleId === article.id ? "削除中..." : "この記事を削除"}
-                </button>
-              </div>
-              </article>)}
-            </section>)}
-          </div>
-        </>}
       </section>}
 
       {tab === "feedback" && <section className="panel feedback-panel">
