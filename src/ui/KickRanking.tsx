@@ -78,6 +78,7 @@ export function KickRanking({pageVisible,configured,desktop,onSettings,registere
   const [rankingChatMessage,setRankingChatMessage]=useState("");
   const [chatScope,setChatScope]=useState<RankingScope|null>(null);
   const [chatAt,setChatAt]=useState<string|null>(null);
+  const [chatError,setChatError]=useState("");
   const [chatFrames,setChatFrames]=useState<Partial<Record<RankingScope,RankFrameHistory>>>({});
   const lastRankFrames=useRef<Partial<Record<RankingScope,RankFrame>>>({});
   const [previousRankFrames,setPreviousRankFrames]=useState<Partial<Record<RankingScope,RankFrame>>>({});
@@ -87,7 +88,7 @@ export function KickRanking({pageVisible,configured,desktop,onSettings,registere
     const refresh=()=>{
       if(waiting)return;waiting=true;
       void api.getRankingBackground().then(value=>{if(mounted)setBackground(value);}).catch(()=>undefined);
-      void api.getRankingChatActivity(scope,observeChat,previewRef.current).then(value=>{if(mounted){setChatActivity(value.rows);setSupport(value.support??[]);setChatScope(scope);setChatAt(new Date().toISOString());setRankingChatMessage(value.message);setChatCoverage({targets:value.targets,connected:value.connected});}}).catch(e=>{if(mounted){setRankingChatMessage(String(e));setChatActivity([]);setSupport([]);setChatCoverage({targets:0,connected:0});setChatScope(null);setChatAt(null);}}).finally(()=>{waiting=false;});
+      void api.getRankingChatActivity(scope,observeChat,previewRef.current).then(value=>{if(mounted){setChatError("");setChatActivity(value.rows);setSupport(value.support??[]);setChatScope(scope);setChatAt(new Date().toISOString());setRankingChatMessage(value.message);setChatCoverage({targets:value.targets,connected:value.connected});}}).catch(e=>{if(mounted){setChatError(String(e));setRankingChatMessage("チャット取得に失敗・再試行中");}}).finally(()=>{waiting=false;});
     };
     refresh();const timer=window.setInterval(refresh,RANKING_REFRESH_MS);
     return()=>{mounted=false;window.clearInterval(timer);};
@@ -170,8 +171,11 @@ export function KickRanking({pageVisible,configured,desktop,onSettings,registere
   const q=search.trim().toLowerCase();
   const categories=[...new Set((snapshot?.entries??[]).map(row=>row.category))].sort((a,b)=>a.localeCompare(b,"ja"));
   const entries=snapshot?.entries??[];
-  const scopedChat=useMemo(()=>chatScope===scope?chatActivity:[],[chatScope,scope,chatActivity]);
-  const scopedSupport=useMemo(()=>chatScope===scope&&observeChat?support:[],[chatScope,scope,observeChat,support]);
+  const chatAge=chatAt?Math.max(0,now-Date.parse(chatAt)):Infinity;
+  const chatUsable=chatScope===scope&&chatAge<=30000;
+  const chatDelayed=Boolean(chatError)||chatAge>15000;
+  const scopedChat=useMemo(()=>chatUsable?chatActivity:[],[chatUsable,chatActivity]);
+  const scopedSupport=useMemo(()=>chatUsable&&observeChat?support:[],[chatUsable,observeChat,support]);
   const supportBySlug=new Map(scopedSupport.map(row=>[row.slug,row]));
   const counts=new Map(scopedChat.map(row=>[row.slug,row.messages]));
   const chatStates=new Map(scopedChat.map(row=>[row.slug,row.state]));
@@ -179,20 +183,21 @@ export function KickRanking({pageVisible,configured,desktop,onSettings,registere
   const momentum=momentumScores(snapshot?.entries??[],scopedChat,scoringWeights);
   const momentumBySlug=new Map(momentum.map((r,i)=>[r.slug,{...r,order:i}]));
   const frame=useMemo(()=>snapshot?rankingFrame(snapshot,scopedChat,snapshot.fetchedAt,scoringWeights,scopedSupport):null,[snapshot,scopedChat,scoringWeights,scopedSupport]);
-  const chatFrame=useMemo(()=>snapshot&&chatScope===scope&&chatAt?rankingFrame(snapshot,scopedChat,chatAt,scoringWeights,scopedSupport):null,[snapshot,chatScope,scope,chatAt,scopedChat,scoringWeights,scopedSupport]);
+  const chatFrame=useMemo(()=>snapshot&&chatUsable&&chatAt?rankingFrame(snapshot,scopedChat,chatAt,scoringWeights,scopedSupport):null,[snapshot,chatUsable,chatAt,scopedChat,scoringWeights,scopedSupport]);
   useEffect(()=>{
     setChatFrames(prev=>{
       if(!chatFrame)return prev[scope]?{...prev,[scope]:undefined}:prev;
+      if(chatDelayed)return prev;
       const next=advanceRankFrame(prev[scope],chatFrame);
       return next===prev[scope]?prev:{...prev,[scope]:next};
     });
-  },[scope,chatFrame]);
+  },[scope,chatFrame,chatDelayed]);
   const previousChatFrame=chatFrames[scope]?.current.at===chatFrame?.at?chatFrames[scope]?.previous:null;
   const chatSort=sort==="chat"||sort==="active"||sort==="momentum"||sort==="kicks"||sort==="giftSubs";
   useEffect(()=>{
     if(!frame&&!chatFrame)return;
-    setTrends(prev=>{const old=prev[scope]??{};let next=old;if(frame)next=appendTrendFrame(next,frame,["viewers","growth"]);if(chatFrame)next=appendTrendFrame(next,chatFrame,["chat","active","momentum","kicks","giftSubs"]);return next===old?prev:{...prev,[scope]:next};});
-  },[scope,frame,chatFrame]);
+    setTrends(prev=>{const old=prev[scope]??{};let next=old;if(frame)next=appendTrendFrame(next,frame,["viewers","growth"]);if(chatFrame&&!chatDelayed)next=appendTrendFrame(next,chatFrame,["chat","active","momentum","kicks","giftSubs"]);return next===old?prev:{...prev,[scope]:next};});
+  },[scope,frame,chatFrame,chatDelayed]);
   const trendFor=(slug:string,start:string|null)=>rankTrendPoints(trends[scope]?.[sort]??[],sort,slug,start);
   const selectedRow=snapshot?.entries.find(r=>r.slug===historySlug);
   const selectedTrend=selectedRow?trendFor(selectedRow.slug,selectedRow.startedAt):[];
@@ -223,7 +228,7 @@ export function KickRanking({pageVisible,configured,desktop,onSettings,registere
     <div className="ranking-toolbar"><select aria-label="ランキング範囲" value={scope} onChange={e=>setScope(e.target.value as RankingScope)}><option value="ja">日本語配信</option><option value="all">全世界</option></select><select aria-label="カテゴリ絞り込み" value={category} onChange={e=>setCategory(e.target.value)}><option value="">全カテゴリ</option>{categories.map(c=><option key={c} value={c}>{c}</option>)}</select><input aria-label="配信検索" placeholder="配信者・タイトル・カテゴリ検索" value={search} onChange={e=>setSearch(e.target.value)}/><label><input type="checkbox" checked={auto} onChange={e=>setAuto(e.target.checked)}/> 自動更新（{RANKING_REFRESH_MS/1000}秒）</label><button className="small-action" disabled={busy||!configured||!desktop} onClick={()=>refreshRef.current()}>{busy?"取得中…":"更新"}</button></div>
     <div className="ranking-sort-tabs" role="group" aria-label="ランキングの種類">{([{id:"viewers",label:"同時視聴者"},{id:"growth",label:"視聴者増加"},{id:"chat",label:"コメント"},{id:"active",label:"アクティブ"},{id:"momentum",label:"AI総合"},{id:"kicks",label:"KICKs"},{id:"giftSubs",label:"ギフトサブ"}] as const).map(item=><button key={item.id} type="button" aria-pressed={sort===item.id} onClick={()=>setSort(item.id)}>{item.label}</button>)}</div>
     <div className="ranking-view-controls"><div role="group" aria-label="表示密度"><button type="button" aria-pressed={!compact} onClick={()=>setCompact(false)}>標準</button><button type="button" aria-pressed={compact} onClick={()=>setCompact(true)}>コンパクト</button></div><span>最大50位</span><label><input type="checkbox" checked={rankedOnly} onChange={e=>setRankedOnly(e.target.checked)}/> 順位取得済みのみ</label><span>{rankLabels[sort]}：{rankedCount}/{topRows.length}件に順位あり</span></div>
-    <div className="ranking-status-strip"><span>{snapshot? snapshot.total.toLocaleString("ja-JP")+"配信":"未取得"}</span><span>チャット {chatCoverage.connected}/{chatCoverage.targets}</span><span>{aiStatus?.weights?"AI配点":"通常配点"}</span><span>{snapshot?"更新 "+new Date(snapshot.fetchedAt).toLocaleTimeString("ja-JP"):"更新待ち"}</span></div>
+    <div className="ranking-status-strip"><span>{snapshot? snapshot.total.toLocaleString("ja-JP")+"配信":"未取得"}</span><span>チャット {chatUsable?chatCoverage.connected+"/"+chatCoverage.targets:"未取得"}</span><span>{chatUsable?(chatDelayed?"前回受信値・再取得待ち":"コメント・ギフト更新中"):"コメント・ギフト観測待ち"}</span><span>{aiStatus?.weights?"AI配点":"通常配点"}</span><span>{snapshot?"更新 "+new Date(snapshot.fetchedAt).toLocaleTimeString("ja-JP"):"更新待ち"}</span></div>
     <details className="ranking-details"><summary>監視・AI採点設定／集計方法</summary>
     {background&&<div className="notice"><label><input type="checkbox" checked={background.enabled} disabled={backgroundBusy||(!configured&&!background.enabled)} onChange={e=>void configureBackground(e.target.checked,background.scope)}/> 画面を閉じてもランキングを収集（5分間隔）</label> <select aria-label="常時収集範囲" value={background.scope} disabled={backgroundBusy} onChange={e=>void configureBackground(background.enabled,e.target.value as RankingScope)}><option value="ja">日本語配信</option><option value="all">全世界</option></select><div>{background.running?"取得中":background.enabled?"収集有効":"停止中"} ／ 前回成功：{background.lastAt?new Date(background.lastAt).toLocaleString("ja-JP"):"未取得"} ／ 次回：{background.nextAt?new Date(background.nextAt).toLocaleString("ja-JP"):"—"}</div>{background.error&&<div role="alert">{background.error}</div>}<div>アプリ動作中のみ収集。追加のAPI通信があります。設定は次回起動にも引き継がれます。</div></div>}
     <div className="ranking-caption"><label><input type="checkbox" checked={observeChat} onChange={e=>setObserveChat(e.target.checked)}/> 最大30配信のコメント勢いを受信（追加接続・ログ保存なし）</label> ／ 追加観測 {chatCoverage.connected}/{chatCoverage.targets}件接続 ／ {rankingChatMessage||"受信準備中"}。同接上位10を優先確保し、登録配信者・プレビュー・視聴者増加・総合勢いも優先枠へ。正常接続中は360秒以上の間隔で接続先を切り替え、連続観測を保護します。チャットは接続中リアルタイム受信し、直近10秒の実受信件数（完了した5秒枠2つ）・約5分の受信件数・毎分コメント数・アクティブ人数・総合順位を10秒ごとに反映します。</div>
@@ -236,6 +241,7 @@ export function KickRanking({pageVisible,configured,desktop,onSettings,registere
     </details>
     {snapshot&&<div className="ranking-caption">最終取得：{new Date(snapshot.fetchedAt).toLocaleString("ja-JP")} ／ {snapshot.complete?"取得完了":"取得範囲内の暫定ランキング"} ／ 上位50位まで表示（未観測は順位なし） ／ 順位変動は前回取得との比較{snapshot.excluded>0?" ／ 不明データ "+snapshot.excluded+"件":""}</div>}
     {snapshot&&stale&&<div className="notice" role="alert">取得から3分を超えています。誤った配信の録画を避けるため、新規録画は更新後に操作してください。録画停止は利用できます。</div>}
+    {chatDelayed&&chatAt&&chatScope===scope&&<div className="ranking-caption" role="status">{chatUsable?"コメント・ギフトは前回観測値を一時表示中（新しい順位変動は記録しません）":"30秒以上観測できていないため、コメント・ギフトの順位は未取得扱い"}。{chatError?" 再取得中。":""}</div>}
     {error&&<div className="notice" role="alert">{error}{snapshot?"（前回取得結果を表示中）":""}</div>}
     {message&&<p className="api-message" role="status">{message}</p>}
     {!!active.length&&<div className="ranking-active"><strong>現在録画中（ランキング圏外も表示）</strong>{active.map(slug=><div key={slug}><span>{slug}</span>{action(slug)}</div>)}</div>}
@@ -255,7 +261,7 @@ export function KickRanking({pageVisible,configured,desktop,onSettings,registere
     </div>
     <div className="ranking-list" role="list" data-density={compact?"compact":"standard"} aria-label={rankLabels[sort]+"一覧"}>
       {visible.map(row=><article role="listitem" className="ranking-card" key={row.slug} data-ranking-slug={row.slug} aria-label={row.name+"の配信"}>
-        <div className="ranking-card-position">{(()=>{const rank=displayFrame?.ranks[sort].get(row.slug),change=chatSort?(chatFrame?rankMovement(chatFrame,previousChatFrame,sort,row):null):frame?rankMovement(frame,previousRankFrames[scope],sort,row):null;return <div className="ranking-position"><strong className="ranking-rank">{rank!=null?rank+"位":"—"}</strong><span className={"ranking-move ranking-move-"+(change?.kind??"unknown")} title={change?.previous!=null?"前回 "+change.previous+"位":change?.kind==="new"?"新しい配信・新規登場":"比較可能な前回順位なし"}>{movementLabels[change?.kind??"unknown"]}{change&&change.delta>0?" "+change.delta:""}</span>{change?.previous!=null&&<small>前回 {change.previous}位</small>}{sort!=="viewers"&&<small>同接 {row.rank}位</small>}{(()=>{const p=trendFor(row.slug,row.startedAt),segments=rankTrendSegments(p);return segments.length?<button type="button" className="ranking-trend-button" onClick={()=>openHistory(row.slug)} title="順位推移を詳しく見る"><svg className="ranking-trend" viewBox="0 0 72 26" role="img" aria-label={"順位推移："+p.map(v=>v.rank==null?"欠測":v.rank+"位").join(" → ")}>{segments.map((v,i)=><polyline key={i} points={v} fill="none" stroke="currentColor" strokeWidth="2"/>)}</svg></button>:<small>推移観測中</small>;})()}</div>;})()}</div>
+        <div className="ranking-card-position">{(()=>{const rank=displayFrame?.ranks[sort].get(row.slug),change=chatSort?(chatFrame&&!chatDelayed?rankMovement(chatFrame,previousChatFrame,sort,row):null):frame?rankMovement(frame,previousRankFrames[scope],sort,row):null;return <div className="ranking-position"><strong className="ranking-rank">{rank!=null?rank+"位":"—"}</strong><span className={"ranking-move ranking-move-"+(change?.kind??"unknown")} title={change?.previous!=null?"前回 "+change.previous+"位":change?.kind==="new"?"新しい配信・新規登場":"比較可能な前回順位なし"}>{movementLabels[change?.kind??"unknown"]}{change&&change.delta>0?" "+change.delta:""}</span>{change?.previous!=null&&<small>前回 {change.previous}位</small>}{sort!=="viewers"&&<small>同接 {row.rank}位</small>}{(()=>{const p=trendFor(row.slug,row.startedAt),segments=rankTrendSegments(p);return segments.length?<button type="button" className="ranking-trend-button" onClick={()=>openHistory(row.slug)} title="順位推移を詳しく見る"><svg className="ranking-trend" viewBox="0 0 72 26" role="img" aria-label={"順位推移："+p.map(v=>v.rank==null?"欠測":v.rank+"位").join(" → ")}>{segments.map((v,i)=><polyline key={i} points={v} fill="none" stroke="currentColor" strokeWidth="2"/>)}</svg></button>:<small>推移観測中</small>;})()}</div>;})()}</div>
         <div className="ranking-card-stream"><div className="ranking-thumb" onMouseEnter={()=>hoverPreview(row.slug,row.name)} onMouseLeave={()=>leavePreview(row.slug)}><SmoothRankingThumbnail source={row.thumbnail} refreshed={row.thumbnail?refreshedRankingThumbnail(row.thumbnail,snapshot?.fetchedAt)??row.thumbnail:null}/>{pageVisible&&preview?.slug===row.slug&&/^[a-z0-9_-]{1,40}$/.test(row.slug)&&<iframe key={row.slug} className="ranking-thumb-player" src={"https://player.kick.com/"+encodeURIComponent(row.slug)+"?autoplay=true&muted=true"} title={row.name+"のライブ映像"} allow="autoplay" tabIndex={-1} aria-hidden="true"/>}<button type="button" className="ranking-thumb-toggle" onClick={()=>togglePreview(row.slug,row.name)} aria-label={row.name+(previewPinned&&preview?.slug===row.slug?"の固定プレビューを解除":"のライブ映像を同じ枠内に固定")} aria-pressed={previewPinned&&preview?.slug===row.slug} title="マウスを合わせると枠内再生・クリックで固定/解除">{preview?.slug===row.slug&&<span className="ranking-thumb-live">{previewPinned?"● 固定":"● LIVE"}</span>}</button></div><div className="ranking-card-identity"><button className="ranking-name" onClick={()=>void window.kickRecorder?.openKickProfile(row.slug).catch(e=>setMessage(String(e)))}>{row.avatar&&<img src={row.avatar} alt="" loading="lazy" referrerPolicy="no-referrer"/>}{row.name}</button><div className="ranking-title">{row.title}</div><small>{row.category} ・ {row.language||"言語不明"}</small><small className="ranking-duration">{elapsed(row.startedAt)}</small></div></div>
         <div className="ranking-card-numbers">
           <div className="ranking-metric" data-selected={sort==="viewers"}><span className="ranking-metric-label">同時視聴者</span><strong className="ranking-viewers">{row.viewers.toLocaleString("ja-JP")}</strong></div>
