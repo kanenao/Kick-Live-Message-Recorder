@@ -1,6 +1,6 @@
 {
   "name": "kick-live-message-recorder",
-  "version": "1.4.3-beta.111",
+  "version": "1.4.4-beta.112",
   "private": true,
   "description": "Kick配信の映像・音声・チャットを保存するWindowsアプリ",
   "main": "dist-electron/main.js",

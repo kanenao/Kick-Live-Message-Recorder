@@ -1,5 +1,6 @@
 import { registeredRank, registeredRankPeak, registeredRankPeakLabel, registeredRankChangeLabel, type RankingSnapshot } from "../../electron/kick-ranking";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { captureRankingScroll, restoreRankingScroll } from "../shared/ranking-scroll";
 import { KickRanking } from "./KickRanking";
 import { getRecordingChannelSlug } from "../shared/recording-library";
 import { computeNicoAssProfile } from "../../electron/nico-ass-auto";
@@ -188,7 +189,7 @@ type CommentVideoPreviewData = {
   comments: Array<{ seconds: number; content: string; username: string; color: string; position?: "scroll" | "top" | "bottom" }>;
 };
 
-const APP_VERSION = "1.4.3-beta.111";
+const APP_VERSION = "1.4.4-beta.112";
 const CURRENT_EDITION: "beta" | "stable" = APP_VERSION.includes("-beta.") ? "beta" : "stable";
 const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: number; delay: number; repeatLane?: boolean; position?: "scroll" | "top" | "bottom" }> = [
   { text: "きたあああああ！", color: "#ffffff", lane: 0, delay: 0 },
@@ -217,6 +218,7 @@ const COMMENT_VIDEO_PREVIEW_ITEMS: Array<{ text: string; color: string; lane: nu
   { text: "いいね！", color: "#ffffff", lane: 9, delay: 2.3, repeatLane: true }
 ];
 const VERSION_HISTORY = [
+  { version: "1.4.4-beta.112", title: "ランキング閲覧位置の復元", changes: ["別メニューから同じ配信者の表示位置へ復帰", "古いデータの即時更新・監視継続"] },
   { version: "1.4.3-beta.111", title: "別メニューでもランキング維持", changes: ["10秒更新・コメント・ギフト・順位推移を継続", "検索条件保持、非表示中のライブプレビュー停止"] },
   { version: "1.4.2-beta.110", title: "ランキング50位上限", changes: ["全7種類を最大50位に固定、ページ送り廃止", "10秒更新・内部集計・順位取得済み絞り込みを維持"] },
   { version: "1.4.1-beta.109", title: "KICKs・ギフトサブスクの速報化", changes: ["60秒待たず実受信を次の10秒更新で順位反映", "受信待ち10秒、未接続時の再試行を20秒へ短縮"] },
@@ -1158,9 +1160,27 @@ export default function App() {
     const ticker = window.setInterval(() => setVodClock(Date.now()), 1000);
     return () => window.clearInterval(ticker);
   }, []);
-  const [tab, setTab] = useState<"dashboard" | "ranking" | "recording" | "library" | "comment-video" | "updates" | "feedback" | "settings">("dashboard");
+  const [tab, setActiveTab] = useState<"dashboard" | "ranking" | "recording" | "library" | "comment-video" | "updates" | "feedback" | "settings">("dashboard");
   // Mount the ranking once on first visit, then keep its subscriptions and state alive.
   const [rankingOpened,setRankingOpened]=useState(false);
+  const rankingScroll=useRef<ReturnType<typeof captureRankingScroll>|null>(null);
+  const previousTab=useRef<typeof tab>(tab);
+  function setTab(next:typeof tab){
+    if(next===tab)return;
+    if(tab==="ranking"){
+      const cards=Array.from(document.querySelectorAll<HTMLElement>(".ranking-page-host [data-ranking-slug]"));
+      rankingScroll.current=captureRankingScroll(window.scrollY,window.innerHeight,cards.map(card=>({slug:card.dataset.rankingSlug??"",top:card.getBoundingClientRect().top,bottom:card.getBoundingClientRect().bottom})));
+    }
+    setActiveTab(next);
+  }
+  useLayoutEffect(()=>{
+    if(previousTab.current===tab)return;
+    previousTab.current=tab;
+    if(tab!=="ranking"||!rankingScroll.current)return;
+    const cards=Array.from(document.querySelectorAll<HTMLElement>(".ranking-page-host [data-ranking-slug]"));
+    const target=restoreRankingScroll(rankingScroll.current,window.scrollY,cards.map(card=>({slug:card.dataset.rankingSlug??"",top:card.getBoundingClientRect().top})),Math.max(0,document.documentElement.scrollHeight-window.innerHeight));
+    window.scrollTo({top:target,behavior:"instant"});
+  },[tab]);
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [feedbackDetails, setFeedbackDetails] = useState("");
   const [feedbackBusy, setFeedbackBusy] = useState(false);
