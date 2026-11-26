@@ -1,6 +1,6 @@
 import {RankingSupportActivity} from "./ranking-support";
 import {supportRetryDelayMs} from "./ranking-support-policy";
-import {supportTargetGroups} from "./ranking-support-targets";
+import {supportTargetGroups,stableTargetGroups} from "./ranking-support-targets";
 import type {SupportKind} from "./ranking-support";
 import { RankingAiWeights } from "./ranking-ai";
 import { buildFeedbackIssueUrl } from "./feedback-url";
@@ -728,9 +728,18 @@ const chatReceiver = new KickChatReceiver(
 );
 
 // Independent, bounded ranking chat observation. Never changes recording chat subscriptions or writes logs.
-const rankingChatReceiver = new KickChatReceiver(getRecordingOutputDirectory,()=>false,message=>{
-  rankingChatActivity.add(message.channelSlug.toLowerCase(),Date.now(),message.eventId,message.senderUserId);
-},()=>{},true);
+const rankingChatGroups=Array.from({length:3},()=>({
+  receiver:new KickChatReceiver(getRecordingOutputDirectory,()=>false,message=>{
+    rankingChatActivity.add(message.channelSlug.toLowerCase(),Date.now(),message.eventId,message.senderUserId);
+  },()=>{},true),
+  wanted:[] as string[],lastStart:0,starting:false,generation:0
+}));
+function rankingConnectedSlugs(){return [...new Set(rankingChatGroups.flatMap(g=>g.receiver.getConnectedSlugs()))];}
+function rankingDesiredSlugs(){return [...new Set(rankingChatGroups.flatMap(g=>g.receiver.getDesiredSlugs()))];}
+function stopRankingGroup(g:typeof rankingChatGroups[number]){
+  g.generation++;g.starting=false;g.lastStart=0;g.wanted=[];
+  void g.receiver.stop().catch(()=>undefined);
+}
 const rankingSupport=new RankingSupportActivity();
 const rankingSupportGroups=Array.from({length:2},()=>({
   receiver:new KickChatReceiver(getRecordingOutputDirectory,()=>false,()=>{},()=>{},true,(slug,event)=>rankingSupport.add(slug,event)),
@@ -765,20 +774,19 @@ function renewRankingSupport(snapshot:RankingSnapshot){
   const generation=++g.generation;g.lastStart=now;g.starting=true;
   void g.receiver.start(g.wanted).catch(()=>undefined).finally(()=>{if(g.generation===generation)g.starting=false;});
 }
-let rankingChatLeaseUntil=0,rankingChatLastStart=0,rankingChatSignature="";
+let rankingChatLeaseUntil=0;
 let rankingChatWanted:string[]=[];
 let rankingChatScope:RankingScope|null=null;
-let rankingChatStarting=false;
 let rankingChatLeaseTimer:ReturnType<typeof setTimeout>|null=null;
 function stopRankingChat():void{
-  rankingChatLeaseUntil=0;rankingChatSignature="";rankingChatWanted=[];rankingChatLastStart=0;rankingChatScope=null;
+  rankingChatLeaseUntil=0;rankingChatWanted=[];rankingChatScope=null;
   if(rankingChatLeaseTimer)clearTimeout(rankingChatLeaseTimer);rankingChatLeaseTimer=null;
-  void rankingChatReceiver.stop().catch(()=>undefined);
+  rankingChatGroups.forEach(stopRankingGroup);
   rankingSupportGroups.forEach(stopSupportGroup);
 }
 function rankingChatMeasurement(snapshot:RankingSnapshot|null,slug:string){
   const row=[...(snapshot?.entries??[]),...(snapshot?.trackedEntries??[])].find(r=>r.slug===slug);
-  const since=[chatReceiver.getConnectedSince(slug),rankingChatReceiver.getConnectedSince(slug)].filter((n):n is number=>n!==null);
+  const since=[chatReceiver.getConnectedSince(slug),...rankingChatGroups.map(g=>g.receiver.getConnectedSince(slug))].filter((n):n is number=>n!==null);
   const connectedSince=since.length?Math.min(...since):null, startedAt=row?.startedAt??null, now=Date.now();
   return {recentMessages:rankingChatActivity.recent(slug,connectedSince,startedAt,now),...rankingChatActivity.measured(slug,connectedSince,startedAt,now),...rankingChatActivity.active(slug,connectedSince,startedAt,now),...rankingChatActivity.activeMinute(slug,connectedSince,startedAt,now)};
 }
@@ -793,20 +801,28 @@ function renewRankingChat(scope:RankingScope,selected:string|null):void{
   // Do not discover new targets from stale data; the UI lease still stops reception.
   if(!snapshot||Date.now()-Date.parse(snapshot.fetchedAt)>90000)return;
   renewRankingSupport(snapshot);
-  const currentConnected=[...chatReceiver.getConnectedSlugs(),...rankingChatReceiver.getConnectedSlugs()];
+  const currentConnected=[...chatReceiver.getConnectedSlugs(),...rankingConnectedSlugs()];
   const observed=rankingChatActivity.observed(currentConnected,[]).map(row=>({...row,...rankingChatMeasurement(snapshot,row.slug)}));
   const slugs=rankingChatTargets(snapshot,selected,chatReceiver.getConnectedSlugs(),undefined,observed);
   rankingChatWanted=slugs;
-  const signature=slugs.join("|");
-  const matching=signature===rankingChatSignature&&rankingChatReceiver.getDesiredSlugs().join("|")===signature;
-  if(matching&&(!rankingChatReceiver.getStatus().running||rankingChatReceiver.getConnectedSlugs().length===slugs.length||Date.now()-rankingChatLastStart<120000))return;
-  if(!slugs.length){rankingChatSignature="";if(rankingChatReceiver.getDesiredSlugs().length)void rankingChatReceiver.stop().catch(()=>undefined);return;}
-  const topMissing=snapshot.entries.slice(0,10).some(row=>slugs.includes(row.slug)&&!rankingChatReceiver.getDesiredSlugs().includes(row.slug));
-  // Ordinary churn/partial retries must allow five minutes of active-user observation.
-  const healthy=rankingChatReceiver.getConnectedSlugs().length>0;
-  if(rankingChatStarting||Date.now()-rankingChatLastStart<(healthy?360000:topMissing?60000:120000))return;
-  rankingChatLastStart=Date.now();rankingChatSignature=signature;rankingChatStarting=true;
-  void rankingChatReceiver.start(slugs).catch(()=>{if(rankingChatSignature===signature)rankingChatSignature="";}).finally(()=>{rankingChatStarting=false;});
+  const next=stableTargetGroups(slugs,rankingChatGroups.map(g=>g.wanted),3,10);
+  for(let i=0;i<rankingChatGroups.length;i++){
+    const g=rankingChatGroups[i];g.wanted=next[i];
+    if(!g.wanted.length&&(g.starting||g.receiver.getDesiredSlugs().length))stopRankingGroup(g);
+  }
+  if(rankingChatGroups.some(g=>g.starting))return;
+  const now=Date.now();
+  const candidates=rankingChatGroups.filter(g=>{
+    if(!g.wanted.length)return false;
+    const current=g.receiver.getDesiredSlugs().sort(),connected=g.receiver.getConnectedSlugs();
+    const matched=g.wanted.join("|")===current.join("|");
+    if(matched&&connected.length===g.wanted.length)return false;
+    // Protect continuous 5-minute active-user observations; retry a failed group sooner.
+    return now-g.lastStart>=(connected.length?360000:30000);
+  }).sort((a,b)=>a.lastStart-b.lastStart);
+  const g=candidates[0];if(!g)return;
+  const generation=++g.generation;g.lastStart=now;g.starting=true;
+  void g.receiver.start(g.wanted).catch(()=>undefined).finally(()=>{if(g.generation===generation)g.starting=false;});
 }
 let lastRegisteredRankRequest=0;
 function refreshRegisteredRanks():void{
@@ -1491,24 +1507,24 @@ function registerIpcHandlers(): void {
     assertTrustedSender(event);
     if((scope!=="ja"&&scope!=="all")||typeof enabled!=="boolean"||(selected!==null&&(typeof selected!=="string"||!/^[a-z0-9_-]{1,40}$/.test(selected))))throw Error("ランキングコメント設定が不正です。");
     if(enabled)renewRankingChat(scope,selected as string|null);else if(rankingChatLeaseUntil)stopRankingChat();
-    const connected=[...chatReceiver.getConnectedSlugs(),...rankingChatReceiver.getConnectedSlugs()];
-    const normal=chatReceiver.getDesiredSlugs(),desired=rankingChatReceiver.getDesiredSlugs();
+    const connected=[...chatReceiver.getConnectedSlugs(),...rankingConnectedSlugs()];
+    const normal=chatReceiver.getDesiredSlugs(),desired=rankingDesiredSlugs();
     const rows=rankingChatActivity.observed(connected,[...normal,...rankingChatWanted,...desired]);
-    const online=new Set(connected),normalWanted=new Set(normal),rankWanted=new Set(rankingChatWanted),rankDesired=new Set(desired);
-    const status=rankingChatReceiver.getStatus();
+    const online=new Set(connected),normalWanted=new Set(normal),rankWanted=new Set(rankingChatWanted);
+    const status={message:rankingChatGroups.map((g,i)=>"接続"+(i+1)+" "+g.receiver.getConnectedSlugs().length+"/"+g.wanted.length).join(" ／ ")};
     const support=(rankingCache.get(scope)?.entries??[]).flatMap(row=>{
       if(!enabled)return [];
       const kicks=rankingSupport.measure(row.slug,"kicks",supportSince(row.slug,"kicks"),row.startedAt);
       const subs=rankingSupport.measure(row.slug,"giftSubs",supportSince(row.slug,"giftSubs"),row.startedAt);
       return kicks.amount===null&&subs.amount===null?[]:[{slug:row.slug,startedAt:row.startedAt,kicks:kicks.amount,giftSubs:subs.amount,kicksSeconds:kicks.seconds,giftSubsSeconds:subs.seconds}];
     });
-    return {support,rows:rows.map(row=>({...row,...rankingChatMeasurement(rankingCache.get(scope)??null,row.slug),state:online.has(row.slug)?"connected":normalWanted.has(row.slug)?row.state:rankWanted.has(row.slug)?(rankingChatStarting||(!rankDesired.has(row.slug)&&Date.now()-rankingChatLastStart<60000&&status.running)?"connecting":rankDesired.has(row.slug)&&!status.running?"connecting":"unavailable"):row.messages>0?"recent":"unavailable"})),message:status.message+(enabled&&rankingCache.has(scope)&&Date.now()-Date.parse(rankingCache.get(scope)!.fetchedAt)>90000?" ／ API更新待ち・既存チャット監視を継続":""),targets:rankingChatWanted.length,connected:rankingChatWanted.filter(s=>online.has(s)).length};
+    return {support,rows:rows.map(row=>({...row,...rankingChatMeasurement(rankingCache.get(scope)??null,row.slug),state:online.has(row.slug)?"connected":normalWanted.has(row.slug)?row.state:rankWanted.has(row.slug)?(rankingChatGroups.some(g=>g.wanted.includes(row.slug)&&(g.starting||g.receiver.getDesiredSlugs().includes(row.slug)&&!g.receiver.getStatus().running))?"connecting":"unavailable"):row.messages>0?"recent":"unavailable"})),message:status.message+(enabled&&rankingCache.has(scope)&&Date.now()-Date.parse(rankingCache.get(scope)!.fetchedAt)>90000?" ／ API更新待ち・既存チャット監視を継続":""),targets:rankingChatWanted.length,connected:rankingChatWanted.filter(s=>online.has(s)).length};
   });
   ipcMain.handle("kick:ranking-ai",(event,scope:unknown)=>{
     assertTrustedSender(event);
     if(scope!=="ja"&&scope!=="all")throw Error("AIランキング範囲が不正です。");
     const snapshot=rankingCache.get(scope)??null;
-    const connected=[...chatReceiver.getConnectedSlugs(),...rankingChatReceiver.getConnectedSlugs()];
+    const connected=[...chatReceiver.getConnectedSlugs(),...rankingConnectedSlugs()];
     const chat=rankingChatActivity.observed(connected,[]).map(row=>({...row,...rankingChatMeasurement(snapshot,row.slug)}));
     return rankingAiWeights.poll(scope,snapshot,chat,readState().settings.rankingAiModel);
   });
