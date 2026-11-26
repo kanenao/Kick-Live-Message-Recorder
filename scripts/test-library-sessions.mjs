@@ -35,7 +35,7 @@ assert.equal(byId["sample_VOD_" + uuid].logs.length, 1, "VOD IDで正確にコ�
 assert.equal(byId["sample_VOD_20261114_101000"].logs.length, 0, "別VODのコメントを誤結合しない");
 assert.equal(byId["sample_chat_2026-11-15"].videos.length, 0, "日別LIVEログを別の番組に誤結合しない");
 assert.ok(byId["sample_chat_2026-11-15"].warnings.length > 0);
-const failures = buildRecordingSessions([], [], [{
+const failures = buildRecordingSessions([], [{
   schemaVersion: 1, id: "sample_20261115_152000", slug: "sample",
   kind: "LIVE", startedAt: "2026-11-15T06:20:00.000Z", status: "completed"
 }]);
