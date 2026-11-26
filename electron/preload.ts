@@ -245,6 +245,7 @@ const api = {
   clearKickCredentials: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("kick:clear-credentials"),
   getRankingBackground: ():Promise<import("./ranking-background").RankingBackgroundStatus> => ipcRenderer.invoke("kick:ranking-background:get"),
   setRankingBackground: (enabled:boolean,scope:"ja"|"all"):Promise<import("./ranking-background").RankingBackgroundStatus> => ipcRenderer.invoke("kick:ranking-background:set",enabled,scope),
+  getRankingAi: (scope:"ja"|"all"):Promise<import("./ranking-ai").RankingAiStatus> => ipcRenderer.invoke("kick:ranking-ai",scope),
   getRegisteredRanks: ():Promise<Record<"ja"|"all",import("./kick-ranking").RankingSnapshot|null>> => ipcRenderer.invoke("kick:registered-ranks"),
   getRankingChatActivity: (scope:"ja"|"all",enabled:boolean,selected:string|null=null):Promise<{rows:Array<{slug:string;messages:number;state:"connected"|"connecting"|"recent"|"unavailable";observedSeconds:number;ratePerMinute:number|null;recentMessages:number|null;activeUsers:number|null;activeSeconds:number;activeComplete:boolean}>;message:string;targets:number;connected:number}> => ipcRenderer.invoke("kick:ranking-chat-activity",scope,enabled,selected),
   getKickRankingHistory: (scope:"ja"|"all",hours:24|168|720,slug:string|null):Promise<import("./kick-ranking-history").RankingHistory> => ipcRenderer.invoke("kick:ranking-history",scope,hours,slug),
