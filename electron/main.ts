@@ -1,5 +1,7 @@
 import {RankingSupportActivity} from "./ranking-support";
 import {supportRetryDelayMs} from "./ranking-support-policy";
+import {supportTargetGroups} from "./ranking-support-targets";
+import type {SupportKind} from "./ranking-support";
 import { RankingAiWeights } from "./ranking-ai";
 import { buildFeedbackIssueUrl } from "./feedback-url";
 import { rankingChatTargets } from "./ranking-chat-targets";
@@ -730,17 +732,38 @@ const rankingChatReceiver = new KickChatReceiver(getRecordingOutputDirectory,()=
   rankingChatActivity.add(message.channelSlug.toLowerCase(),Date.now(),message.eventId,message.senderUserId);
 },()=>{},true);
 const rankingSupport=new RankingSupportActivity();
-const rankingSupportReceiver=new KickChatReceiver(getRecordingOutputDirectory,()=>false,()=>{},()=>{},true,(slug,event)=>rankingSupport.add(slug,event));
-let supportLastStart=0,supportStarting=false;
+const rankingSupportGroups=Array.from({length:2},()=>({
+  receiver:new KickChatReceiver(getRecordingOutputDirectory,()=>false,()=>{},()=>{},true,(slug,event)=>rankingSupport.add(slug,event)),
+  wanted:[] as string[],lastStart:0,starting:false,generation:0
+}));
+function supportSince(slug:string,kind:SupportKind):number|null{
+  const times=rankingSupportGroups.filter(g=>g.wanted.includes(slug)).map(g=>g.receiver.getSupportSince(slug,kind)).filter((n):n is number=>n!==null);
+  return times.length?Math.min(...times):null;
+}
+function stopSupportGroup(g:typeof rankingSupportGroups[number]){
+  g.generation++;g.starting=false;g.lastStart=0;g.wanted=[];
+  void g.receiver.stop().catch(()=>undefined);
+}
 function renewRankingSupport(snapshot:RankingSnapshot){
-  const slugs=snapshot.entries.slice(0,10).map(row=>row.slug).filter(slug=>/^[a-z0-9_]{1,25}$/.test(slug)).sort();
-  const current=rankingSupportReceiver.getDesiredSlugs().sort();
-  if(!slugs.length){if(current.length)void rankingSupportReceiver.stop().catch(()=>undefined);return;}
-  const covered=slugs.every(slug=>rankingSupportReceiver.getSupportSince(slug,"kicks")!==null&&rankingSupportReceiver.getSupportSince(slug,"giftSubs")!==null);
-  const hasSubscription=current.some(slug=>rankingSupportReceiver.getSupportSince(slug,"kicks")!==null||rankingSupportReceiver.getSupportSince(slug,"giftSubs")!==null);
-  if(supportStarting||(covered&&slugs.join("|")===current.join("|"))||Date.now()-supportLastStart<supportRetryDelayMs(hasSubscription))return;
-  supportLastStart=Date.now();supportStarting=true;
-  void rankingSupportReceiver.start(slugs).catch(()=>undefined).finally(()=>{supportStarting=false;});
+  const next=supportTargetGroups(snapshot.entries.slice(0,10).map(row=>row.slug),rankingSupportGroups.map(g=>g.wanted));
+  for(let i=0;i<rankingSupportGroups.length;i++){
+    const g=rankingSupportGroups[i],slugs=next[i];
+    g.wanted=slugs;
+    if(!slugs.length&&(g.starting||g.receiver.getDesiredSlugs().length))stopSupportGroup(g);
+  }
+  // Start at most one group per poll; do not restart the other healthy group.
+  if(rankingSupportGroups.some(g=>g.starting))return;
+  const now=Date.now();
+  const candidates=rankingSupportGroups.filter(g=>{
+    if(!g.wanted.length)return false;
+    const current=g.receiver.getDesiredSlugs().sort();
+    const covered=g.wanted.every(slug=>g.receiver.getSupportSince(slug,"kicks")!==null&&g.receiver.getSupportSince(slug,"giftSubs")!==null);
+    const healthy=current.some(slug=>g.receiver.getSupportSince(slug,"kicks")!==null||g.receiver.getSupportSince(slug,"giftSubs")!==null);
+    return !(covered&&g.wanted.join("|")===current.join("|"))&&now-g.lastStart>=supportRetryDelayMs(healthy);
+  }).sort((a,b)=>a.lastStart-b.lastStart);
+  const g=candidates[0];if(!g)return;
+  const generation=++g.generation;g.lastStart=now;g.starting=true;
+  void g.receiver.start(g.wanted).catch(()=>undefined).finally(()=>{if(g.generation===generation)g.starting=false;});
 }
 let rankingChatLeaseUntil=0,rankingChatLastStart=0,rankingChatSignature="";
 let rankingChatWanted:string[]=[];
@@ -751,7 +774,7 @@ function stopRankingChat():void{
   rankingChatLeaseUntil=0;rankingChatSignature="";rankingChatWanted=[];rankingChatLastStart=0;rankingChatScope=null;
   if(rankingChatLeaseTimer)clearTimeout(rankingChatLeaseTimer);rankingChatLeaseTimer=null;
   void rankingChatReceiver.stop().catch(()=>undefined);
-  supportLastStart=0;void rankingSupportReceiver.stop().catch(()=>undefined);
+  rankingSupportGroups.forEach(stopSupportGroup);
 }
 function rankingChatMeasurement(snapshot:RankingSnapshot|null,slug:string){
   const row=[...(snapshot?.entries??[]),...(snapshot?.trackedEntries??[])].find(r=>r.slug===slug);
@@ -1475,8 +1498,8 @@ function registerIpcHandlers(): void {
     const status=rankingChatReceiver.getStatus();
     const support=(rankingCache.get(scope)?.entries??[]).flatMap(row=>{
       if(!enabled)return [];
-      const kicks=rankingSupport.measure(row.slug,"kicks",rankingSupportReceiver.getSupportSince(row.slug,"kicks"),row.startedAt);
-      const subs=rankingSupport.measure(row.slug,"giftSubs",rankingSupportReceiver.getSupportSince(row.slug,"giftSubs"),row.startedAt);
+      const kicks=rankingSupport.measure(row.slug,"kicks",supportSince(row.slug,"kicks"),row.startedAt);
+      const subs=rankingSupport.measure(row.slug,"giftSubs",supportSince(row.slug,"giftSubs"),row.startedAt);
       return kicks.amount===null&&subs.amount===null?[]:[{slug:row.slug,startedAt:row.startedAt,kicks:kicks.amount,giftSubs:subs.amount,kicksSeconds:kicks.seconds,giftSubsSeconds:subs.seconds}];
     });
     return {support,rows:rows.map(row=>({...row,...rankingChatMeasurement(rankingCache.get(scope)??null,row.slug),state:online.has(row.slug)?"connected":normalWanted.has(row.slug)?row.state:rankWanted.has(row.slug)?(rankingChatStarting||(!rankDesired.has(row.slug)&&Date.now()-rankingChatLastStart<60000&&status.running)?"connecting":rankDesired.has(row.slug)&&!status.running?"connecting":"unavailable"):row.messages>0?"recent":"unavailable"})),message:status.message+(enabled&&rankingCache.has(scope)&&Date.now()-Date.parse(rankingCache.get(scope)!.fetchedAt)>90000?" ／ API更新待ち・既存チャット監視を継続":""),targets:rankingChatWanted.length,connected:rankingChatWanted.filter(s=>online.has(s)).length};

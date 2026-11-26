@@ -1,0 +1,13 @@
+import assert from "node:assert/strict";
+import {supportTargetGroups} from "../electron/ranking-support-targets.ts";
+const top=Array.from({length:10},(_,i)=>"c"+i);
+const first=supportTargetGroups(top,[]);
+assert.equal(first.length,2);assert.equal(first[0].length,5);assert.equal(first[1].length,5);
+assert.equal(new Set(first.flat()).size,10);
+assert.deepEqual(supportTargetGroups([...top].reverse(),first),first);
+const changed=supportTargetGroups([...top.slice(0,9),"new"],first);
+assert.deepEqual(changed[0],first[0]);assert.ok(changed[1].includes("new"));assert.ok(!changed.flat().includes("c9"));
+assert.deepEqual(supportTargetGroups([],first),[[],[]]);
+assert.equal(supportTargetGroups([...top,"extra"],first).flat().length,10);
+assert.deepEqual(supportTargetGroups(["bad!","a","a","b"],[]),[["a","b"],[]]);
+console.log("応援監視：5配信×2、順位入れ替えでも接続を維持、上限と停止");
