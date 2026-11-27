@@ -1,3 +1,4 @@
+import {SUPPORT_GROUP_COUNT,SUPPORT_GROUP_SIZE} from "./ranking-support-policy";
 /** Keep established assignments while replacing only departed targets. */
 export function stableTargetGroups(top:readonly string[],previous:readonly (readonly string[])[],count:number,size:number):string[][]{
  const wanted=[...new Set(top.filter(s=>/^[a-z0-9_]{1,25}$/.test(s)))].slice(0,count*size);
@@ -11,5 +12,5 @@ export function stableTargetGroups(top:readonly string[],previous:readonly (read
  return groups.map(g=>g.sort());
 }
 export function supportTargetGroups(top:readonly string[],previous:readonly (readonly string[])[]):string[][]{
- return stableTargetGroups(top,previous,2,5);
+ return stableTargetGroups(top,previous,SUPPORT_GROUP_COUNT,SUPPORT_GROUP_SIZE);
 }

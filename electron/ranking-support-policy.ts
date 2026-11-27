@@ -6,3 +6,9 @@ export function supportRankValue(value:number|null,seconds:number):number|null{
 }
 /** Retry faster only if no requested feed is subscribed, to avoid resetting healthy observation. */
 export function supportRetryDelayMs(hasSubscription:boolean):number{return hasSubscription?120000:20000;}
+
+export const SUPPORT_GROUP_SIZE=5;
+export const SUPPORT_GROUP_COUNT=4;
+export const SUPPORT_TARGET_LIMIT=SUPPORT_GROUP_SIZE*SUPPORT_GROUP_COUNT;
+export type SupportFeedState="outside"|"waiting"|"subscribed";
+export function supportFeedState(target:boolean,since:number|null):SupportFeedState{return !target?"outside":since===null?"waiting":"subscribed";}

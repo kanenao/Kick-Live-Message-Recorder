@@ -1,5 +1,5 @@
 import {RankingSupportActivity} from "./ranking-support";
-import {supportRetryDelayMs} from "./ranking-support-policy";
+import {supportRetryDelayMs,SUPPORT_GROUP_COUNT,SUPPORT_TARGET_LIMIT,supportFeedState} from "./ranking-support-policy";
 import {supportTargetGroups,stableTargetGroups} from "./ranking-support-targets";
 import type {SupportKind} from "./ranking-support";
 import { RankingAiWeights } from "./ranking-ai";
@@ -741,7 +741,7 @@ function stopRankingGroup(g:typeof rankingChatGroups[number]){
   void g.receiver.stop().catch(()=>undefined);
 }
 const rankingSupport=new RankingSupportActivity();
-const rankingSupportGroups=Array.from({length:2},()=>({
+const rankingSupportGroups=Array.from({length:SUPPORT_GROUP_COUNT},()=>({
   receiver:new KickChatReceiver(getRecordingOutputDirectory,()=>false,()=>{},()=>{},true,(slug,event)=>rankingSupport.add(slug,event)),
   wanted:[] as string[],lastStart:0,starting:false,generation:0
 }));
@@ -754,7 +754,7 @@ function stopSupportGroup(g:typeof rankingSupportGroups[number]){
   void g.receiver.stop().catch(()=>undefined);
 }
 function renewRankingSupport(snapshot:RankingSnapshot){
-  const next=supportTargetGroups(snapshot.entries.slice(0,10).map(row=>row.slug),rankingSupportGroups.map(g=>g.wanted));
+  const next=supportTargetGroups(snapshot.entries.slice(0,SUPPORT_TARGET_LIMIT).map(row=>row.slug),rankingSupportGroups.map(g=>g.wanted));
   for(let i=0;i<rankingSupportGroups.length;i++){
     const g=rankingSupportGroups[i],slugs=next[i];
     g.wanted=slugs;
@@ -1514,9 +1514,12 @@ function registerIpcHandlers(): void {
     const status={message:rankingChatGroups.map((g,i)=>"接続"+(i+1)+" "+g.receiver.getConnectedSlugs().length+"/"+g.wanted.length).join(" ／ ")};
     const support=(rankingCache.get(scope)?.entries??[]).flatMap(row=>{
       if(!enabled)return [];
-      const kicks=rankingSupport.measure(row.slug,"kicks",supportSince(row.slug,"kicks"),row.startedAt);
-      const subs=rankingSupport.measure(row.slug,"giftSubs",supportSince(row.slug,"giftSubs"),row.startedAt);
-      return kicks.amount===null&&subs.amount===null?[]:[{slug:row.slug,startedAt:row.startedAt,kicks:kicks.amount,giftSubs:subs.amount,kicksSeconds:kicks.seconds,giftSubsSeconds:subs.seconds}];
+      const target=rankingSupportGroups.some(g=>g.wanted.includes(row.slug));
+      if(!target)return [];
+      const kicksSince=supportSince(row.slug,"kicks"),subsSince=supportSince(row.slug,"giftSubs");
+      const kicks=rankingSupport.measure(row.slug,"kicks",kicksSince,row.startedAt);
+      const subs=rankingSupport.measure(row.slug,"giftSubs",subsSince,row.startedAt);
+      return [{slug:row.slug,startedAt:row.startedAt,kicks:kicks.amount,giftSubs:subs.amount,kicksSeconds:kicks.seconds,giftSubsSeconds:subs.seconds,kicksState:supportFeedState(target,kicksSince),giftSubsState:supportFeedState(target,subsSince)}];
     });
     return {support,rows:rows.map(row=>({...row,...rankingChatMeasurement(rankingCache.get(scope)??null,row.slug),state:online.has(row.slug)?"connected":normalWanted.has(row.slug)?row.state:rankWanted.has(row.slug)?(rankingChatGroups.some(g=>g.wanted.includes(row.slug)&&(g.starting||g.receiver.getDesiredSlugs().includes(row.slug)&&!g.receiver.getStatus().running))?"connecting":"unavailable"):row.messages>0?"recent":"unavailable"})),message:status.message+(enabled&&rankingCache.has(scope)&&Date.now()-Date.parse(rankingCache.get(scope)!.fetchedAt)>90000?" ／ API更新待ち・既存チャット監視を継続":""),targets:rankingChatWanted.length,connected:rankingChatWanted.filter(s=>online.has(s)).length};
   });

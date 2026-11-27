@@ -1,8 +1,8 @@
-import {SUPPORT_WINDOW_SECONDS} from "./ranking-support-policy";
+import {SUPPORT_WINDOW_SECONDS,type SupportFeedState} from "./ranking-support-policy";
 import {createHash} from "node:crypto";
 export type SupportKind="kicks"|"giftSubs";
 export type SupportEvent={kind:SupportKind;amount:number;id:string|null};
-export type SupportObservation={slug:string;startedAt:string|null;kicks:number|null;giftSubs:number|null;kicksSeconds:number;giftSubsSeconds:number};
+export type SupportObservation={slug:string;startedAt:string|null;kicks:number|null;giftSubs:number|null;kicksSeconds:number;giftSubsSeconds:number;kicksState?:SupportFeedState;giftSubsState?:SupportFeedState};
 const rec=(v:unknown):Record<string,unknown>=>v&&typeof v==="object"&&!Array.isArray(v)?v as Record<string,unknown>:{};
 const positive=(v:unknown):number|null=>typeof v==="number"&&Number.isSafeInteger(v)&&v>0&&v<=100000000?v:null;
 const id=(v:unknown)=>typeof v==="string"&&v.length>0&&v.length<=200?v:typeof v==="number"&&Number.isSafeInteger(v)?String(v):null;
