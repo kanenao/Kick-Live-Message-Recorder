@@ -1,6 +1,6 @@
 import type {RankingSnapshot} from "./kick-ranking";
 import {momentumScores,type MomentumChat} from "./ranking-momentum";
-export const MAX_RANKING_CHAT_CHANNELS=30;
+export const MAX_RANKING_CHAT_CHANNELS=50;
 /** Guarantee top ten coverage first, then selected/registered LIVE and growth/
  * measured momentum candidates. Keep within the existing extra connection cap. */
 export function rankingChatTargets(snapshot:RankingSnapshot,selected:string|null,normal:readonly string[],limit=MAX_RANKING_CHAT_CHANNELS,chat:readonly MomentumChat[]=[]):string[]{
@@ -10,7 +10,8 @@ export function rankingChatTargets(snapshot:RankingSnapshot,selected:string|null
  const cap=Math.min(MAX_RANKING_CHAT_CHANNELS,Math.max(0,limit));
  const result=new Set<string>();
  const add=(s:string)=>{if(result.size<cap&&known.has(s)&&/^[a-z0-9_]{1,25}$/.test(s)&&!excluded.has(s))result.add(s);};
- snapshot.entries.slice(0,10).forEach(r=>add(r.slug));
+ // At full capacity prioritize the entire displayed viewer ranking; smaller budgets retain the previous selection policy.
+ snapshot.entries.slice(0,cap===MAX_RANKING_CHAT_CHANNELS?50:10).forEach(r=>add(r.slug));
  if(selected)add(selected);
  // Reserve capacity for growth and momentum discoveries even with many registrations.
  const tracked=(snapshot.trackedEntries??[]).map(r=>r.slug);
@@ -21,5 +22,5 @@ export function rankingChatTargets(snapshot:RankingSnapshot,selected:string|null
  combined.filter(r=>!result.has(r.slug)&&!excluded.has(r.slug)).slice(0,3).forEach(r=>add(r.slug));
  tracked.forEach(add);
  snapshot.entries.forEach(r=>add(r.slug));
- return [...result].sort();
+ return [...result]; // preserve priority for initial connection-group assignment
 }

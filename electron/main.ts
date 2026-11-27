@@ -4,7 +4,7 @@ import {supportTargetGroups,stableTargetGroups} from "./ranking-support-targets"
 import type {SupportKind} from "./ranking-support";
 import { RankingAiWeights } from "./ranking-ai";
 import { buildFeedbackIssueUrl } from "./feedback-url";
-import { rankingChatTargets } from "./ranking-chat-targets";
+import { rankingChatTargets, MAX_RANKING_CHAT_CHANNELS } from "./ranking-chat-targets";
 import { LiveRankingPeaks } from "./ranking-live-peaks";
 import { RankingRequestQueue } from "./ranking-request-queue";
 import {
@@ -728,7 +728,7 @@ const chatReceiver = new KickChatReceiver(
 );
 
 // Independent, bounded ranking chat observation. Never changes recording chat subscriptions or writes logs.
-const rankingChatGroups=Array.from({length:3},()=>({
+const rankingChatGroups=Array.from({length:MAX_RANKING_CHAT_CHANNELS/10},()=>({
   receiver:new KickChatReceiver(getRecordingOutputDirectory,()=>false,message=>{
     rankingChatActivity.add(message.channelSlug.toLowerCase(),Date.now(),message.eventId,message.senderUserId);
   },()=>{},true),
@@ -805,7 +805,7 @@ function renewRankingChat(scope:RankingScope,selected:string|null):void{
   const observed=rankingChatActivity.observed(currentConnected,[]).map(row=>({...row,...rankingChatMeasurement(snapshot,row.slug)}));
   const slugs=rankingChatTargets(snapshot,selected,chatReceiver.getConnectedSlugs(),undefined,observed);
   rankingChatWanted=slugs;
-  const next=stableTargetGroups(slugs,rankingChatGroups.map(g=>g.wanted),3,10);
+  const next=stableTargetGroups(slugs,rankingChatGroups.map(g=>g.wanted),rankingChatGroups.length,10);
   for(let i=0;i<rankingChatGroups.length;i++){
     const g=rankingChatGroups[i];g.wanted=next[i];
     if(!g.wanted.length&&(g.starting||g.receiver.getDesiredSlugs().length))stopRankingGroup(g);

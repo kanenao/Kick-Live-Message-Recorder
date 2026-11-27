@@ -18,3 +18,8 @@ assert.ok(main.includes("if(g.generation===generation)g.starting=false"));
 assert.ok(main.includes("connected.length?360000:30000"));
 assert.ok(!main.includes("rankingChatReceiver"));
 console.log("コメント監視：3グループ、30配信上限、既存割当保持、停止・再試行");
+
+const expanded=Array.from({length:50},(_,i)=>"s"+i),five=stableTargetGroups(expanded,[],5,10);
+assert.deepEqual(five.map(g=>g.length),[10,10,10,10,10]);assert.equal(new Set(five.flat()).size,50);
+assert.deepEqual(five[0],[...expanded.slice(0,10)].sort());assert.deepEqual(stableTargetGroups([...expanded].reverse(),five,5,10),five);
+assert.ok(main.includes("length:MAX_RANKING_CHAT_CHANNELS/10"));assert.ok(main.includes("rankingChatGroups.length,10"));
